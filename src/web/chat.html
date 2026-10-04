@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="de" style="color-scheme: dark">
+<head>
+<meta charset="utf-8">
+<meta name="theme-color" content="#02060c">
+<title>Klaus</title>
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<script src="klaus.js"></script>
+<style>
+  @font-face { font-family: "Rajdhani"; font-weight: 500; src: url(vendor/rajdhani-500.woff2) format("woff2"); }
+  @font-face { font-family: "Rajdhani"; font-weight: 700; src: url(vendor/rajdhani-700.woff2) format("woff2"); }
+  @font-face { font-family: "Orbitron"; font-weight: 600; src: url(vendor/orbitron-600.woff2) format("woff2"); }
+  :root {
+    --rgb: 0, 229, 255; --rgb2: 255, 179, 0; --glow: #04202c; --bg: #02060c; --cyan: #00e5ff; --cyan-2: rgba(var(--rgb), .55); --cyan-3: rgba(var(--rgb), .22);
+    --cyan-4: rgba(var(--rgb), .08); --bernstein: #ffb300; --gruen: #3dffa8; --text: #cfefff; --leise: color-mix(in srgb, var(--cyan) 38%, #5d6670);
+    --mono: "Cascadia Code", Consolas, monospace; --ease: cubic-bezier(.165, .84, .44, 1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(ellipse 120% 60% at 50% 0%, var(--glow) 0%, var(--bg) 65%);
+    color: var(--text); font-family: "Rajdhani", "Segoe UI", sans-serif; font-weight: 500;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  body::before { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .25;
+    background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .35) 0 1px, transparent 1px 3px); }
+  html { border: 1px solid var(--cyan-2); }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 12px 8px 16px; border-bottom: 1px solid var(--cyan-3); cursor: grab; user-select: none; }
+  header .name { flex: 1; }
+  header .zu { align-self: flex-start; padding: 4px 9px; font-size: 14px; letter-spacing: 0; color: var(--leise); background: none; border-color: transparent; }
+  header .zu:hover { color: #ff3d5a; background: rgba(255, 61, 90, .1); border-color: transparent; box-shadow: none; }
+  header canvas { width: 96px; height: 96px; margin: -8px -6px -8px -10px; }
+  header b { font-family: "Orbitron"; font-size: 16px; letter-spacing: .3em; color: var(--cyan); text-shadow: 0 0 10px rgba(var(--rgb), .5); }
+  header span { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: .12em; color: var(--leise); margin-top: 4px; }
+
+  #verlauf { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; overscroll-behavior: contain; }
+  #verlauf::-webkit-scrollbar { width: 4px; }
+  #verlauf::-webkit-scrollbar-thumb { background: var(--cyan-3); }
+  .blase { max-width: 88%; padding: 8px 12px; font-size: 16px; line-height: 1.35; white-space: pre-wrap; word-wrap: break-word;
+    animation: rein .25s var(--ease) both; }
+  @keyframes rein { from { opacity: 0; transform: translateY(6px); } }
+  .blase::before { display: block; font-family: var(--mono); font-size: 10px; letter-spacing: .14em; margin-bottom: 3px; }
+  .du { align-self: flex-end; background: var(--cyan-4); border: 1px solid var(--cyan-3); border-right: 2px solid var(--cyan); }
+  .du::before { content: "DU"; color: var(--cyan-2); text-align: right; }
+  .klaus { align-self: flex-start; background: rgba(1, 16, 26, .7); border: 1px solid var(--cyan-3); border-left: 2px solid var(--cyan); }
+  .klaus::before { content: "KLAUS"; color: var(--cyan); }
+  .info { align-self: center; font-family: var(--mono); font-size: 11px; letter-spacing: .06em; color: var(--leise); text-align: center; padding: 2px 8px; }
+
+  .auftrag { align-self: stretch; max-width: none; border: 1px solid rgba(var(--rgb2), .5); padding: 0; background: rgba(20, 12, 0, .35); }
+  .auftrag .kopf { padding: 8px 12px; font-weight: 700; font-size: 12.5px; letter-spacing: .22em; color: var(--bernstein);
+    border-bottom: 1px dashed rgba(var(--rgb2), .4); }
+  .auftrag pre { padding: 10px 12px; font: 12.5px/1.5 var(--mono); white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+  .knoepfe { display: flex; gap: 8px; padding: 0 12px 12px; }
+  button { font: inherit; font-weight: 700; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; cursor: pointer;
+    color: var(--cyan); background: var(--cyan-4); border: 1px solid var(--cyan-3); padding: 8px 14px;
+    transition: background .15s var(--ease), border-color .15s var(--ease), box-shadow .15s var(--ease); }
+  button:hover { background: rgba(var(--rgb), .16); border-color: var(--cyan-2); box-shadow: 0 0 12px rgba(var(--rgb), .25); }
+  button.los { color: #021a10; background: var(--gruen); border-color: var(--gruen); }
+  button.los:hover { box-shadow: 0 0 16px rgba(61, 255, 168, .5); background: var(--gruen); }
+  button:focus-visible { outline: 1px solid var(--cyan); outline-offset: 2px; }
+  button:disabled { opacity: .35; cursor: default; box-shadow: none; }
+
+  .tipp { font-family: var(--mono); font-size: 10.5px; letter-spacing: .04em; color: var(--leise); padding: 0 16px 8px; }
+  .auftrag .antwort { padding: 0 12px 10px; font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--bernstein); }
+  @media (prefers-reduced-motion: reduce) { .blase { animation: none; } }
+</style>
+</head>
+<body>
+<header id="kopf" title="Ziehen zum Verschieben">
+  <canvas id="orb"></canvas>
+  <div class="name"><b translate="no">KLAUS</b><span id="status">BEREIT</span></div>
+  <button class="zu" id="zu" aria-label="Schließen" title="Schließen">✕</button>
+</header>
+<div id="verlauf"></div>
+<div class="tipp">Sprich einfach weiter. „Danke“ beendet das Gespräch.</div>
+<script>
+const STATUS = { aus: "BEREIT · SAG „KLAUS“", start: "INITIALISIERE …", hoeren: "HÖRE ZU …", denken: "VERARBEITE …",
+                 sprechen: "ANTWORTE …", aktion: "AUSGEFÜHRT", fehler: "FEHLER · SIEHE LOG" };
+const orb = new KlausOrb(document.getElementById("orb"));
+const verlauf = document.getElementById("verlauf");
+
+function blase(rolle, text) {
+  if (rolle === "auftrag") return auftrag(text);
+  verlauf.append(el("div", "blase " + rolle, text));
+  verlauf.scrollTop = verlauf.scrollHeight;
+}
+
+function auftrag(text) {
+  const b = el("div", "blase auftrag");
+  b.append(el("div", "kopf", "AUFTRAG FÜR CLAUDE"), el("pre", "", text),
+           el("div", "antwort", "SAG „JA“ ZUM BAUEN · „WEITER PLANEN“ ZUM ÄNDERN"));
+  verlauf.append(b);
+  verlauf.scrollTop = verlauf.scrollHeight;
+}
+
+klausBereit.then((klaus) => {
+  klaus.ladeThema(wendeThemaAn);
+  klaus.thema.connect(wendeThemaAn);
+  // Kein Windows-Rahmen: am Kopf ziehen verschiebt das Fenster
+  document.getElementById("kopf").onmousedown = (e) => { if (e.button === 0 && e.target.id !== "zu") klaus.fensterZiehen(); };
+  document.getElementById("zu").onclick = () => klaus.fensterZu();
+  klaus.nachricht.connect(blase);
+  klaus.zustand.connect((z) => { orb.setZustand(z); document.getElementById("status").textContent = STATUS[z] || ""; });
+  klaus.pegel.connect((p) => orb.setPegel(p));
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,1464 @@
+<!doctype html>
+<html lang="de" style="color-scheme: dark">
+<head>
+<meta charset="utf-8">
+<meta name="theme-color" content="#02060c">
+<title>Klaus Desktop</title>
+<link rel="stylesheet" href="vendor/gridstack.min.css">
+<script src="vendor/gridstack-all.js"></script>
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<script src="klaus.js"></script>
+<style>
+  @font-face { font-family: "Rajdhani"; font-weight: 500; src: url(vendor/rajdhani-500.woff2) format("woff2"); }
+  @font-face { font-family: "Rajdhani"; font-weight: 700; src: url(vendor/rajdhani-700.woff2) format("woff2"); }
+  @font-face { font-family: "Orbitron"; font-weight: 600; src: url(vendor/orbitron-600.woff2) format("woff2"); }
+
+  :root {
+    --rgb: 0, 229, 255;
+    --rgb2: 255, 179, 0;
+    --glow: #04202c;
+    --bg: #02060c;
+    --cyan: #00e5ff;
+    --cyan-2: rgba(var(--rgb), .55);
+    --cyan-3: rgba(var(--rgb), .22);
+    --cyan-4: rgba(var(--rgb), .08);
+    --bernstein: #ffb300;
+    --gruen: #3dffa8;
+    --rot: #ff3d5a;
+    --text: #cfefff;
+    --leise: color-mix(in srgb, var(--cyan) 38%, #5d6670);
+    --flaeche: rgba(1, 16, 26, .62);
+    --mono: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+    --hud: "Rajdhani", "Segoe UI", sans-serif;
+    --ease: cubic-bezier(.165, .84, .44, 1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(ellipse 55% 50% at 50% 40%, color-mix(in srgb, var(--glow) 80%, transparent) 0%, transparent 72%),
+      radial-gradient(ellipse 130% 110% at 50% 50%, transparent 50%, rgba(0, 0, 0, .7) 100%),
+      var(--bg);
+    color: var(--text); font-family: var(--hud); font-weight: 500; user-select: none;
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  :focus-visible { outline: 1px solid var(--cyan); outline-offset: 2px; }
+
+  /* ---------- Hintergrund: Hexagon-Raster in Themenfarbe + feine Scanlinien (alles statisch -> keine Dauer-Last) */
+  .gitter { position: fixed; inset: 0; pointer-events: none; background: rgba(var(--rgb), .16);
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100'%3E%3Cpath d='M28 66L0 50L0 16L28 0L56 16L56 50L28 66L28 100' fill='none' stroke='black' stroke-width='1'/%3E%3Cpath d='M28 0L28 34L0 50L0 84L28 100L56 84L56 50L28 34' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E"),
+      radial-gradient(ellipse 70% 65% at 50% 42%, #000 0%, transparent 85%);
+    -webkit-mask-composite: source-in; mask-composite: intersect; }
+  .zeilen { position: fixed; inset: 0; pointer-events: none; opacity: .22;
+    background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .4) 0 1px, transparent 1px 3px); }
+  /* Eckklammern des Bildschirms mit kleiner Skala */
+  .ecke { position: fixed; width: 60px; height: 60px; pointer-events: none; border: 0 solid var(--cyan-2); }
+  .ecke::after { content: ""; position: absolute; width: 22px; height: 22px; border: 0 solid var(--cyan); }
+  .ecke.lo { top: 8px; left: 8px; border-top-width: 1px; border-left-width: 1px; }
+  .ecke.lo::after { top: 4px; left: 4px; border-top-width: 2px; border-left-width: 2px; }
+  .ecke.ro { top: 8px; right: 8px; border-top-width: 1px; border-right-width: 1px; }
+  .ecke.ro::after { top: 4px; right: 4px; border-top-width: 2px; border-right-width: 2px; }
+  .ecke.lu { bottom: 8px; left: 8px; border-bottom-width: 1px; border-left-width: 1px; }
+  .ecke.lu::after { bottom: 4px; left: 4px; border-bottom-width: 2px; border-left-width: 2px; }
+  .ecke.ru { bottom: 8px; right: 8px; border-bottom-width: 1px; border-right-width: 1px; }
+  .ecke.ru::after { bottom: 4px; right: 4px; border-bottom-width: 2px; border-right-width: 2px; }
+
+  /* ---------- Kopfleiste: Linie mit Skala darunter */
+  .leiste { position: relative; height: 46px; margin: 12px 30px 0; display: flex; align-items: center; gap: 18px; }
+  .leiste::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan-2) 12%, var(--cyan-2) 88%, transparent); }
+  .leiste::before { content: ""; position: absolute; left: 12%; right: 12%; bottom: 1px; height: 4px;
+    background: repeating-linear-gradient(90deg, var(--cyan-3) 0 1px, transparent 1px 14px); }
+  .logo { font-family: "Orbitron", var(--hud); font-size: 19px; letter-spacing: .5em; color: var(--cyan);
+    text-shadow: 0 0 14px rgba(var(--rgb), .7), 0 0 2px rgba(var(--rgb), .9); }
+  .unterzeile { font-family: var(--mono); font-size: 10.5px; color: var(--leise); letter-spacing: .14em; }
+  .leiste .platz { flex: 1; }
+  .zustand { font-family: var(--mono); font-size: 11px; letter-spacing: .16em; color: var(--cyan); display: flex; align-items: center; gap: 8px; }
+  .zustand i { width: 7px; height: 7px; transform: rotate(45deg); background: var(--cyan); box-shadow: 0 0 8px var(--cyan);
+    animation: blink 1.6s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  .hud-knopf { font-family: var(--hud); font-weight: 700; font-size: 12px; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--cyan); padding: 6px 16px; background: rgba(var(--rgb), .06); position: relative;
+    clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+    box-shadow: inset 0 0 0 1px var(--cyan-3); transition: background .15s var(--ease), color .15s var(--ease); }
+  .hud-knopf:hover { background: rgba(var(--rgb), .2); color: #fff; }
+  .hud-knopf.schalter.an { color: #fff; background: rgba(255, 61, 90, .55); box-shadow: inset 0 0 0 1px #ff3d5a; }
+  /* Stumm / Mikro aus: Orb und Ring gedimmt */
+  body.stumm .klaus .buehne, body.mikro-aus .klaus .buehne { opacity: .35; filter: grayscale(.6); transition: opacity .3s, filter .3s; }
+
+  /* ---------- Hightech-Details: Boot-Sequenz, Telemetrie, Rand-Skalen, Cursor-Koordinaten */
+  #boot { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: var(--bg);
+    transition: opacity .7s var(--ease); }
+  #boot.weg { opacity: 0; pointer-events: none; }
+  .boot-box { width: min(560px, 80vw); font-family: var(--mono); color: var(--cyan); }
+  .boot-logo { font-family: "Orbitron"; font-size: 40px; letter-spacing: .5em; text-shadow: 0 0 22px rgba(var(--rgb), .8); }
+  .boot-unter { font-size: 10.5px; letter-spacing: .32em; color: var(--leise); margin: 6px 0 22px; }
+  .boot-zeilen div { font-size: 12.5px; letter-spacing: .08em; color: var(--leise); line-height: 1.7; animation: rein .18s both; }
+  .boot-zeilen div b { color: var(--gruen); font-weight: 400; }
+  .boot-balken { margin-top: 18px; height: 3px; background: var(--cyan-4); }
+  .boot-balken i { display: block; height: 100%; width: 0; background: var(--cyan); box-shadow: 0 0 12px var(--cyan); transition: width .3s linear; }
+  .lineal { position: fixed; top: 90px; bottom: 90px; width: 9px; pointer-events: none; background-repeat: no-repeat;
+    background-image: repeating-linear-gradient(180deg, var(--cyan-2) 0 1px, transparent 1px 60px),
+                      repeating-linear-gradient(180deg, var(--cyan-3) 0 1px, transparent 1px 12px);
+    background-size: 9px 100%, 4px 100%; }
+  .lineal.links { left: 5px; }
+  .lineal.rechts { right: 5px; background-position: right top, right top; }
+  .fuss { position: fixed; bottom: 3px; font-family: var(--mono); font-size: 9.5px; letter-spacing: .16em; color: var(--leise);
+    pointer-events: none; font-variant-numeric: tabular-nums; z-index: 5; }
+  .fuss.links { left: 78px; }
+  .fuss.rechts { right: 78px; }
+  .telemetrie { display: flex; gap: 16px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; color: var(--leise);
+    font-variant-numeric: tabular-nums; }
+  .telemetrie b { color: var(--cyan); font-weight: 400; }
+  .telemetrie .warm { color: var(--bernstein); } .telemetrie .heiss { color: var(--rot); }
+  .w-id { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; color: var(--cyan-3); white-space: nowrap;
+    min-width: 0; overflow: hidden; text-overflow: clip; flex: 0 1 auto; }  /* weicht zuerst, wenn es eng wird */
+  .w-id::after { content: " ◆◆◇"; color: var(--cyan-2); letter-spacing: 1px; }
+  .grid-stack-item.einflug > .w { animation: einflug .55s var(--ease) both; }
+  @keyframes einflug { from { opacity: 0; transform: scale(.95) translateY(10px); filter: brightness(2.4); } }
+
+  /* ---------- Raster + Widgets: abgeschraegte HUD-Rahmen
+     Trick: aeusseres Element = Rahmenfarbe (Verlauf), inneres 1px kleiner mit gleicher Schraege = Flaeche.
+     So bekommen auch die schraegen Ecken eine Linie. */
+  #raster { margin: 8px 24px 0; }
+  /* Holo-Rahmen: kein gefuellter Kasten - nur Eckklammern, hauchduenne Kontur und ein Schimmer.
+     Das Hexagon-Raster scheint durch, die Daten "schweben" wie in einem Iron-Man-HUD. */
+  .w { --k: 20px; --e: var(--cyan); display: flex; flex-direction: column; overflow: hidden !important;
+    background:
+      linear-gradient(var(--e), var(--e)) top left / var(--k) 2px no-repeat,
+      linear-gradient(var(--e), var(--e)) top left / 2px var(--k) no-repeat,
+      linear-gradient(var(--e), var(--e)) top right / var(--k) 2px no-repeat,
+      linear-gradient(var(--e), var(--e)) top right / 2px var(--k) no-repeat,
+      linear-gradient(var(--e), var(--e)) bottom left / var(--k) 2px no-repeat,
+      linear-gradient(var(--e), var(--e)) bottom left / 2px var(--k) no-repeat,
+      linear-gradient(var(--e), var(--e)) bottom right / var(--k) 2px no-repeat,
+      linear-gradient(var(--e), var(--e)) bottom right / 2px var(--k) no-repeat,
+      linear-gradient(180deg, rgba(var(--rgb), .09), rgba(var(--rgb), .015) 35%, rgba(var(--rgb), .015) 70%, rgba(var(--rgb), .06));
+    box-shadow: inset 0 0 0 1px rgba(var(--rgb), .09); }
+  .w-innen { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+  .w-innen::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 5px; height: 1px; pointer-events: none;
+    background: repeating-linear-gradient(90deg, rgba(var(--rgb), .25) 0 1px, transparent 1px 8px); }
+  .w.frei .w-innen::after { display: none; }
+  /* Text muss ohne Hintergrund lesbar bleiben */
+  .w-inhalt { text-shadow: 0 1px 3px rgba(0, 0, 0, .9); }
+  .w-kopf { position: relative; display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px 0 20px; flex-shrink: 0; cursor: grab; }
+  .w-kopf::after { content: ""; position: absolute; left: 20px; right: 10px; bottom: 0; height: 1px;
+    background: linear-gradient(90deg, var(--cyan-2), rgba(var(--rgb), .1) 55%, transparent); }
+  .w-kopf:active { cursor: grabbing; }
+  .w-titel { font-weight: 700; font-size: 12px; letter-spacing: .3em; text-transform: uppercase; color: var(--cyan); flex: 1 0 auto;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 0 8px rgba(var(--rgb), .5); }
+  .w-titel::before { content: "◢ "; font-size: 9px; color: var(--cyan); }
+  .w-extra { display: flex; gap: 4px; font-family: var(--mono); font-size: 10px; letter-spacing: .08em; color: var(--leise); align-items: center;
+    min-width: 0; overflow: hidden; white-space: nowrap; flex: 0 1 auto; }
+  .w-knopf { width: 22px; height: 22px; display: grid; place-items: center; color: var(--leise); font-size: 13px;
+    transition: color .15s var(--ease), background .15s var(--ease); }
+  .w-knopf:hover { color: var(--cyan); background: var(--cyan-4); }
+  .w-knopf.weg:hover { color: var(--rot); background: rgba(255, 61, 90, .1); }
+  .w-inhalt { flex: 1; min-height: 0; padding: 10px 14px 12px 16px; overflow-y: auto; position: relative; }
+  .w-inhalt::-webkit-scrollbar { width: 3px; }
+  .w-inhalt::-webkit-scrollbar-thumb { background: var(--cyan-2); }
+  .zu .w-inhalt { display: none; }
+  .zu .w-knopf.klapp { transform: rotate(-90deg); }
+
+  /* Freischwebende Widgets (Klaus-Orb, Uhr): kein Rahmen, Titel nur beim Drueberfahren */
+  .w.frei { background: none; box-shadow: none; }
+  .w.frei .w-kopf { opacity: 0; transition: opacity .2s var(--ease); }
+  .w.frei .w-kopf::after { display: none; }
+  .w.frei:hover .w-kopf, .w.frei.zu .w-kopf { opacity: 1; }
+
+  .grid-stack-placeholder > .placeholder-content { border: 1px dashed var(--cyan-2) !important; background: var(--cyan-4) !important; }
+  .grid-stack > .grid-stack-item > .ui-resizable-se { background: none; width: 14px; height: 14px; right: 2px; bottom: 2px; transform: none;
+    border-right: 2px solid var(--cyan-2); border-bottom: 2px solid var(--cyan-2); opacity: 0; transition: opacity .15s; }
+  .grid-stack-item:hover > .ui-resizable-se { opacity: 1; }
+
+  /* ---------- Bausteine ---------- */
+  .leer { font-family: var(--mono); font-size: 12px; color: var(--leise); padding: 6px 2px; }
+  .zeile { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 6px 6px; border-left: 2px solid transparent;
+    transition: background .12s var(--ease), border-color .12s var(--ease); }
+  .zeile:hover { background: var(--cyan-4); border-left-color: var(--cyan); }
+  .zeile .haupt { flex: 1; min-width: 0; }
+  .zeile .titel { font-size: 15px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .zeile .unter { font-family: var(--mono); font-size: 10.5px; color: var(--leise); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .zeile .rechts { font-family: var(--mono); font-size: 11px; color: var(--leise); font-variant-numeric: tabular-nums; }
+  .tag { font-family: var(--mono); font-size: 10px; padding: 1px 5px; border: 1px solid var(--cyan-3); color: var(--cyan); flex-shrink: 0; }
+  .zeile .loeschen { color: var(--leise); padding: 2px 6px; opacity: 0; transition: opacity .15s, color .15s; }
+  .zeile:hover .loeschen { opacity: 1; }
+  .zeile .loeschen:hover { color: var(--rot); }
+  .tag.b { border-color: rgba(var(--rgb2), .4); color: var(--bernstein); }
+  .feld { width: 100%; font-family: var(--mono); font-size: 12.5px; color: var(--text); background: rgba(var(--rgb), .04);
+    border: 1px solid var(--cyan-3); padding: 7px 9px; outline: none; }
+  .feld:focus { border-color: var(--cyan); box-shadow: 0 0 10px rgba(var(--rgb), .2); }
+  .feld::placeholder { color: var(--leise); }
+  .nachricht .titel { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.25; font-size: 14px; }
+
+  /* Uhr: Ring-Zifferblatt */
+  .uhr-hud { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+  .uhr-hud svg { flex: 1; min-height: 0; width: 100%; overflow: visible; filter: drop-shadow(0 0 6px rgba(var(--rgb), .35)); }
+  .uhr-hud .ring-duenn { fill: none; stroke: var(--cyan-3); stroke-width: .8; }
+  .uhr-hud .striche line { stroke: var(--cyan-3); stroke-width: 1; }
+  .uhr-hud .striche line.lang { stroke: var(--cyan-2); stroke-width: 1.6; }
+  .uhr-hud .sek-spur { fill: none; stroke: var(--cyan-4); stroke-width: 3; }
+  .uhr-hud .sek { fill: none; stroke: var(--cyan); stroke-width: 3; stroke-linecap: round; transition: stroke-dasharray .3s linear; }
+  .uhr-hud .dreh { fill: none; stroke: var(--cyan-2); stroke-width: 1; stroke-dasharray: 2 7; transform-box: fill-box; transform-origin: center;
+    animation: drehen 40s linear infinite; }
+  @keyframes drehen { to { transform: rotate(360deg); } }
+  .uhr-hud text { text-anchor: middle; fill: var(--cyan); font-variant-numeric: tabular-nums; }
+  .uhr-hud .zeit { font-family: "Orbitron"; font-size: 40px; dominant-baseline: middle; filter: drop-shadow(0 0 6px rgba(var(--rgb), .7)); }
+  .uhr-hud .sekunden { font-family: "Orbitron"; font-size: 13px; fill: var(--cyan-2); }
+  .uhr-hud .tag { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; fill: var(--leise); }
+  .uhr-gruss { font-size: 17px; letter-spacing: .24em; text-transform: uppercase; flex-shrink: 0; }
+  .uhr-gruss b { color: var(--cyan); }
+
+  /* Datum: grosse Typo wie bei SHIELD OS */
+  .datum { height: 100%; display: flex; align-items: center; justify-content: flex-end; gap: 14px; padding-right: 6px; }
+  .datum .tag-zahl { font-family: "Orbitron"; font-size: clamp(56px, 6vw, 110px); line-height: .9; color: #fff;
+    text-shadow: 0 0 24px rgba(var(--rgb), .6); }
+  .datum .seite { display: flex; flex-direction: column; gap: 6px; }
+  .datum .monat { font-weight: 700; font-size: 20px; letter-spacing: .28em; color: var(--bg); background: var(--cyan);
+    padding: 3px 12px; box-shadow: 0 0 18px rgba(var(--rgb), .5); }
+  .datum .wochentag { font-weight: 700; font-size: 16px; letter-spacing: .3em; color: var(--cyan); }
+  .datum .kw { font-family: var(--mono); font-size: 10.5px; letter-spacing: .2em; color: var(--leise); }
+
+  /* Klaus */
+  .klaus { height: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .klaus .buehne { position: relative; flex: 1 1 0; min-height: 120px; width: 100%; }
+  .klaus .buehne canvas, .klaus .buehne svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  /* Segment-Ring (SHIELD-OS-Stil): Ringausschnitte als Knoepfe */
+  .ring-menue .fuehrung { fill: none; stroke: var(--cyan-3); stroke-width: 1; stroke-dasharray: 1 5; }
+  .ring-menue .seg { cursor: pointer; }
+  .ring-menue .seg path { fill: rgba(var(--rgb), .07); stroke: var(--cyan-2); stroke-width: 1;
+    transition: fill .15s var(--ease), stroke .15s var(--ease); }
+  .ring-menue .seg text { fill: var(--cyan); font-family: "Rajdhani", sans-serif; font-weight: 700; letter-spacing: .14em;
+    text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+  .ring-menue .seg:hover path { fill: rgba(var(--rgb), .28); stroke: var(--cyan); }
+  .ring-menue .seg:hover text { fill: #fff; }
+  .ring-menue .satellit { --farbe: var(--cyan); }
+  .ring-menue .satellit.warm { --farbe: var(--bernstein); }
+  .ring-menue .satellit.heiss { --farbe: var(--rot); }
+  .ring-menue .satellit .verbindung { stroke: var(--cyan-2); stroke-width: 1; stroke-dasharray: 4 3; }
+  .ring-menue .satellit .knoten { fill: var(--cyan); }
+  .ring-menue .satellit .aussen { fill: rgba(var(--rgb), .05); stroke: var(--cyan-3); stroke-width: 1; stroke-dasharray: 2 4; }
+  .ring-menue .satellit .spur { fill: none; stroke: rgba(var(--rgb), .12); stroke-width: 4; }
+  .ring-menue .satellit .wert { fill: none; stroke: var(--farbe); stroke-width: 4; transition: stroke-dasharray .6s var(--ease); }
+  .ring-menue .satellit text { text-anchor: middle; dominant-baseline: middle; fill: var(--farbe); }
+  .ring-menue .satellit .zahl { font-family: "Orbitron"; }
+  .ring-menue .satellit .name { font-family: Consolas, monospace; letter-spacing: 2px; fill: var(--leise); }
+  .ring-menue .seg.aktiv path { animation: seg-blitz .6s var(--ease); }
+  @keyframes seg-blitz { 30% { fill: var(--gruen); } }
+  .klaus.mit-briefing .verlauf { max-height: 72%; }
+  .klaus.mit-briefing canvas { min-height: 70px; }
+  .blase.briefing { align-self: stretch; max-width: none; padding: 0 0 6px; border: 1px solid var(--cyan-2); background: var(--cyan-4); }
+  .blase.briefing .kopf { padding: 7px 11px; font-weight: 700; font-size: 12px; letter-spacing: .22em; color: var(--cyan);
+    border-bottom: 1px dashed var(--cyan-3); margin-bottom: 4px; }
+  .blase.briefing .zeile-b { padding: 4px 11px; font-size: 14px; color: var(--gruen); }
+  .blase.briefing .antwort { padding: 4px 11px 2px; }
+  .maerkte { display: flex; flex-wrap: wrap; gap: 5px; padding: 4px 11px 6px; }
+  .markt { font-family: var(--mono); font-size: 11.5px; padding: 2px 7px; border: 1px solid currentColor; font-variant-numeric: tabular-nums; }
+  .sprachhinweis, .blase.briefing .antwort, .blase.auftrag .antwort { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--leise); flex-shrink: 0; }
+  .blase.auftrag .antwort { padding: 0 11px 10px; color: var(--bernstein); }
+  .klaus .status { font-family: var(--mono); font-size: 11.5px; letter-spacing: .16em; color: var(--cyan); }
+  /* Gespraech direkt im Widget */
+  .verlauf { flex: 0 1 auto; max-height: 40%; min-height: 0; width: min(620px, 96%); overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+    padding: 4px 2px; overscroll-behavior: contain; }
+  .verlauf::-webkit-scrollbar { width: 4px; }
+  .verlauf::-webkit-scrollbar-thumb { background: var(--cyan-3); }
+  .blase { max-width: 86%; padding: 7px 11px; font-size: 15.5px; line-height: 1.35; white-space: pre-wrap; word-wrap: break-word;
+    animation: rein .25s var(--ease) both; }
+  .blase::before { display: block; font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; margin-bottom: 2px; }
+  .blase.du { align-self: flex-end; background: var(--cyan-4); border: 1px solid var(--cyan-3); border-right: 2px solid var(--cyan); }
+  .blase.du::before { content: "DU"; color: var(--cyan-2); text-align: right; }
+  .blase.klaus-text { align-self: flex-start; background: rgba(0, 0, 0, .35); border: 1px solid var(--cyan-3); border-left: 2px solid var(--cyan); }
+  .blase.klaus-text::before { content: "KLAUS"; color: var(--cyan); }
+  .blase.info { align-self: center; font-family: var(--mono); font-size: 11px; color: var(--leise); text-align: center; padding: 0 6px; }
+  .blase.auftrag { align-self: stretch; max-width: none; padding: 0; border: 1px solid rgba(var(--rgb2), .5); background: rgba(var(--rgb2), .05); }
+  .blase.auftrag .kopf { padding: 7px 11px; font-weight: 700; font-size: 12px; letter-spacing: .22em; color: var(--bernstein);
+    border-bottom: 1px dashed rgba(var(--rgb2), .4); }
+  .blase.auftrag pre { padding: 9px 11px; font: 12.5px/1.5 var(--mono); white-space: pre-wrap; max-height: 240px; overflow-y: auto; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .chip { font-weight: 700; font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--cyan);
+    padding: 5px 10px; border: 1px solid var(--cyan-3); transition: background .12s var(--ease), border-color .12s var(--ease); }
+  .chip:hover { background: var(--cyan-4); border-color: var(--cyan-2); }
+
+  /* Schnellstart */
+  .kacheln { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+  .kachel { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    border: 1px solid var(--cyan-3); background: rgba(var(--rgb), .03); position: relative;
+    transition: background .15s var(--ease), border-color .15s var(--ease), transform .15s var(--ease); }
+  .kachel:hover { background: var(--cyan-4); border-color: var(--cyan); transform: translateY(-1px); }
+  .kachel:active { transform: scale(.96); }
+  .kachel img, .kachel .buchstabe { width: 34px; height: 34px; }
+  .kachel .buchstabe { display: grid; place-items: center; font-family: "Orbitron"; color: var(--cyan); border: 1px solid var(--cyan-2); }
+  .kachel span { font-size: 11.5px; letter-spacing: .04em; color: var(--text); text-align: center; line-height: 1.1; max-width: 100%;
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .kachel.gestartet { animation: start .6s var(--ease); }
+  @keyframes start { 30% { box-shadow: 0 0 26px var(--gruen); border-color: var(--gruen); } }
+  .appsuche { margin-top: 10px; }
+  .treffer { margin-top: 4px; }
+
+  /* Wetter */
+  .wetter { display: flex; align-items: center; gap: 14px; }
+  .wetter .symbol { font-size: 40px; filter: drop-shadow(0 0 8px rgba(var(--rgb), .35)); }
+  .wetter b { font-family: "Orbitron"; font-size: 34px; color: var(--cyan); }
+  .wetter .unter { font-family: var(--mono); font-size: 11px; color: var(--leise); letter-spacing: .1em; text-transform: uppercase; }
+  .tage { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 12px; border-top: 1px dashed var(--cyan-3); padding-top: 8px; }
+  .tag-w { text-align: center; font-family: var(--mono); font-size: 11px; color: var(--leise); font-variant-numeric: tabular-nums; }
+  .tag-w div { font-size: 18px; margin: 2px 0; }
+  .tag-w b { color: var(--text); font-weight: 400; }
+
+  /* Boerse */
+  .aktie { display: grid; grid-template-columns: 1fr 80px 74px; gap: 10px; align-items: center; }
+  .aktie svg { width: 80px; height: 26px; }
+  .proz { font-family: var(--mono); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+  .plus { color: var(--gruen); } .minus { color: var(--rot); }
+
+  /* System: Rundinstrumente */
+  .instrumente { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px 10px; }
+  .instrument { text-align: center; --farbe: var(--cyan); }
+  .instrument.warm { --farbe: var(--bernstein); }
+  .instrument.heiss { --farbe: var(--rot); }
+  .instrument svg { width: 100%; max-height: 120px; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--farbe) 45%, transparent)); }
+  .instrument .skala line { stroke: var(--cyan-3); stroke-width: .8; }
+  .instrument .spur { fill: none; stroke: var(--cyan-4); stroke-width: 6; }
+  .instrument .wert { fill: none; stroke: var(--farbe); stroke-width: 6; transition: stroke-dasharray .6s var(--ease); }
+  .instrument text { text-anchor: middle; fill: var(--farbe); }
+  .instrument .zahl { font-family: "Orbitron"; font-size: 17px; }
+  .instrument .prozent { font-size: 8px; }
+  .instrument .name { font-family: var(--mono); font-size: 7.5px; letter-spacing: 1.5px; fill: var(--leise); }
+  .graph-kopf { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em;
+    color: var(--leise); margin-top: 8px; }
+  .cpu-graph { width: 100%; height: 46px; display: block; margin-top: 3px; border: 1px solid var(--cyan-4); }
+  .cpu-graph .gitterlinien { stroke: var(--cyan-4); stroke-width: .4; fill: none; vector-effect: non-scaling-stroke; }
+  .cpu-graph .flaeche { fill: rgba(var(--rgb), .14); }
+  .cpu-graph .linie { fill: none; stroke: var(--cyan); stroke-width: 1.3; vector-effect: non-scaling-stroke; }
+  .instrument .unter { font-family: var(--mono); font-size: 10px; color: var(--leise); font-variant-numeric: tabular-nums; min-height: 13px; }
+
+  /* Notizen */
+  .notiz { width: 100%; height: 100%; resize: none; background: transparent; border: 0; outline: none; color: var(--text);
+    font-family: var(--mono); font-size: 13px; line-height: 1.55;
+    background-image: linear-gradient(transparent calc(1.55em - 1px), var(--cyan-4) 1px); background-size: 100% 1.55em; }
+
+  /* Zahlen (Klesro) */
+  .zahlen { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; height: 100%; }
+  .zahl { border: 1px solid var(--cyan-3); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .zahl b { font-family: "Orbitron"; font-size: 28px; color: var(--cyan); }
+  .zahl span { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--leise); }
+
+  @keyframes rein { from { opacity: 0; transform: translateY(6px); } }
+  /* Kurzes Aufleuchten, wenn Klaus ein Widget bewegt oder einblendet */
+  .w.blitzt { animation: blitzt 1.1s var(--ease); }
+  @keyframes blitzt { 20% { filter: brightness(1.9); } }
+
+  /* Design-Auswahl */
+  #designs { position: absolute; top: 46px; right: 250px; z-index: 40; display: none; gap: 6px; padding: 10px;
+    background: var(--bg); border: 1px solid var(--cyan-2); box-shadow: 0 0 30px rgba(0, 0, 0, .6); }
+  #designs.offen { display: flex; animation: rein .2s var(--ease); }
+  .design-wahl { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border: 1px solid rgba(255, 255, 255, .08);
+    font-weight: 700; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--farbe);
+    transition: background .15s var(--ease), border-color .15s var(--ease); }
+  .design-wahl i { width: 12px; height: 12px; background: var(--farbe); box-shadow: 0 0 10px var(--farbe); }
+  .design-wahl:hover, .design-wahl.aktiv { border-color: var(--farbe); background: rgba(255, 255, 255, .04); }
+
+  /* Web-Widget: Platzhalter, ueber den Python die Browser-Ansicht legt */
+  .w-inhalt.web-inhalt { padding: 0; overflow: hidden; }
+  .web-platz { width: 100%; height: 100%; background: #fff1; }
+  .web-start { height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 12px; padding: 0 8%; }
+  .web-start .chips { justify-content: flex-start; }
+
+  /* Widget-Katalog */
+  #katalog { position: fixed; inset: 0; display: none; place-items: center; background: rgba(0, 4, 8, .7); backdrop-filter: blur(4px); z-index: 50; }
+  #katalog.offen { display: grid; animation: einblenden .25s var(--ease); }
+  @keyframes einblenden { from { opacity: 0; } }
+  .katalog-box { width: min(760px, 92vw); background: #031018; border: 1px solid var(--cyan-2); padding: 20px; position: relative;
+    box-shadow: 0 0 60px rgba(var(--rgb), .12); }
+  .katalog-box h3 { font-weight: 700; letter-spacing: .26em; color: var(--cyan); font-size: 15px; margin-bottom: 14px; }
+  .katalog-liste { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .katalog-eintrag { text-align: left; border: 1px solid var(--cyan-3); padding: 12px; transition: background .15s var(--ease), border-color .15s var(--ease); }
+  .katalog-eintrag:hover { background: var(--cyan-4); border-color: var(--cyan); }
+  .katalog-eintrag b { display: block; color: var(--cyan); letter-spacing: .16em; text-transform: uppercase; font-size: 13px; }
+  .katalog-eintrag span { font-size: 13px; color: var(--leise); }
+  .katalog-zu { position: absolute; top: 12px; right: 14px; color: var(--leise); font-size: 16px; }
+  .hinweis { font-family: var(--mono); font-size: 11px; color: var(--leise); margin-top: 14px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .zustand i, .kachel.gestartet { animation: none !important; }
+  }
+  /* Panel verdeckt (z. B. Spiel im Vollbild): alle CSS-Animationen anhalten */
+  body.ruhe *, body.ruhe *::before, body.ruhe *::after { animation-play-state: paused !important; }
+</style>
+</head>
+<body>
+<div class="gitter"></div><div class="zeilen"></div>
+<div class="lineal links"></div><div class="lineal rechts"></div>
+<div class="fuss links" id="cursor">CURSOR 0000 · 0000</div>
+<div class="fuss rechts">◆ SECURE UPLINK // GEMINI LIVE · CLAUDE OPUS · LOKAL</div>
+<div id="boot" aria-hidden="true"><div class="boot-box"><div class="boot-logo">K.L.A.U.S.</div>
+  <div class="boot-unter">KLESRO LOGISTIC AUTONOMOUS UTILITY SYSTEM</div><div class="boot-zeilen"></div><div class="boot-balken"><i></i></div></div></div>
+<div class="ecke lo"></div><div class="ecke ro"></div><div class="ecke lu"></div><div class="ecke ru"></div>
+
+<header class="leiste">
+  <div class="logo" translate="no">K.L.A.U.S.</div>
+  <div class="unterzeile">// PERSONAL INTERFACE · KLESRO WEB · ONLINE</div>
+  <div class="platz"></div>
+  <div class="telemetrie" id="telemetrie"></div>
+  <div class="zustand"><i id="zustandspunkt"></i><span id="zustandstext">SYSTEM BEREIT · SAG „KLAUS“</span></div>
+  <button class="hud-knopf schalter" id="knopf-stumm" title="Klaus stumm schalten – er hört nur noch auf „Klaus, wieder an“ (Strg+Alt+K)">◉ Stumm</button>
+  <button class="hud-knopf schalter" id="knopf-mikro" title="Mikrofon komplett aus (Strg+Shift+M)">◎ Mikro</button>
+  <button class="hud-knopf" id="knopf-design" title="Farbpalette wechseln (oder sag: „Klaus, Design rot“)">◐ Design</button>
+  <div id="designs" role="menu" aria-label="Design wählen"></div>
+  <button class="hud-knopf" id="knopf-widget">+ Widget</button>
+  <button class="hud-knopf" id="knopf-standard" title="Alle Widgets auf Standard zurücksetzen">↺ Standard</button>
+</header>
+
+<div class="grid-stack" id="raster"></div>
+
+<div id="katalog" role="dialog" aria-label="Widget hinzufügen">
+  <div class="katalog-box">
+    <h3>WIDGET HINZUFÜGEN</h3>
+    <button class="katalog-zu" id="katalog-zu" aria-label="Schließen">✕</button>
+    <div class="katalog-liste" id="katalog-liste"></div>
+    <div class="hinweis">Am Titel ziehen = verschieben · Ecke unten rechts = Größe · ▾ = einklappen · Rechtsklick auf Einträge = entfernen</div>
+  </div>
+</div>
+
+<script>
+const GS = window.GridStack.GridStack || window.GridStack;
+const SPALTEN = 12, ZEILEN = 24;
+const ZUSTAND_TEXT = {
+  aus: "SYSTEM BEREIT · SAG „KLAUS“", start: "INITIALISIERE …", hoeren: "HÖRE ZU …", denken: "VERARBEITE …",
+  sprechen: "ANTWORTE …", aktion: "AUSGEFÜHRT", fehler: "FEHLER · SIEHE LOG",
+};
+const ZUSTAND_FARBE = { denken: "var(--bernstein)", aktion: "#3dffa8", fehler: "#ff3d5a" };
+
+let klaus, grid;
+let modelle = [];                 // gespeicherter Zustand aller Widgets
+const laufend = {};               // id -> { timer: [], abos: [] }
+const abos = {};                  // datenschluessel -> [{id, fn}]
+const zwischenspeicher = {};      // datenschluessel -> letzte Daten
+const klausHoerer = { zustand: [], pegel: [], nachricht: [] };
+let alleApps = [];
+
+// ================================================================ Widget-Typen
+const TYPEN = {
+  uhr: {
+    titel: "Zeit", info: "Ring-Zifferblatt mit Datum und Begrüßung", w: 3, h: 7, minW: 2, minH: 4, frei: true,
+    bauen(c) {
+      // 60 Striche, jeder 5. lang; Sekunden als wachsender Bogen
+      const striche = Array.from({ length: 60 }, (_, i) => {
+        const a = (i / 60) * Math.PI * 2, lang = i % 5 === 0, r1 = lang ? 99 : 104;
+        return `<line x1="${120 + Math.sin(a) * r1}" y1="${120 - Math.cos(a) * r1}" x2="${120 + Math.sin(a) * 110}" y2="${120 - Math.cos(a) * 110}"
+          class="${lang ? "lang" : ""}"/>`;
+      }).join("");
+      c.inhalt.innerHTML = `<div class="uhr-hud"><svg viewBox="0 0 240 240">
+          <circle cx="120" cy="120" r="115" class="ring-duenn"/>
+          <g class="striche">${striche}</g>
+          <circle cx="120" cy="120" r="92" class="sek-spur"/>
+          <circle cx="120" cy="120" r="92" class="sek" transform="rotate(-90 120 120)"/>
+          <circle cx="120" cy="120" r="82" class="dreh"/>
+          <circle cx="120" cy="120" r="74" class="ring-duenn"/>
+          <text x="120" y="122" class="zeit"></text>
+          <text x="120" y="146" class="sekunden"></text>
+          <text x="120" y="92" class="tag"></text>
+        </svg><div class="uhr-gruss"></div></div>`;
+      const q = (s) => c.inhalt.querySelector(s);
+      const umfang = 2 * Math.PI * 92;
+      const tick = () => {
+        const j = new Date(), zwei = (n) => String(n).padStart(2, "0");
+        q(".zeit").textContent = `${zwei(j.getHours())}:${zwei(j.getMinutes())}`;
+        q(".sekunden").textContent = zwei(j.getSeconds());
+        q(".tag").textContent = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" })
+          .format(j).replace(",", "").toUpperCase();
+        q(".sek").setAttribute("stroke-dasharray", `${(j.getSeconds() / 60) * umfang} ${umfang}`);
+        const h = j.getHours();
+        q(".uhr-gruss").innerHTML = `${h < 5 ? "Gute Nacht" : h < 11 ? "Guten Morgen" : h < 18 ? "Guten Tag" : "Guten Abend"}, <b>Nikola</b>`;
+      };
+      tick(); c.alle(1, tick);
+    },
+  },
+
+  datum: {
+    titel: "Datum", info: "Großes Datum mit Kalenderwoche", w: 3, h: 4, minW: 2, minH: 3, frei: true,
+    bauen(c) {
+      c.inhalt.innerHTML = '<div class="datum"><div class="tag-zahl"></div><div class="seite"><div class="monat"></div><div class="wochentag"></div><div class="kw"></div></div></div>';
+      const q = (sel) => c.inhalt.querySelector(sel);
+      const tick = () => {
+        const j = new Date();
+        // ISO-Kalenderwoche
+        const d = new Date(Date.UTC(j.getFullYear(), j.getMonth(), j.getDate()));
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+        const kw = Math.ceil(((d - new Date(Date.UTC(d.getUTCFullYear(), 0, 1))) / 86400000 + 1) / 7);
+        q(".tag-zahl").textContent = String(j.getDate()).padStart(2, "0");
+        q(".monat").textContent = j.toLocaleDateString("de-DE", { month: "long" }).toUpperCase();
+        q(".wochentag").textContent = j.toLocaleDateString("de-DE", { weekday: "long" }).toUpperCase();
+        q(".kw").textContent = `KW ${String(kw).padStart(2, "0")} · ${j.getFullYear()}`;
+      };
+      tick(); c.alle(60, tick);
+    },
+  },
+
+  klaus: {
+    titel: "Klaus", info: "Der Orb und euer Gespräch (nur per Stimme)", w: 6, h: 16, minW: 3, minH: 8, frei: true,
+    bauen(c) {
+      c.inhalt.innerHTML = `<div class="klaus"><div class="buehne"><canvas></canvas><svg class="ring-menue"></svg></div>
+        <div class="status">STATUS // BEREIT</div><div class="verlauf" aria-live="polite"></div>
+        <div class="sprachhinweis">SAG „KLAUS“ · Z. B. „KLAUS, ÖFFNE STEAM“</div></div>`;
+      const orb = new KlausOrb(c.inhalt.querySelector("canvas"), { platz: 0.7, pegelAbstand: 0.385 });
+      ringMenue(c.inhalt.querySelector(".buehne"), c.inhalt.querySelector(".ring-menue"));
+      const status = c.inhalt.querySelector(".status"), verlauf = c.inhalt.querySelector(".verlauf");
+      // Kein Chatverlauf auf dem Bildschirm (steht im Obsidian-Vault unter Gespraeche/).
+      // Nur Karten, die etwas zu tun geben: "Seit du weg warst" und ein Claude-Auftrag - je 3 Minuten.
+      let platzTimer;
+      const zeigen = (rolle, text) => {
+        if (rolle !== "briefing" && rolle !== "auftrag") return;
+        verlauf.innerHTML = "";
+        const b = blase(rolle, text);
+        verlauf.append(b);
+        const box = c.inhalt.querySelector(".klaus");
+        box.classList.add("mit-briefing");
+        clearTimeout(platzTimer);
+        platzTimer = setTimeout(() => { box.classList.remove("mit-briefing"); verlauf.innerHTML = ""; }, 180000);
+        requestAnimationFrame(() => { verlauf.scrollTop = 0; });
+      };
+      c.hoere("zustand", (z) => {
+        orb.setZustand(z);
+        if (!document.body.classList.contains("stumm") && !document.body.classList.contains("mikro-aus")) {
+          status.textContent = "STATUS // " + ZUSTAND_TEXT[z].split(" ·")[0];
+        }
+      });
+      c.hoere("pegel", (p) => orb.setPegel(p));
+      c.hoere("nachricht", zeigen);
+    },
+  },
+
+  schnellstart: {
+    titel: "Schnellstart", info: "Deine Apps und Spiele als Kacheln", w: 3, h: 9, minW: 2, minH: 4,
+    bauen(c) {
+      c.inhalt.innerHTML = `<div class="kacheln"></div>
+        <div class="appsuche"><input class="feld" aria-label="App starten" spellcheck="false" autocomplete="off" placeholder="App starten …"><div class="treffer"></div></div>`;
+      const kacheln = c.inhalt.querySelector(".kacheln");
+      const zeichnen = () => {
+        kacheln.innerHTML = "";
+        for (const name of c.einst.apps || []) {
+          const k = el("button", "kachel");
+          k.title = `${name} · Rechtsklick = entfernen`;
+          const platz = el("div", "buchstabe", name[0]);
+          k.append(platz, el("span", "", name));
+          klaus.icon(name, (url) => { if (url) { const i = new Image(); i.src = url; i.alt = ""; platz.replaceWith(i); } });
+          k.onclick = () => { k.classList.remove("gestartet"); void k.offsetWidth; k.classList.add("gestartet"); klaus.oeffne(name); };
+          k.oncontextmenu = (e) => { e.preventDefault(); c.einst.apps = c.einst.apps.filter((a) => a !== name); c.speichern(); zeichnen(); };
+          kacheln.append(k);
+        }
+      };
+      if (!c.einst.apps) {
+        c.abo("favoriten", "", 0, (d) => { if (!c.einst.apps) { c.einst.apps = d.liste.map((f) => f.name); c.speichern(); zeichnen(); } });
+      } else zeichnen();
+      // Suche: Enter oeffnet, "+" am Treffer legt eine Kachel an
+      appSuche(c.inhalt.querySelector(".appsuche"), (name) => klaus.oeffne(name), (name) => {
+        c.einst.apps = [...new Set([...(c.einst.apps || []), name])]; c.speichern(); zeichnen();
+      });
+    },
+  },
+
+  projekte: {
+    titel: "Projekte", info: "Letzte VS-Code-Ordner und Klaus-Projekte", w: 3, h: 10, minW: 2, minH: 3,
+    bauen(c) {
+      c.extra.textContent = "KLICK ÖFFNEN · RECHTS ORDNER";
+      c.abo("projekte", "", 60, (d) => {
+        c.inhalt.innerHTML = "";
+        for (const p of d.klaus) {
+          const z = el("button", "zeile");
+          z.append(el("span", "tag b", "KL"));
+          const h = el("div", "haupt");
+          h.append(el("div", "titel", p.name.replace(/^\d{4}-\d{2}-\d{2}-/, "")), el("div", "unter", p.fertig ? "KLAUS // FERTIG" : "KLAUS // NUR AUFTRAG"));
+          const weg = el("span", "loeschen", "✕");
+          weg.title = "In den Papierkorb verschieben";
+          weg.onclick = (e) => {
+            e.stopPropagation();
+            if (confirm(`„${p.name}“ in den Papierkorb verschieben?
+
+${p.pfad}`)) klaus.papierkorb(p.pfad);
+          };
+          z.append(h, weg);
+          z.onclick = () => klaus.ordner(p.index || p.pfad);
+          z.oncontextmenu = (e) => { e.preventDefault(); klaus.ordner(p.pfad); };
+          c.inhalt.append(z);
+        }
+        for (const p of d.vscode) {
+          const z = el("button", "zeile");
+          z.append(el("span", "tag", "VS"));
+          const h = el("div", "haupt");
+          h.append(el("div", "titel", p.name), el("div", "unter", p.pfad));
+          z.append(h, el("span", "rechts", p.zuletzt));
+          z.onclick = () => klaus.vscode(p.pfad);
+          z.oncontextmenu = (e) => { e.preventDefault(); klaus.ordner(p.pfad); };
+          c.inhalt.append(z);
+        }
+        if (!c.inhalt.children.length) c.inhalt.append(el("div", "leer", "KEINE PROJEKTE"));
+      });
+    },
+  },
+
+  wetter: {
+    titel: "Wetter", info: "Aktuell und 4 Tage", w: 3, h: 6, minW: 2, minH: 3,
+    bauen(c) {
+      c.abo("wetter", "", 900, (d) => {
+        if (d.fehler) { c.inhalt.innerHTML = '<div class="leer">WETTERDIENST NICHT ERREICHBAR</div>'; return; }
+        c.extra.textContent = d.ort.toUpperCase();
+        c.inhalt.innerHTML = `<div class="wetter"><div class="symbol">${d.symbol}</div><div><b>${d.temp}°</b><div class="unter">${d.text}</div></div></div>
+          <div class="tage">${d.tage.map((t) => `<div class="tag-w">${t.tag}<div>${t.symbol}</div><b>${t.hoch}°</b> ${t.tief}°</div>`).join("")}</div>`;
+      });
+    },
+  },
+
+  boerse: {
+    titel: "Börse", info: "Kurse mit Tagesverlauf, Symbole frei wählbar", w: 3, h: 8, minW: 2, minH: 3,
+    bauen(c) {
+      if (!c.einst.symbole) c.einst.symbole = "^GDAXI,NVDA,AAPL,MSFT,BTC-EUR";
+      const plus = el("button", "w-knopf", "+");
+      plus.title = "Symbol hinzufügen (Yahoo-Kürzel, z. B. TSLA, SAP.DE, ETH-EUR)";
+      c.extra.append(plus);
+      const liste = el("div"), eingabe = el("input", "feld");
+      eingabe.placeholder = "Symbol, z. B. TSLA …"; eingabe.style.display = "none"; eingabe.style.marginTop = "8px";
+      eingabe.setAttribute("aria-label", "Börsen-Symbol hinzufügen");
+      c.inhalt.append(liste, eingabe);
+      plus.onclick = () => { eingabe.style.display = eingabe.style.display === "none" ? "" : "none"; eingabe.focus(); };
+      let laden;
+      eingabe.onkeydown = (e) => {
+        if (e.key !== "Enter" || !eingabe.value.trim()) return;
+        c.einst.symbole = [...c.einst.symbole.split(","), eingabe.value.trim().toUpperCase()].join(",");
+        eingabe.value = ""; eingabe.style.display = "none"; c.speichern(); laden();
+      };
+      laden = () => c.abo("aktien", c.einst.symbole, 120, (d) => {
+        liste.innerHTML = "";
+        for (const a of d.liste || []) {
+          const z = el("button", "zeile aktie");
+          z.title = "Klick = Details · Rechtsklick = entfernen";
+          const links = el("div", "haupt");
+          links.append(el("div", "titel", a.name));
+          z.oncontextmenu = (e) => { e.preventDefault(); c.einst.symbole = c.einst.symbole.split(",").filter((s) => s !== a.symbol).join(","); c.speichern(); laden(); };
+          if (a.fehler) { links.append(el("div", "unter", "NICHT VERFÜGBAR")); z.append(links); liste.append(z); continue; }
+          links.append(el("div", "unter", `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: a.preis > 1000 ? 0 : 2 }).format(a.preis)} ${a.waehrung}`));
+          z.append(links, kurve(a.verlauf, a.aenderung >= 0),
+            el("div", "proz " + (a.aenderung >= 0 ? "plus" : "minus"),
+              (a.aenderung >= 0 ? "▲ " : "▼ ") + new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2 }).format(Math.abs(a.aenderung)) + "%"));
+          z.onclick = () => klaus.link(`https://finance.yahoo.com/quote/${encodeURIComponent(a.symbol)}`);
+          liste.append(z);
+        }
+      }, true);
+      laden();
+    },
+  },
+
+  nachrichten: {
+    titel: "Nachrichten", info: "Tagesschau und heise, live", w: 3, h: 10, minW: 2, minH: 3,
+    bauen(c) {
+      c.abo("nachrichten", "", 600, (d) => {
+        c.inhalt.innerHTML = "";
+        for (const n of d.liste || []) {
+          const z = el("button", "zeile nachricht");
+          z.append(el("span", "tag" + (n.quelle === "heise" ? " b" : ""), { heise: "HS", google: "GN" }[n.quelle] || "TS"));
+          const h = el("div", "haupt");
+          h.append(el("div", "titel", n.titel), el("div", "unter", n.alter ? `VOR ${n.alter.toUpperCase()}` : ""));
+          z.append(h);
+          z.title = "Klick = im Panel lesen · Rechtsklick = im Browser";
+          z.onclick = () => webOeffnen(n.link);
+          z.oncontextmenu = (e) => { e.preventDefault(); klaus.link(n.link); };
+          c.inhalt.append(z);
+        }
+        if (!c.inhalt.children.length) c.inhalt.append(el("div", "leer", "KEINE NACHRICHTEN ERREICHBAR"));
+      });
+    },
+  },
+
+  system: {
+    titel: "System", info: "CPU, RAM, Grafikkarte als Rundinstrumente", w: 3, h: 8, minW: 2, minH: 5,
+    bauen(c) {
+      const umfang = 2 * Math.PI * 38;
+      // Rundinstrument: Skala aussen, Wert als Bogen, Zahl in der Mitte
+      const skala = Array.from({ length: 36 }, (_, i) => {
+        const a = (i / 36) * Math.PI * 2;
+        return `<line x1="${50 + Math.sin(a) * 45}" y1="${50 - Math.cos(a) * 45}" x2="${50 + Math.sin(a) * (i % 3 ? 47 : 49)}" y2="${50 - Math.cos(a) * (i % 3 ? 47 : 49)}"/>`;
+      }).join("");
+      const instrument = (name, wert, unter) => {
+        const stufe = wert > 85 ? "heiss" : wert > 65 ? "warm" : "";
+        return `<div class="instrument ${stufe}"><svg viewBox="0 0 100 100">
+            <g class="skala">${skala}</g>
+            <circle cx="50" cy="50" r="38" class="spur"/>
+            <circle cx="50" cy="50" r="38" class="wert" transform="rotate(-90 50 50)" stroke-dasharray="${(Math.min(wert, 100) / 100) * umfang} ${umfang}"/>
+            <text x="50" y="52" class="zahl">${Math.round(wert)}<tspan dy="-7" class="prozent">%</tspan></text>
+            <text x="50" y="66" class="name">${name}</text>
+          </svg><div class="unter">${unter}</div></div>`;
+      };
+      const cpuVerlauf = [];  // letzte 60 Messungen (= 4 Minuten)
+      c.abo("system", "", 4, (d) => {
+        cpuVerlauf.push(d.cpu);
+        if (cpuVerlauf.length > 60) cpuVerlauf.shift();
+        let html = instrument("CPU", d.cpu, "") + instrument("RAM", d.ram, `${d.ram_gb} / ${d.ram_gesamt} GB`);
+        if (d.gpu !== undefined) {
+          c.extra.textContent = d.gpu_name.toUpperCase();
+          html += instrument("GPU", d.gpu, `${Math.round(d.gpu_temp)} °C`) + instrument("VRAM", d.vram, `${d.vram_gb} / ${d.vram_gesamt} GB`);
+        }
+        const punkte = cpuVerlauf.map((v, i) => `${((i / 59) * 120).toFixed(1)},${(30 - (v / 100) * 28).toFixed(1)}`).join(" L");
+        const graph = cpuVerlauf.length > 1 ? `<div class="graph-kopf"><span>CPU-VERLAUF</span><span>4 MIN</span></div>
+          <svg class="cpu-graph" viewBox="0 0 120 30" preserveAspectRatio="none">
+            <path class="gitterlinien" d="M0,10 H120 M0,20 H120 M30,0 V30 M60,0 V30 M90,0 V30"/>
+            <path class="flaeche" d="M0,30 L${punkte} L${(((cpuVerlauf.length - 1) / 59) * 120).toFixed(1)},30 Z"/>
+            <path class="linie" d="M${punkte}"/></svg>` : "";
+        c.inhalt.innerHTML = `<div class="instrumente">${html}</div>${graph}<div class="leer">LAUFZEIT ${String(d.laufzeit_h).replace(".", ",")} H</div>`;
+      });
+    },
+  },
+
+  notizen: {
+    titel: "Notizen", info: "Freier Notizblock, speichert automatisch", w: 3, h: 7, minW: 2, minH: 3, mehrfach: true,
+    bauen(c) {
+      const t = el("textarea", "notiz");
+      t.setAttribute("aria-label", "Notizen"); t.placeholder = "Notizen …"; t.value = c.einst.text || "";
+      t.oninput = () => { c.einst.text = t.value; c.speichern(); };
+      c.inhalt.append(t);
+    },
+  },
+
+  lesezeichen: {
+    titel: "Lesezeichen", info: "Deine Links, z. B. Kunden-Websites", w: 3, h: 6, minW: 2, minH: 3, mehrfach: true,
+    bauen(c) {
+      if (!c.einst.links) c.einst.links = [{ name: "Klesro Web", url: "https://klesro-web.de" }];
+      const liste = el("div"), eingabe = el("input", "feld");
+      eingabe.placeholder = "Name https://… + Enter"; eingabe.style.marginTop = "8px";
+      eingabe.setAttribute("aria-label", "Lesezeichen hinzufügen");
+      const zeichnen = () => {
+        liste.innerHTML = "";
+        for (const l of c.einst.links) {
+          const z = el("button", "zeile");
+          z.append(el("span", "tag", "↗"));
+          const h = el("div", "haupt");
+          h.append(el("div", "titel", l.name), el("div", "unter", l.url));
+          z.append(h);
+          z.onclick = () => klaus.link(l.url);
+          z.oncontextmenu = (e) => { e.preventDefault(); c.einst.links = c.einst.links.filter((x) => x !== l); c.speichern(); zeichnen(); };
+          liste.append(z);
+        }
+      };
+      eingabe.onkeydown = (e) => {
+        if (e.key !== "Enter") return;
+        const m = eingabe.value.trim().match(/^(.*?)\s*(https?:\/\/\S+)$/);
+        if (!m) return;
+        c.einst.links.push({ name: m[1] || m[2].replace(/^https?:\/\//, ""), url: m[2] });
+        eingabe.value = ""; c.speichern(); zeichnen();
+      };
+      c.inhalt.append(liste, eingabe);
+      zeichnen();
+    },
+  },
+
+  web: {
+    titel: "Web", info: "Eine Website direkt im Widget: YouTube, ChatGPT, Kunden-Seiten …", w: 4, h: 12, minW: 2, minH: 4, mehrfach: true,
+    bauen(c) {
+      const knopf = (zeichen, titel, fn) => { const k = el("button", "w-knopf", zeichen); k.title = titel; k.onclick = fn; c.extra.append(k); };
+      knopf("◀", "Zurück", () => klaus.webAktion(c.id, "zurueck"));
+      knopf("⟳", "Neu laden", () => klaus.webAktion(c.id, "neu"));
+      knopf("⌂", "Andere Seite", () => start());
+      knopf("↗", "Im Browser öffnen", () => klaus.webAktion(c.id, "extern"));
+
+      const laden = (url) => {
+        c.einst.url = url; c.speichern();
+        c.inhalt.innerHTML = '<div class="web-platz"></div>';
+        c.inhalt.classList.add("web-inhalt");
+        webPlaetze[c.id] = { platz: c.inhalt.firstChild, url, modell: c.modell };
+        new ResizeObserver(() => webMelden(c.id)).observe(c.inhalt.firstChild);
+        setTimeout(() => webMelden(c.id), 50);
+        c.setTitel(new URL(url).hostname.replace(/^www\./, ""));
+      };
+      const start = () => {
+        klaus.webWeg(c.id); delete webPlaetze[c.id];
+        c.inhalt.classList.remove("web-inhalt");
+        c.setTitel("Web");
+        c.inhalt.innerHTML = `<div class="web-start"><input class="feld" aria-label="Adresse oder Suche" spellcheck="false" autocomplete="off"
+          placeholder="Adresse oder Suchbegriff … + Enter"><div class="chips"></div></div>`;
+        const feld = c.inhalt.querySelector(".feld");
+        feld.onkeydown = (e) => { if (e.key === "Enter" && feld.value.trim()) laden(webAdresse(feld.value)); };
+        for (const [name, url] of [["YouTube", "https://www.youtube.com"], ["ChatGPT", "https://chatgpt.com"], ["Claude", "https://claude.ai"],
+                                   ["Gmail", "https://mail.google.com"], ["Klesro Web", "https://klesro-web.de"], ["GitHub", "https://github.com"]]) {
+          const chip = el("button", "chip", name);
+          chip.onclick = () => laden(url);
+          c.inhalt.querySelector(".chips").append(chip);
+        }
+        feld.focus();
+      };
+      webLader[c.id] = laden;
+      c.beimEntfernen(() => { klaus.webWeg(c.id); delete webPlaetze[c.id]; delete webLader[c.id]; });
+      c.beimKlappen(() => webMelden(c.id));
+      c.beiAdresse((url) => {
+        if (!webPlaetze[c.id] || !url.startsWith("http")) return;
+        webPlaetze[c.id].url = url; c.einst.url = url; c.speichern();
+        c.setTitel(new URL(url).hostname.replace(/^www\./, ""));
+      });
+      if (c.einst.url) laden(c.einst.url); else start();
+    },
+  },
+
+  gedaechtnis: {
+    titel: "Gedächtnis", info: "Was Klaus sich über dich gemerkt hat", w: 3, h: 7, minW: 2, minH: 3,
+    bauen(c) {
+      c.extra.textContent = "„KLAUS, MERK DIR …“";
+      c.abo("gedaechtnis", "", 60, (d) => {
+        c.inhalt.innerHTML = "";
+        for (const e of d.liste || []) {
+          const z = el("button", "zeile");
+          z.title = "Rechtsklick = vergessen";
+          z.append(el("span", "tag", "◆"));
+          const h = el("div", "haupt");
+          const t = el("div", "titel", e.text);
+          t.style.whiteSpace = "normal";
+          h.append(t, el("div", "unter", e.datum));
+          z.append(h);
+          z.oncontextmenu = (ev) => { ev.preventDefault(); klaus.vergissEintrag(String(e.id)); };
+          c.inhalt.append(z);
+        }
+        if (!c.inhalt.children.length) c.inhalt.append(el("div", "leer", "NOCH NICHTS GEMERKT · SAG „KLAUS, MERK DIR …“"));
+      });
+    },
+  },
+
+  klesro: {
+    titel: "Klesro Web", info: "Leads, Mail-Entwürfe, Klaus-Projekte", w: 3, h: 4, minW: 2, minH: 3,
+    bauen(c) {
+      c.inhalt.innerHTML = '<div class="zahlen"><div class="zahl"><b>–</b><span>Leads</span></div><div class="zahl"><b>–</b><span>Briefe</span></div><div class="zahl"><b>–</b><span>Projekte</span></div></div>';
+      const [l, e, p] = c.inhalt.querySelectorAll(".zahl b");
+      c.abo("leads", "", 300, (d) => { l.textContent = d.leads; e.textContent = d.entwuerfe; });
+      c.abo("projekte", "", 60, (d) => { p.textContent = d.klaus.length; });
+    },
+  },
+};
+
+const STANDARD = [
+  { typ: "uhr", x: 0, y: 0, w: 3, h: 10 },
+  { typ: "system", x: 0, y: 10, w: 3, h: 8 },
+  { typ: "projekte", x: 0, y: 18, w: 3, h: 6 },
+  { typ: "klaus", x: 3, y: 0, w: 6, h: 24 },
+  { typ: "datum", x: 9, y: 0, w: 3, h: 4 },
+  { typ: "wetter", x: 9, y: 4, w: 3, h: 5 },
+  { typ: "boerse", x: 9, y: 9, w: 3, h: 7 },
+  { typ: "nachrichten", x: 9, y: 16, w: 3, h: 8 },
+];
+
+// ================================================================ Hilfen
+const gespraech = [];  // [rolle, text] dieser Sitzung, damit ein neu gebautes Klaus-Widget den Verlauf zeigt
+
+function blase(rolle, text) {
+  if (rolle === "briefing") return briefingKarte(JSON.parse(text));
+  if (rolle === "auftrag") {
+    const b = el("div", "blase auftrag");
+    b.append(el("div", "kopf", "AUFTRAG FÜR CLAUDE"), el("pre", "", text),
+             el("div", "antwort", "SAG „JA“ ZUM BAUEN · „WEITER PLANEN“ ZUM ÄNDERN"));
+    return b;
+  }
+  return el("div", "blase " + (rolle === "klaus" ? "klaus-text" : rolle), text);
+}
+
+// "Seit du weg warst": Maerkte als farbige Chips, Nachrichten zum Anklicken (oeffnen im Panel)
+function briefingKarte(d) {
+  const b = el("div", "blase briefing");
+  const h = Math.floor(d.dauer_min / 60), m = d.dauer_min % 60;
+  b.append(el("div", "kopf", `SEIT DU WEG WARST · ${h ? h + " H " : ""}${m} MIN`));
+  if (d.projekte.length) b.append(el("div", "zeile-b", `✦ Fertig gebaut: ${d.projekte.join(", ")}`));
+  if (d.maerkte.length) {
+    const box = el("div", "maerkte");
+    for (const x of d.maerkte.slice(0, 8)) {
+      const pos = x.aenderung >= 0;
+      box.append(el("span", "markt " + (pos ? "plus" : "minus"),
+        `${x.name} ${pos ? "▲" : "▼"} ${new Intl.NumberFormat("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Math.abs(x.aenderung))}%`));
+    }
+    b.append(box);
+  }
+  for (const n of d.nachrichten) {
+    const z = el("button", "zeile nachricht");
+    z.append(el("span", "tag" + (n.quelle === "heise" ? " b" : ""), { heise: "HS", google: "GN" }[n.quelle] || "TS"));
+    const t = el("div", "haupt");
+    t.append(el("div", "titel", n.titel), el("div", "unter", n.alter ? `VOR ${n.alter.toUpperCase()}` : ""));
+    z.append(t);
+    z.onclick = () => webOeffnen(n.link);
+    z.oncontextmenu = (e) => { e.preventDefault(); klaus.link(n.link); };
+    b.append(z);
+  }
+  b.append(el("div", "antwort", "„KLAUS, WAS HAB ICH VERPASST?“ ZUM VORLESEN"));
+  const k = modelle.find((x) => x.typ === "klaus");
+  if (k) setTimeout(() => hervorheben(k.id), 100);
+  return b;
+}
+
+// ---------------------------------------------------------------- Web-Widgets
+// Python legt eine echte Browser-Ansicht ueber den Platzhalter; wir melden nur Lage und Sichtbarkeit.
+const webPlaetze = {};  // id -> { platz, url, modell }
+const adressHoerer = {};  // id -> fn(url), wenn im Web-Widget eine neue Seite geladen wurde
+const webLader = {};  // id -> fn(url), laedt eine Seite in dieses Web-Widget
+let webVerdeckt = false;  // waehrend Ziehen/Katalog: Browser-Ansichten weg, sonst liegen sie darueber
+
+function webMelden(id) {
+  const w = webPlaetze[id];
+  if (!w) return;
+  const r = w.platz.getBoundingClientRect();
+  const sichtbar = !webVerdeckt && !w.modell.zu && r.width > 20 && r.height > 20 && w.platz.isConnected;
+  klaus.webSetze(id, w.url || "", Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height), sichtbar);
+}
+function webAlleMelden() { Object.keys(webPlaetze).forEach(webMelden); }
+function webVerdecken(an) { webVerdeckt = an; webAlleMelden(); }
+
+function webAdresse(text) {
+  text = text.trim();
+  if (!text) return "";
+  if (/^https?:\/\//i.test(text)) return text;
+  if (/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(text)) return "https://" + text;
+  return "https://www.google.com/search?q=" + encodeURIComponent(text);
+}
+
+function kurve(werte, hoch) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 80 26");
+  if (!werte || werte.length < 2) return svg;
+  const min = Math.min(...werte), max = Math.max(...werte), sp = max - min || 1;
+  const pkt = werte.map((w, i) => `${((i / (werte.length - 1)) * 80).toFixed(1)},${(23 - ((w - min) / sp) * 20).toFixed(1)}`);
+  const farbe = hoch ? "#3dffa8" : "#ff3d5a";
+  svg.innerHTML = `<path d="M0,26 L${pkt.join(" L")} L80,26 Z" fill="${farbe}" opacity=".1"/>
+    <path d="M${pkt.join(" L")}" fill="none" stroke="${farbe}" stroke-width="1.3"/>`;
+  return svg;
+}
+
+function appSuche(box, oeffnen, anheften) {
+  const feld = box.querySelector(".feld"), treffer = box.querySelector(".treffer");
+  feld.oninput = () => {
+    const q = feld.value.trim().toLowerCase();
+    treffer.innerHTML = "";
+    if (!q) return;
+    const liste = alleApps.filter((a) => a.toLowerCase().includes(q))
+      .sort((a, b) => a.toLowerCase().indexOf(q) - b.toLowerCase().indexOf(q)).slice(0, 5);
+    for (const name of liste) {
+      const z = el("button", "zeile");
+      const h = el("div", "haupt"); h.append(el("div", "titel", name));
+      const pin = el("span", "tag", "+ KACHEL");
+      pin.onclick = (e) => { e.stopPropagation(); anheften(name); feld.value = ""; treffer.innerHTML = ""; };
+      z.append(h, pin);
+      z.onclick = () => { oeffnen(name); feld.value = ""; treffer.innerHTML = ""; };
+      treffer.append(z);
+    }
+  };
+  feld.onkeydown = (e) => {
+    if (e.key === "Enter" && treffer.firstChild) treffer.firstChild.click();
+    if (e.key === "Escape") { feld.value = ""; treffer.innerHTML = ""; }
+  };
+}
+
+let speicherTimer;
+function speichern() {
+  clearTimeout(speicherTimer);
+  speicherTimer = setTimeout(() => {
+    // GridStack laesst Werte weg, die 0 bzw. 1 sind -> mit ?? auffuellen.
+    // Eingeklappt bleibt h die volle Hoehe von vorher.
+    for (const pos of grid.save(false)) {
+      const m = modelle.find((x) => x.id === pos.id);
+      if (m) Object.assign(m, { x: pos.x ?? 0, y: pos.y ?? 0, w: pos.w ?? 1, h: m.zu ? m.h : (pos.h ?? 1) });
+    }
+    klaus.speichereLayout(JSON.stringify({ version: 1, widgets: modelle }));
+  }, 400);
+}
+
+// ================================================================ Widgets bauen
+function widgetHinzufuegen(m, einflugNr) {
+  const typ = TYPEN[m.typ];
+  if (!typ) return;
+  m.einst = m.einst || {};
+  m.w = m.w || typ.w;
+  m.h = m.h || typ.h;
+  const item = el("div", "grid-stack-item");
+  const attr = { "gs-id": m.id, "gs-w": m.w, "gs-h": m.zu ? 1 : m.h, "gs-min-w": typ.minW, "gs-min-h": m.zu ? 1 : typ.minH };
+  if (m.x === undefined) attr["gs-auto-position"] = "true"; else { attr["gs-x"] = m.x; attr["gs-y"] = m.y; }
+  for (const [k, v] of Object.entries(attr)) item.setAttribute(k, v);
+
+  const w = el("div", "grid-stack-item-content w" + (m.zu ? " zu" : "") + (typ.frei ? " frei" : ""));
+  const kopf = el("div", "w-kopf"), titel = el("div", "w-titel", typ.titel), extra = el("div", "w-extra");
+  const klapp = el("button", "w-knopf klapp", "▾"), weg = el("button", "w-knopf weg", "✕");
+  klapp.title = "Einklappen / Ausklappen"; weg.title = "Widget entfernen";
+  const kennung = el("span", "w-id", modulId(m));
+  kopf.append(titel, kennung, extra, klapp, weg);
+  const inhalt = el("div", "w-inhalt");
+  const innen = el("div", "w-innen");
+  innen.append(kopf, inhalt);
+  w.append(innen);
+  item.append(w);
+  document.getElementById("raster").append(item);
+  grid.makeWidget(item);
+  if (einflugNr !== undefined) {
+    item.classList.add("einflug");
+    w.style.animationDelay = `${BOOT_DAUER / 1000 + einflugNr * 0.07}s`;
+    setTimeout(() => { item.classList.remove("einflug"); w.style.animationDelay = ""; }, BOOT_DAUER + 1500 + einflugNr * 70);
+  }
+
+  const lauf = (laufend[m.id] = { timer: [], abos: [], entfernen: [], klappen: [] });
+  const kontext = {
+    id: m.id, modell: m, inhalt, extra, einst: m.einst,
+    speichern,
+    setTitel(text) { titel.textContent = text; },
+    beimEntfernen(fn) { lauf.entfernen.push(fn); },
+    beimKlappen(fn) { lauf.klappen.push(fn); },
+    beiAdresse(fn) { adressHoerer[m.id] = fn; },
+    alle(sek, fn) { lauf.timer.push(setInterval(fn, sek * 1000)); },
+    hoere(art, fn) { klausHoerer[art].push({ id: m.id, fn }); },
+    // Daten abonnieren; ersetzen=true wirft fruehere Abos dieses Widgets fuer dieselbe Art weg
+    abo(art, wert, sek, fn, ersetzen = false) {
+      if (ersetzen) {
+        for (const schl of Object.keys(abos)) if (schl.split("|")[0] === art) abos[schl] = abos[schl].filter((a) => a.id !== m.id);
+        lauf.timer.forEach(clearInterval); lauf.timer = [];
+      }
+      const schl = wert ? `${art}|${wert}` : art;
+      (abos[schl] = abos[schl] || []).push({ id: m.id, fn });
+      if (zwischenspeicher[schl]) fn(zwischenspeicher[schl]);
+      klaus.lade(art, wert);
+      if (sek) lauf.timer.push(setInterval(() => klaus.lade(art, wert), sek * 1000));
+    },
+  };
+  typ.bauen(kontext);
+
+  lauf.item = item;
+  lauf.rahmen = w;
+  lauf.klappe = () => klapp.onclick();
+  lauf.entferne = () => weg.onclick();
+  klapp.onclick = () => {
+    if (!m.zu) m.h = item.gridstackNode.h;  // volle Hoehe merken, bevor eingeklappt wird
+    m.zu = !m.zu;
+    w.classList.toggle("zu", m.zu);
+    grid.update(item, m.zu ? { h: 1, minH: 1 } : { h: m.h, minH: typ.minH });
+    setTimeout(() => lauf.klappen.forEach((fn) => fn()), 320);  // nach der Animation
+    speichern();
+  };
+  weg.onclick = () => {
+    lauf.entfernen.forEach((fn) => fn());
+    delete adressHoerer[m.id];
+    lauf.timer.forEach(clearInterval);
+    for (const schl of Object.keys(abos)) abos[schl] = abos[schl].filter((a) => a.id !== m.id);
+    for (const art of Object.keys(klausHoerer)) klausHoerer[art] = klausHoerer[art].filter((a) => a.id !== m.id);
+    grid.removeWidget(item);
+    modelle = modelle.filter((x) => x !== m);
+    speichern();
+  };
+}
+
+function aufbauen(liste) {
+  for (const lauf of Object.values(laufend)) lauf.entfernen.forEach((fn) => fn());
+  grid.removeAll();
+  for (const lauf of Object.values(laufend)) lauf.timer.forEach(clearInterval);
+  // Widget-Abos weg, globale (id "__…", z. B. Telemetrie-Leiste) bleiben
+  for (const k of Object.keys(abos)) abos[k] = abos[k].filter((a) => a.id.startsWith("__"));
+  for (const k of Object.keys(klausHoerer)) klausHoerer[k] = [];
+  modelle = liste.map((m, i) => ({ ...m, id: m.id || `${m.typ}-${i}` }));
+  modelle.forEach((m, i) => widgetHinzufuegen(m, ersterAufbau ? i : undefined));
+  ersterAufbau = false;
+}
+
+function katalogZeigen() {
+  const box = document.getElementById("katalog-liste");
+  box.innerHTML = "";
+  for (const [typ, def] of Object.entries(TYPEN)) {
+    const schon = modelle.some((m) => m.typ === typ);
+    if (schon && !def.mehrfach && typ !== "klaus") continue;
+    const e = el("button", "katalog-eintrag");
+    e.append(el("b", "", def.titel), el("span", "", def.info));
+    e.onclick = () => {
+      if (!widgetNeu(typ)) {
+        document.getElementById("katalog-liste").prepend(el("div", "leer", "KEIN PLATZ FREI · ERST EIN WIDGET VERKLEINERN ODER ENTFERNEN"));
+        return;
+      }
+      katalogZu();
+    };
+    box.append(e);
+  }
+  if (!box.children.length) box.append(el("div", "leer", "ALLE WIDGETS SIND SCHON DA"));
+  document.getElementById("katalog").classList.add("offen");
+  webVerdecken(true);  // Browser-Ansichten laegen sonst ueber dem Dialog
+}
+
+// Neues Widget in der groessten Groesse, die noch auf den Bildschirm passt. -> Modell oder null
+function widgetNeu(typ, einst = {}) {
+  const def = TYPEN[typ];
+  let w = def.w, h = def.h;
+  while (!grid.willItFit({ w, h, autoPosition: true }) && (h > def.minH || w > def.minW)) {
+    if (h > def.minH) h--; else w--;
+  }
+  if (!grid.willItFit({ w, h, autoPosition: true })) return null;
+  const m = { id: `${typ}-${Date.now()}`, typ, w, h, einst };
+  modelle.push(m);
+  widgetHinzufuegen(m);
+  speichern();
+  return m;
+}
+
+function hervorheben(id) {
+  const r = laufend[id] && laufend[id].rahmen;
+  if (!r) return;
+  r.classList.remove("blitzt"); void r.offsetWidth; r.classList.add("blitzt");
+}
+
+// Website im Panel zeigen: vorhandenes Web-Widget nutzen, sonst eins anlegen, sonst extern
+function webOeffnen(url) {
+  const m = modelle.find((x) => x.typ === "web");
+  if (m) {
+    if (m.zu) laufend[m.id].klappe();
+    webLader[m.id](url);
+    hervorheben(m.id);
+    return;
+  }
+  const neu = widgetNeu("web", { url });
+  if (neu) hervorheben(neu.id); else klaus.link(url);
+}
+
+// Befehle, die Klaus per Sprache gibt (assistent.panel_wunsch)
+function panelBefehl(json) {
+  const a = JSON.parse(json);
+  if (a.aktion === "web") return webOeffnen(a.url);
+  if (a.aktion === "standard") { aufbauen(STANDARD); speichern(); return; }
+  if (a.aktion === "neu_laden") { klaus.lade(a.typ, ""); return; }
+  const m = modelle.find((x) => x.typ === a.typ);
+  const lauf = m && laufend[m.id];
+  const def = TYPEN[a.typ];
+  switch (a.aktion) {
+    case "hinzufuegen":
+    case "ausklappen":
+      if (!m) { const neu = widgetNeu(a.typ); if (neu) hervorheben(neu.id); }
+      else { if (m.zu) lauf.klappe(); hervorheben(m.id); }
+      break;
+    case "einklappen": if (m && !m.zu) lauf.klappe(); break;
+    case "entfernen": if (m) lauf.entferne(); break;
+    case "groesser": {
+      if (!m || m.zu) break;
+      const n = lauf.item.gridstackNode;
+      // Erst dort wachsen, wo frei ist: rechts, links, unten, oben (erst viel, dann wenig)
+      const versuche = [[0, 0, 2, 0], [-2, 0, 2, 0], [0, 0, 0, 3], [0, -3, 0, 3], [0, 0, 1, 0], [-1, 0, 1, 0], [0, 0, 0, 1], [0, -1, 0, 1]];
+      const ziel = versuche.map(([dx, dy, dw, dh]) => ({ x: n.x + dx, y: n.y + dy, w: n.w + dw, h: n.h + dh }))
+        .find((r) => frei(r, n));
+      if (ziel) { grid.update(lauf.item, ziel); hervorheben(m.id); }
+      else klausHinweis(`Kein Platz, um ${def.titel} zu vergrößern. Verkleinere oder schließ erst ein Widget daneben.`);
+      break;
+    }
+    case "kleiner": {
+      if (!m || m.zu) break;
+      const n = lauf.item.gridstackNode;
+      grid.update(lauf.item, { w: Math.max(def.minW, n.w - 2), h: Math.max(def.minH, n.h - 3) });
+      hervorheben(m.id);
+      break;
+    }
+    case "verschieben": {
+      if (!m) break;
+      verschiebe(lauf.item.gridstackNode, a.richtung);
+      hervorheben(m.id);
+      break;
+    }
+  }
+  setTimeout(() => { speichern(); webAlleMelden(); }, 350);
+}
+
+// Ist das Rechteck im Raster und von keinem anderen Widget belegt?
+function frei(r, ohne) {
+  if (r.x < 0 || r.y < 0 || r.x + r.w > SPALTEN || r.y + r.h > ZEILEN) return false;
+  return grid.engine.nodes.every((n) => n === ohne || n.x >= r.x + r.w || n.x + n.w <= r.x || n.y >= r.y + r.h || n.y + n.h <= r.y);
+}
+
+// So weit wie moeglich in die Richtung rutschen; geht gar nichts, mit dem Nachbarn dort den Platz tauschen
+function verschiebe(n, richtung) {
+  const schritt = { links: [-1, 0], rechts: [1, 0], oben: [0, -1], unten: [0, 1] }[richtung];
+  if (richtung === "mitte") {
+    const x = Math.round((SPALTEN - n.w) / 2);
+    if (frei({ ...n, x, y: n.y, w: n.w, h: n.h }, n)) grid.update(n.el, { x });
+    return;
+  }
+  if (!schritt) return;
+  let r = { x: n.x, y: n.y, w: n.w, h: n.h };
+  while (frei({ ...r, x: r.x + schritt[0], y: r.y + schritt[1] }, n)) { r.x += schritt[0]; r.y += schritt[1]; }
+  if (r.x !== n.x || r.y !== n.y) { grid.update(n.el, { x: r.x, y: r.y }); return; }
+
+  // Naechster Nachbar in dieser Richtung, der sich mit uns ueberlappt (in der anderen Achse)
+  const nachbarn = grid.engine.nodes.filter((o) => o !== n && (schritt[0]
+    ? o.y < n.y + n.h && o.y + o.h > n.y && (schritt[0] < 0 ? o.x + o.w <= n.x : o.x >= n.x + n.w)
+    : o.x < n.x + n.w && o.x + o.w > n.x && (schritt[1] < 0 ? o.y + o.h <= n.y : o.y >= n.y + n.h)));
+  if (!nachbarn.length) return;
+  const abstand = (o) => Math.abs(schritt[0] ? o.x - n.x : o.y - n.y);
+  const o = nachbarn.sort((a, b) => abstand(a) - abstand(b))[0];
+  const platzA = { x: n.x, y: n.y, w: n.w, h: n.h }, platzB = { x: o.x, y: o.y, w: o.w, h: o.h };
+  const minN = TYPEN[modelle.find((m) => m.id === n.id).typ], minO = TYPEN[modelle.find((m) => m.id === o.id).typ];
+  if (platzB.w < minN.minW || platzB.h < minN.minH || platzA.w < minO.minW || platzA.h < minO.minH) {
+    klausHinweis(`${minN.titel} und ${minO.titel} passen nicht in den Platz des anderen. Zieh sie am Titel selbst hin.`);
+    return;
+  }
+  // Tauschen: Nachbarn kurz unter dem sichtbaren Raster parken, damit sich nichts ueberlappt
+  const max = grid.opts.maxRow;
+  grid.opts.maxRow = grid.engine.maxRow = max + 40;
+  grid.update(o.el, { y: max + 1 });
+  grid.update(n.el, platzB);
+  grid.update(o.el, platzA);
+  grid.opts.maxRow = grid.engine.maxRow = max;
+}
+
+function klausHinweis(text) {
+  gespraech.push(["info", text]);
+  klausHoerer.nachricht.forEach((h) => h.fn("info", text));
+}
+
+function katalogZu() {
+  document.getElementById("katalog").classList.remove("offen");
+  webVerdecken(false);
+}
+
+// Design-Auswahl in der Kopfleiste
+function designMenue() {
+  const box = document.getElementById("designs");
+  const offen = box.classList.toggle("offen");
+  webVerdecken(offen);
+  if (offen) {
+    box.innerHTML = "";
+    for (const [name, t] of Object.entries(THEMEN)) {
+      const k = el("button", "design-wahl" + (name === aktuellesThema ? " aktiv" : ""));
+      k.style.setProperty("--farbe", `rgb(${t.haupt.join(",")})`);
+      k.append(el("i"), el("span", "", t.titel));
+      k.onclick = () => { klaus.setzeThema(name); box.classList.remove("offen"); webVerdecken(false); };
+      box.append(k);
+    }
+  }
+}
+
+function zellhoehe() {
+  return Math.max(18, Math.floor((innerHeight - 86) / ZEILEN) - 0.5);  // unten Platz fuer die Fusszeile
+}
+
+// ================================================================ Segment-Ring um den Orb (wie SHIELD OS)
+const KURZNAMEN = { "Teamfight Tactics": "TFT", "Counter-Strike 2": "CS2", "League of Legends": "LOL",
+                    "Visual Studio Code": "CODE", "Microsoft Edge": "EDGE", "Riot Client": "RIOT" };
+
+const ringZeichner = [];  // alle Ring-Menues neu zeichnen, wenn neue Daten (Apps, Systemwerte) da sind
+let ringWerte = null;      // letzte Systemwerte fuer die Satelliten
+
+function ringApps() {
+  const klausM = modelle.find((m) => m.typ === "klaus"), schnell = modelle.find((m) => m.typ === "schnellstart");
+  const apps = (klausM && klausM.einst.ringApps) || (schnell && schnell.einst.apps)
+    || (zwischenspeicher.favoriten?.liste || []).map((f) => f.name);
+  return apps.slice(0, 10);
+}
+
+// Satelliten in den vier Ecken um den Ring: kleine Rundinstrumente mit Verbindungslinie zum Reaktor
+function satelliten(svg, mx, my, groesse, r2) {
+  if (!ringWerte) return;
+  const ns = "http://www.w3.org/2000/svg", d = ringWerte;
+  const daten = [["CPU", d.cpu, `${Math.round(d.cpu)}%`], ["RAM", d.ram, `${d.ram_gb}G`],
+                 ["GPU", d.gpu ?? 0, `${Math.round(d.gpu ?? 0)}%`], ["TEMP", d.gpu_temp ?? 0, `${Math.round(d.gpu_temp ?? 0)}°`]];
+  const abstand = groesse * 0.43, rs = groesse * 0.052;
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([dx, dy], i) => {
+    const [name, wert, text] = daten[i];
+    const x = mx + dx * abstand, y = my + dy * abstand;
+    const g = document.createElementNS(ns, "g");
+    g.setAttribute("class", "satellit" + (wert > 85 ? " heiss" : wert > 65 ? " warm" : ""));
+    const umfang = 2 * Math.PI * rs;
+    // Name oben unter dem Kreis, unten ueber dem Kreis (sonst schneidet der Rand ihn ab)
+    // Linie vom Satelliten diagonal zum Ring
+    const innen = r2 + 10, ex = mx + dx * innen * Math.SQRT1_2, ey = my + dy * innen * Math.SQRT1_2;
+    g.innerHTML = `<line x1="${x - dx * rs * 0.75}" y1="${y - dy * rs * 0.75}" x2="${ex}" y2="${ey}" class="verbindung"/>
+      <circle cx="${ex}" cy="${ey}" r="2.5" class="knoten"/>
+      <circle cx="${x}" cy="${y}" r="${rs + 6}" class="aussen"/>
+      <circle cx="${x}" cy="${y}" r="${rs}" class="spur"/>
+      <circle cx="${x}" cy="${y}" r="${rs}" class="wert" transform="rotate(-90 ${x} ${y})"
+        stroke-dasharray="${(Math.min(wert, 100) / 100) * umfang} ${umfang}"/>
+      <text x="${x}" y="${y + 1}" class="zahl" font-size="${(rs * 0.5).toFixed(1)}">${text}</text>
+      <text x="${x}" y="${y - dy * (rs + 18)}" class="name" font-size="${Math.max(9, rs * 0.26).toFixed(1)}">${name}</text>`;
+    svg.append(g);
+  });
+}
+
+// Zeichnet anklickbare Ringsegmente (Kreisring-Ausschnitte) mit Beschriftung entlang des Rings
+function ringMenue(buehne, svg) {
+  const ns = "http://www.w3.org/2000/svg";
+  const zeichnen = () => {
+    const b = buehne.clientWidth, h = buehne.clientHeight, apps = ringApps();
+    svg.setAttribute("viewBox", `0 0 ${b} ${h}`);
+    svg.innerHTML = "";
+    const groesse = Math.min(b, h);
+    if (groesse < 260 || !apps.length) return;  // zu klein: nur der Orb
+    const mx = b / 2, my = h / 2, r1 = groesse * 0.35, r2 = groesse * 0.415;
+    const punkt = (r, a) => `${(mx + Math.cos(a) * r).toFixed(1)} ${(my + Math.sin(a) * r).toFixed(1)}`;
+    // unten (6 Uhr) bleibt eine Luecke von 60 Grad - dort sitzt der Audio-Pegel des Orbs
+    const luecke = 0.035, freiHalb = Math.PI / 6, schritt = (Math.PI * 2 - 2 * freiHalb) / apps.length;
+    // duenne Fuehrungsringe innen und aussen
+    for (const r of [r1 - 6, r2 + 6]) {
+      const kreis = document.createElementNS(ns, "circle");
+      kreis.setAttribute("cx", mx); kreis.setAttribute("cy", my); kreis.setAttribute("r", r); kreis.setAttribute("class", "fuehrung");
+      svg.append(kreis);
+    }
+    apps.forEach((name, i) => {
+      const a0 = Math.PI / 2 + freiHalb + i * schritt + luecke, a1 = a0 + schritt - 2 * luecke, mitte = (a0 + a1) / 2;
+      const gross = a1 - a0 > Math.PI ? 1 : 0;
+      const g = document.createElementNS(ns, "g");
+      g.setAttribute("class", "seg");
+      const pfad = document.createElementNS(ns, "path");
+      pfad.setAttribute("d", `M ${punkt(r2, a0)} A ${r2} ${r2} 0 ${gross} 1 ${punkt(r2, a1)} L ${punkt(r1, a1)} A ${r1} ${r1} 0 ${gross} 0 ${punkt(r1, a0)} Z`);
+      const text = document.createElementNS(ns, "text");
+      let drehung = (mitte * 180) / Math.PI + 90;
+      if (Math.sin(mitte) > 0.05) drehung += 180;  // untere Haelfte: nicht kopfueber
+      const [tx, ty] = punkt((r1 + r2) / 2, mitte).split(" ");
+      text.setAttribute("x", tx); text.setAttribute("y", ty);
+      text.setAttribute("transform", `rotate(${drehung.toFixed(1)} ${tx} ${ty})`);
+      text.setAttribute("font-size", ((r2 - r1) * 0.36).toFixed(1));
+      text.textContent = (KURZNAMEN[name] || name.split(" ")[0]).toUpperCase().slice(0, 9);
+      const titel = document.createElementNS(ns, "title");
+      titel.textContent = `${name} öffnen`;
+      g.append(titel, pfad, text);
+      g.onclick = () => { g.classList.remove("aktiv"); void g.getBBox(); g.classList.add("aktiv"); klaus.oeffne(name); };
+      svg.append(g);
+    });
+    satelliten(svg, mx, my, groesse, r2);
+  };
+  ringZeichner.push(zeichnen);
+  new ResizeObserver(zeichnen).observe(buehne);
+  setTimeout(zeichnen, 1500);  // nachdem Schnellstart/Favoriten geladen sind
+}
+
+// ================================================================ Hightech-Details
+const BOOT_DAUER = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 2600;
+let ersterAufbau = true;
+
+function modulId(m) {
+  let hash = 0;
+  for (const z of m.id) hash = (hash * 31 + z.charCodeAt(0)) >>> 0;
+  return `MOD-${String(modelle.indexOf(m) + 1).padStart(2, "0")} · 0x${(hash & 0xffff).toString(16).toUpperCase().padStart(4, "0")}`;
+}
+
+// Boot-Sequenz: Statuszeilen tippen nacheinander ein, dann blendet der Bildschirm auf
+function bootSequenz() {
+  const boot = document.getElementById("boot");
+  if (!BOOT_DAUER) { boot.remove(); return; }
+  const zeilen = [
+    ["KERNEL", "OK"], ["HUD-RENDERER", "OK"], ["AUDIO-SENSOREN", "OK"], ["NEURAL LINK · GEMINI LIVE", "ONLINE"],
+    ["CLAUDE OPUS UPLINK", "ONLINE"], ["MARKT- UND NACHRICHTEN-FEEDS", "SYNC"], ["GEDÄCHTNISKERN", "GELADEN"],
+  ];
+  const box = boot.querySelector(".boot-zeilen"), balken = boot.querySelector(".boot-balken i");
+  zeilen.forEach(([name, status], i) => setTimeout(() => {
+    const z = el("div");
+    z.innerHTML = `&gt; ${name} ${".".repeat(Math.max(3, 34 - name.length))} <b>${status}</b>`;
+    box.append(z);
+    balken.style.width = `${((i + 1) / zeilen.length) * 100}%`;
+  }, 120 + i * ((BOOT_DAUER - 700) / zeilen.length)));
+  setTimeout(() => {
+    const z = el("div"); z.innerHTML = "&gt; <b>WILLKOMMEN ZURÜCK, NIKOLA.</b>"; box.append(z);
+  }, BOOT_DAUER - 450);
+  setTimeout(() => { boot.classList.add("weg"); setTimeout(() => boot.remove(), 800); }, BOOT_DAUER);
+}
+bootSequenz();
+
+// Telemetrie oben: Systemwerte + Uhr mit Sekunden; holt selbst nur, wenn kein System-Widget da ist
+function telemetrieStarten() {
+  const feld = document.getElementById("telemetrie");
+  let werte = null;
+  const stufe = (v) => (v > 85 ? "heiss" : v > 65 ? "warm" : "");
+  const zeichnen = () => {
+    const j = new Date(), zwei = (n) => String(n).padStart(2, "0");
+    const zeit = `<span><b>${zwei(j.getHours())}:${zwei(j.getMinutes())}:${zwei(j.getSeconds())}</b></span>`;
+    if (!werte) { feld.innerHTML = zeit; return; }
+    const teil = (name, v) => `<span>${name} <b class="${stufe(v)}">${String(Math.round(v)).padStart(2, "0")}%</b></span>`;
+    feld.innerHTML = teil("CPU", werte.cpu) + teil("RAM", werte.ram) + (werte.gpu !== undefined ? teil("GPU", werte.gpu) : "")
+      + `<span>UP <b>${String(werte.laufzeit_h).replace(".", ",")}H</b></span>` + zeit;
+  };
+  (abos.system = abos.system || []).push({ id: "__leiste", fn: (d) => { werte = d; zeichnen(); ringWerte = d; ringZeichner.forEach((f) => f()); } });
+  (abos.favoriten = abos.favoriten || []).push({ id: "__ring", fn: () => ringZeichner.forEach((f) => f()) });
+  klaus.lade("favoriten", "");
+  setInterval(zeichnen, 1000);
+  setInterval(() => { if (!modelle.some((m) => m.typ === "system")) klaus.lade("system", ""); }, 5000);
+  klaus.lade("system", "");
+}
+
+// Cursor-Koordinaten unten links (hoechstens einmal pro Bild aktualisiert)
+let cursorWartet = false;
+addEventListener("mousemove", (e) => {
+  if (cursorWartet) return;
+  cursorWartet = true;
+  requestAnimationFrame(() => {
+    document.getElementById("cursor").textContent =
+      `CURSOR ${String(e.clientX).padStart(4, "0")} · ${String(e.clientY).padStart(4, "0")}`;
+    cursorWartet = false;
+  });
+});
+
+// ================================================================ Start
+klausBereit.then((k) => {
+  klaus = k;
+  grid = GS.init({
+    column: SPALTEN, maxRow: ZEILEN, cellHeight: zellhoehe(), margin: 5, float: true, animate: true,
+    handle: ".w-kopf", resizable: { handles: "se" }, draggable: { cancel: ".w-knopf" },
+  }, "#raster");
+  grid.on("change", speichern);
+  // Beim Ziehen/Groesse-Aendern die Browser-Ansichten kurz ausblenden, danach neu ausrichten
+  grid.on("dragstart resizestart", () => webVerdecken(true));
+  grid.on("dragstop resizestop", () => setTimeout(() => webVerdecken(false), 320));
+  grid.on("change", () => setTimeout(webAlleMelden, 320));
+  addEventListener("resize", () => { grid.cellHeight(zellhoehe()); setTimeout(webAlleMelden, 320); });
+
+  klaus.ladeThema((name) => wendeThemaAn(name));
+  klaus.thema.connect((name) => wendeThemaAn(name));
+  klaus.webUrl.connect((id, url) => adressHoerer[id] && adressHoerer[id](url));
+  klaus.panelBefehl.connect(panelBefehl);
+  // Stumm / Mikro aus: Knoepfe, Statuszeile und gedimmter Orb
+  const schalter = { stumm: false, mikroAus: false };
+  const schalterZeigen = () => {
+    document.getElementById("knopf-stumm").classList.toggle("an", schalter.stumm);
+    document.getElementById("knopf-mikro").classList.toggle("an", schalter.mikroAus);
+    document.body.classList.toggle("stumm", schalter.stumm);
+    document.body.classList.toggle("mikro-aus", schalter.mikroAus);
+    const text = schalter.mikroAus ? "MIKROFON AUS · STRG+SHIFT+M" : schalter.stumm ? "STUMM · SAG „KLAUS, WIEDER AN“" : ZUSTAND_TEXT.aus;
+    document.getElementById("zustandstext").textContent = text;
+    document.querySelectorAll(".klaus .status").forEach((e) => {
+      e.textContent = schalter.mikroAus ? "STATUS // MIKROFON AUS" : schalter.stumm ? "STATUS // STUMM" : "STATUS // BEREIT";
+    });
+  };
+  klaus.ladeSchalter((json) => { Object.assign(schalter, JSON.parse(json)); schalterZeigen(); });
+  klaus.stummStatus.connect((an) => { schalter.stumm = an; schalterZeigen(); });
+  klaus.mikroStatus.connect((aus) => { schalter.mikroAus = aus; schalterZeigen(); });
+  document.getElementById("knopf-stumm").onclick = () => klaus.stummUmschalten();
+  document.getElementById("knopf-mikro").onclick = () => klaus.mikroUmschalten();
+  klaus.sichtbar.connect((sichtbar) => {
+    window.klausPause = !sichtbar;
+    document.body.classList.toggle("ruhe", !sichtbar);
+  });
+
+  klaus.daten.connect((schluessel, json) => {
+    let d; try { d = JSON.parse(json); } catch { return; }
+    zwischenspeicher[schluessel] = d;
+    if (schluessel === "apps") alleApps = d.liste || [];
+    for (const a of abos[schluessel] || []) { try { a.fn(d); } catch (e) { console.error(schluessel, e); } }
+  });
+  klaus.zustand.connect((z) => {
+    klausHoerer.zustand.forEach((h) => h.fn(z));
+    const gedrosselt = document.body.classList.contains("stumm") || document.body.classList.contains("mikro-aus");
+    if (!gedrosselt) document.getElementById("zustandstext").textContent = ZUSTAND_TEXT[z] || "";
+    const f = ZUSTAND_FARBE[z] || "var(--cyan)", p = document.getElementById("zustandspunkt");
+    p.style.background = f; p.style.boxShadow = `0 0 8px ${f}`;
+  });
+  klaus.pegel.connect((p) => klausHoerer.pegel.forEach((h) => h.fn(p)));
+  klaus.nachricht.connect((r, t) => {
+    gespraech.push([r, t]);
+    if (gespraech.length > 60) gespraech.shift();
+    klausHoerer.nachricht.forEach((h) => h.fn(r, t));
+  });
+  klaus.lade("apps", "");
+  telemetrieStarten();
+
+  klaus.ladeLayout((text) => {
+    let liste = STANDARD;
+    try { const g = JSON.parse(text); if (g.widgets && g.widgets.length) liste = g.widgets; } catch {}
+    aufbauen(liste);
+  });
+
+  document.getElementById("knopf-widget").onclick = katalogZeigen;
+  document.getElementById("knopf-standard").onclick = () => { aufbauen(STANDARD); speichern(); };
+  document.getElementById("knopf-design").onclick = designMenue;
+  document.getElementById("katalog-zu").onclick = katalogZu;
+  document.getElementById("katalog").onclick = (e) => { if (e.target.id === "katalog") katalogZu(); };
+  addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { document.getElementById("designs").classList.remove("offen"); katalogZu(); }
+  });
+});
+</script>
+</body>
+</html>

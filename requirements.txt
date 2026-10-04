@@ -1,0 +1,16 @@
+requests>=2.31
+python-dotenv>=1.0
+faster-whisper
+sounddevice
+pyttsx3
+nvidia-cublas-cu12
+nvidia-cudnn-cu12>=9,<10
+piper-tts
+edge-tts
+miniaudio
+PySide6
+google-genai
+send2trash
+qrcode
+paramiko
+ddgs

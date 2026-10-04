@@ -1,0 +1,4 @@
+name,adresse,telefon,bewertung,anzahl_bewertungen,maps_link,branche_suchbegriff
+Schreinerei Maier,"Hauptstr. 12, 73033 Göppingen",07161 123456,4.8,57,https://maps.google.com/?cid=1,Schreiner Göppingen
+Kosmetikstudio Bella,"Marktplatz 3, 73033 Göppingen",07161 654321,4.5,23,https://maps.google.com/?cid=2,Kosmetikstudio Göppingen
+Fahrrad Schuster,"Bahnhofstr. 8, 73035 Göppingen",,3.9,4,https://maps.google.com/?cid=3,Fahrradladen Göppingen

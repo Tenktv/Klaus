@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{{name}} – Entwurf</title>
+<style>
+  :root { --farbe: {{farbe}}; --dunkel: {{dunkel}}; --hell: {{hell}}; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", system-ui, sans-serif; color: #1d1d1f; background: #fff; }
+  .band { position: fixed; top: 0; left: 0; right: 0; z-index: 9; background: #111; color: #fff; font-size: 13px;
+    text-align: center; padding: 6px; letter-spacing: .04em; }
+  header { display: flex; justify-content: space-between; align-items: center; padding: 46px 64px 0; }
+  .logo { font-weight: 800; font-size: 22px; color: var(--dunkel); letter-spacing: -.02em; }
+  .logo span { color: var(--farbe); }
+  nav { display: flex; gap: 28px; font-size: 15px; color: #555; }
+  nav b { color: #fff; background: var(--farbe); padding: 9px 18px; border-radius: 99px; font-weight: 600; }
+  .held { display: grid; grid-template-columns: 1.15fr .85fr; gap: 48px; padding: 54px 64px 60px; align-items: center; }
+  .held h1 { font-size: 54px; line-height: 1.05; letter-spacing: -.03em; color: var(--dunkel); }
+  .held h1 em { font-style: normal; color: var(--farbe); }
+  .held p { font-size: 19px; color: #555; margin: 20px 0 30px; line-height: 1.5; max-width: 34ch; }
+  .knoepfe { display: flex; gap: 14px; }
+  .k1 { background: var(--farbe); color: #fff; padding: 15px 26px; border-radius: 12px; font-weight: 600; }
+  .k2 { border: 2px solid var(--hell); color: var(--dunkel); padding: 13px 24px; border-radius: 12px; font-weight: 600; }
+  .bild { aspect-ratio: 4 / 3.4; border-radius: 28px; position: relative; overflow: hidden;
+    background: radial-gradient(circle at 30% 30%, var(--hell), transparent 60%), linear-gradient(140deg, var(--farbe), var(--dunkel)); }
+  .bild .symbol { position: absolute; inset: 0; display: grid; place-items: center; font-size: 120px; filter: drop-shadow(0 12px 30px rgba(0,0,0,.25)); }
+  .bild .karte { position: absolute; left: 22px; bottom: 22px; background: #fff; border-radius: 16px; padding: 14px 18px;
+    box-shadow: 0 14px 40px rgba(0,0,0,.18); font-size: 14px; color: #444; }
+  .bild .karte b { display: block; font-size: 22px; color: var(--dunkel); }
+  .leistungen { background: #f7f7f8; padding: 56px 64px; }
+  .leistungen h2, .kontakt h2 { font-size: 32px; color: var(--dunkel); letter-spacing: -.02em; margin-bottom: 26px; }
+  .reihe { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .karte2 { background: #fff; border-radius: 18px; padding: 26px; box-shadow: 0 6px 24px rgba(0,0,0,.05); }
+  .karte2 i { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; background: var(--hell);
+    font-style: normal; font-size: 24px; margin-bottom: 14px; }
+  .karte2 b { font-size: 18px; color: var(--dunkel); }
+  .karte2 p { color: #666; margin-top: 8px; line-height: 1.5; font-size: 15px; }
+  .kontakt { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; padding: 56px 64px; }
+  .kontakt .zeile { display: flex; gap: 12px; margin-bottom: 14px; font-size: 17px; color: #444; }
+  .kontakt .karte3 { background: var(--dunkel); color: #fff; border-radius: 22px; padding: 30px; }
+  .kontakt .karte3 b { font-size: 24px; display: block; margin-bottom: 10px; }
+  footer { padding: 26px 64px; color: #999; font-size: 13px; border-top: 1px solid #eee; }
+</style>
+</head>
+<body>
+<div class="band">Unverbindlicher Entwurf von {{absender_firma}} für {{name}}</div>
+<header>
+  <div class="logo">{{logo_vorne}}<span>{{logo_hinten}}</span></div>
+  <nav><span>Leistungen</span><span>Über uns</span><span>Kontakt</span><b>{{knopf}}</b></nav>
+</header>
+<section class="held">
+  <div>
+    <h1>{{titel_vorne}} <em>{{titel_hinten}}</em></h1>
+    <p>{{untertitel}}</p>
+    <div class="knoepfe"><span class="k1">{{knopf}}</span><span class="k2">{{ort_kurz}} &amp; Umgebung</span></div>
+  </div>
+  <div class="bild"><div class="symbol">{{symbol}}</div>{{bewertung_karte}}</div>
+</section>
+<section class="leistungen">
+  <h2>Unsere Leistungen</h2>
+  <div class="reihe">{{leistungen}}</div>
+</section>
+<section class="kontakt">
+  <div>
+    <h2>So erreichen Sie uns</h2>
+    <div class="zeile">📍 {{adresse}}</div>
+    {{telefon_zeile}}
+    <div class="zeile">🕘 Öffnungszeiten: [werden ergänzt]</div>
+  </div>
+  <div class="karte3"><b>{{knopf}}</b>Rufen Sie an oder schreiben Sie uns – wir melden uns schnell zurück.</div>
+</section>
+<footer>{{name}} · {{adresse}} · Impressum · Datenschutz</footer>
+</body>
+</html>

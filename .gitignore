@@ -1,0 +1,10 @@
+.env
+data/leads.csv
+data/outreach/
+__pycache__/
+*.pyc
+.venv/
+data/browser/
+data/briefe/
+data/*.bak
+*.log

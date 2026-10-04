@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Brief an {{name}}</title>
+<style>
+  /* DIN 5008 Form B: Adressfeld 45 mm von oben, 20 mm von links - passt ins Fensterkuvert DL */
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { width: 210mm; height: 297mm; position: relative; font-family: "Segoe UI", Arial, sans-serif; font-size: 10.5pt;
+    color: #1d1d1f; line-height: 1.45; }
+  .fehlt { color: #d00; font-weight: 700; }
+  .kopf { position: absolute; top: 14mm; left: 25mm; right: 20mm; display: flex; justify-content: space-between; align-items: flex-start; }
+  .marke { font-size: 20pt; font-weight: 800; letter-spacing: -.02em; }
+  .marke span { color: #e8672a; }
+  .kopf .kontakt { text-align: right; font-size: 8.5pt; color: #555; line-height: 1.5; }
+  .ruecksende { position: absolute; top: 45mm; left: 25mm; width: 80mm; font-size: 7pt; color: #777;
+    border-bottom: .2mm solid #aaa; padding-bottom: .8mm; white-space: nowrap; overflow: hidden; }
+  .anschrift { position: absolute; top: 51mm; left: 25mm; width: 80mm; font-size: 10.5pt; line-height: 1.4; }
+  .datum { position: absolute; top: 51mm; left: 125mm; font-size: 9.5pt; color: #444; }
+  .inhalt { position: absolute; top: 98mm; left: 25mm; right: 20mm; }
+  .betreff { font-weight: 700; font-size: 11pt; margin-bottom: 6mm; }
+  .inhalt p { margin-bottom: 2.6mm; }
+  .gruss { margin-top: 3mm; }
+  .entwurf { position: absolute; left: 25mm; right: 20mm; bottom: 20mm; display: flex; gap: 7mm; align-items: flex-end; }
+  .entwurf figure { flex: 1; }
+  .entwurf img.vorschau { width: 100%; border-radius: 2.5mm; border: .3mm solid #ddd; box-shadow: 0 1mm 3mm rgba(0,0,0,.08); }
+  .entwurf figcaption { font-size: 8pt; color: #666; margin-top: 1.5mm; }
+  .qr { width: 38mm; text-align: center; font-size: 8pt; color: #444; }
+  .qr svg, .qr img { width: 32mm; height: 32mm; }
+  .qr b { display: block; font-size: 9pt; color: #1d1d1f; margin-top: 1mm; }
+  .fuss { position: absolute; bottom: 9mm; left: 25mm; right: 20mm; border-top: .2mm solid #ddd; padding-top: 2mm;
+    font-size: 7.5pt; color: #888; display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+  <div class="kopf">
+    <div class="marke">{{marke_vorne}}<span>{{marke_hinten}}</span></div>
+    <div class="kontakt">{{absender_name}}<br>{{absender_adresse_zeilen}}<br>{{absender_telefon}}<br>{{absender_mail}}<br>{{absender_website}}</div>
+  </div>
+  <div class="ruecksende">{{absender_firma}} · {{absender_adresse_einzeilig}}</div>
+  <div class="anschrift">{{empfaenger}}</div>
+  <div class="datum">{{ort}}, {{datum}}</div>
+  <div class="inhalt">
+    <div class="betreff">{{betreff}}</div>
+    {{text}}
+    <div class="gruss">Mit freundlichen Grüßen<br><br>{{absender_name}}<br><span style="color:#666">{{absender_firma}}</span></div>
+  </div>
+  <div class="entwurf">
+    <figure><img class="vorschau" src="{{bild}}" alt="Website-Entwurf"><figcaption>Ihr persönlicher, unverbindlicher Website-Entwurf – erstellt nur für {{name}}.</figcaption></figure>
+    <div class="qr">{{qr}}<b>Jetzt ansehen</b>oder einfach anrufen</div>
+  </div>
+  <div class="fuss"><span>{{absender_firma}} · {{absender_website}}</span><span>Sie möchten keine Post mehr von uns? Ein kurzer Anruf oder eine Mail genügt.</span></div>
+</body>
+</html>

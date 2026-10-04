@@ -1,0 +1,416 @@
+"""
+Klaus - Gespraech ueber Gemini Live (Google)
+
+Gemini uebernimmt nur Hoeren, Verstehen und Sprechen - in Echtzeit, mit Unterbrechen.
+Alles, was Klaus *tut*, laeuft lokal ueber Werkzeuge (Apps, Widgets, Gedaechtnis ...);
+Code und schweres Denken gibt Gemini ueber das Werkzeug `frage_claude` an Claude weiter.
+
+Datenschutz: Die Verbindung zu Google steht nur waehrend eines Gespraechs - erst nach
+dem lokal erkannten "Klaus", und nach NACHLAUF_SEK Stille wird sie wieder geschlossen.
+
+.env:
+    GEMINI_API_KEY        Schluessel von https://aistudio.google.com/apikey  (Pflicht)
+    GEMINI_MODELL         leer = neuestes Live-Modell automatisch waehlen
+    GEMINI_STIMME         Charon (Standard), Puck, Kore, Fenrir, Orus, Aoede, ...
+    KLAUS_UNTERBRECHEN    1 (Standard) = du kannst Klaus ins Wort fallen; 0 = Mikro aus, solange er spricht
+"""
+
+import asyncio
+import datetime as dt
+import json
+import os
+import queue
+import re
+import threading
+import time
+import traceback
+
+import numpy as np
+from dotenv import load_dotenv
+
+import apps
+import dateien
+import gehirn
+import hochladen
+
+load_dotenv()
+
+API_KEY = os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip()
+MODELL = os.getenv("GEMINI_MODELL", "").strip()
+STIMME = os.getenv("GEMINI_STIMME", "Charon").strip()
+UNTERBRECHEN = os.getenv("KLAUS_UNTERBRECHEN", "1").strip() != "0"
+NACHLAUF_SEK = 12       # so lange Stille, dann legt Klaus "auf" (kurz, damit er nicht in fremde Gespraeche reinredet)
+MIKRO_RATE, LAUTSPRECHER_RATE = 16000, 24000
+
+WIDGET_TYPEN = ["uhr", "schnellstart", "projekte", "wetter", "boerse", "nachrichten", "system", "notizen",
+                "lesezeichen", "web", "klesro", "gedaechtnis", "klaus"]
+
+WERKZEUGE = [
+    {"name": "oeffne", "description": "Oeffnet eine App, ein Spiel, eine Website oder einen Ordner auf dem PC "
+     "(z. B. Steam, TFT, CS2, VS Code, YouTube, Downloads).",
+     "parameters": {"type": "OBJECT", "properties": {"ziel": {"type": "STRING", "description": "Name, wie der Nutzer ihn sagt"}},
+                    "required": ["ziel"]}},
+    {"name": "google_suche", "description": "Startet eine Google-Suche im Browser.",
+     "parameters": {"type": "OBJECT", "properties": {"begriff": {"type": "STRING"}}, "required": ["begriff"]}},
+    {"name": "website_im_panel", "description": "Zeigt eine Website im Web-Widget auf dem Desktop-Panel.",
+     "parameters": {"type": "OBJECT", "properties": {"adresse": {"type": "STRING", "description": "URL oder Name, z. B. youtube.com"}},
+                    "required": ["adresse"]}},
+    {"name": "widget", "description": "Steuert ein Widget auf dem Desktop-Panel.",
+     "parameters": {"type": "OBJECT", "properties": {
+         "aktion": {"type": "STRING", "enum": ["hinzufuegen", "entfernen", "einklappen", "ausklappen", "groesser",
+                                               "kleiner", "verschieben", "standard"]},
+         "typ": {"type": "STRING", "enum": WIDGET_TYPEN},
+         "richtung": {"type": "STRING", "enum": ["links", "rechts", "oben", "unten", "mitte"]}},
+         "required": ["aktion"]}},
+    {"name": "design", "description": "Wechselt die Farbpalette des Desktops.",
+     "parameters": {"type": "OBJECT", "properties": {"name": {"type": "STRING", "enum": [
+         "jarvis", "ironman", "matrix", "synthwave", "gold", "arktis", "weiter"]}}, "required": ["name"]}},
+    {"name": "merken", "description": "Merkt sich dauerhaft einen Fakt ueber den Nutzer. Nur wenn er das ausdruecklich will.",
+     "parameters": {"type": "OBJECT", "properties": {"fakt": {"type": "STRING", "description":
+         "Kurzer Satz in der dritten Person, z. B. 'Nikola trinkt keinen Kaffee.'"}}, "required": ["fakt"]}},
+    {"name": "vergessen", "description": "Loescht gemerkte Fakten, die das Stichwort enthalten.",
+     "parameters": {"type": "OBJECT", "properties": {"stichwort": {"type": "STRING"}}, "required": ["stichwort"]}},
+    {"name": "recherche", "description": "Sucht im Web nach aktuellen Infos (Nachrichten, Preise, Firmen, Oeffnungszeiten, "
+     "Fakten, bei denen du dir nicht sicher bist). Gib die Antwort danach in eigenen Worten kurz wieder.",
+     "parameters": {"type": "OBJECT", "properties": {"frage": {"type": "STRING", "description": "Die vollstaendige Frage mit Kontext"}},
+                    "required": ["frage"]}},
+    {"name": "frage_claude", "description": "Fragt Claude. NUR aufrufen, wenn der Nutzer ausdruecklich Claude erwaehnt "
+     "(z. B. 'frag Claude'). Gib die Antwort danach in eigenen Worten kurz wieder.",
+     "parameters": {"type": "OBJECT", "properties": {"frage": {"type": "STRING", "description": "Die vollstaendige Frage mit Kontext"}},
+                    "required": ["frage"]}},
+    {"name": "projekt_bauen", "description": "Gibt einen fertigen Bauauftrag (z. B. Website fuer eine Firma) an Claude Code, "
+     "der das Projekt programmiert. NUR aufrufen, nachdem du den Plan zusammengefasst und der Nutzer ausdruecklich ja gesagt hat.",
+     "parameters": {"type": "OBJECT", "properties": {
+         "name": {"type": "STRING", "description": "Kurzer Projekt- oder Firmenname"},
+         "auftrag": {"type": "STRING", "description": "Vollstaendiger Auftrag: Ziel, Firma, Seiten, Inhalte, Design, Technik "
+                     "(Standard: statisches HTML/CSS/JS, responsiv). Fehlende Inhalte als Platzhalter markieren."}},
+         "required": ["name", "auftrag"]}},
+    {"name": "was_verpasst", "description": "Briefing: was seit seiner Abwesenheit passiert ist (Nachrichten, Maerkte, "
+     "fertige Projekte). Fuer 'was hab ich verpasst', 'was gibt's Neues', 'Briefing'. Fasse das Ergebnis natuerlich zusammen.",
+     "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "datei_suchen", "description": "Sucht Dateien oder Ordner auf dem PC (Desktop, Dokumente, Downloads, Bilder, "
+     "Videos, Musik, Klaus-Projekte) nach Namen. Gibt die vollstaendigen Pfade zurueck.",
+     "parameters": {"type": "OBJECT", "properties": {"name": {"type": "STRING", "description": "Name oder Teil davon"}},
+                    "required": ["name"]}},
+    {"name": "in_papierkorb", "description": "Verschiebt eine Datei oder einen Ordner in den Papierkorb (wiederherstellbar). "
+     "NUR mit einem Pfad aus datei_suchen, und NUR nachdem du dem Nutzer Namen und Ort genannt und er ausdruecklich ja gesagt hat.",
+     "parameters": {"type": "OBJECT", "properties": {"pfad": {"type": "STRING", "description": "Vollstaendiger Pfad aus datei_suchen"}},
+                    "required": ["pfad"]}},
+    {"name": "briefe_erstellen", "description": "Erstellt fuer die Leads (Firmen ohne Website) persoenliche Briefe mit "
+     "Website-Entwurf und QR-Code als druckfertige PDFs (dauert pro Firma etwa eine halbe Minute, laeuft im Hintergrund).",
+     "parameters": {"type": "OBJECT", "properties": {"anzahl": {"type": "INTEGER", "description": "Wie viele (0 = alle)"}}}},
+    {"name": "entwuerfe_hochladen", "description": "Laedt die Website-Entwuerfe der Briefe auf den Webspace hoch, damit die QR-Codes funktionieren.",
+     "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "briefe_drucken", "description": "Druckt alle noch nicht gedruckten Briefe auf dem Standarddrucker. Nur wenn er es ausdruecklich will.",
+     "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "stumm_schalten", "description": "Schaltet Klaus stumm, z. B. wenn er 'sei still', 'Ruhe' oder 'stumm' sagt "
+     "oder gerade mit jemand anderem redet. Danach reagiert Klaus nur noch auf 'Klaus, wieder an'.",
+     "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "gespraech_beenden", "description": "Beendet das Gespraech, wenn der Nutzer sich verabschiedet oder fertig ist.",
+     "parameters": {"type": "OBJECT", "properties": {}}},
+]
+
+ANWEISUNG = """
+
+Du fuehrst ein Echtzeit-Sprachgespraech. Antworte schnell, kurz und natuerlich, auf Deutsch.
+Du kannst Dinge am PC erledigen - nutze dafuer IMMER die Werkzeuge, statt nur zu sagen, dass du es tust.
+Sag nach einem Werkzeug kurz, was passiert ist (z. B. "Steam ist offen.").
+Fuer aktuelle Infos oder Fakten, bei denen du unsicher bist, nutze recherche. frage_claude NUR, wenn der Nutzer
+ausdruecklich Claude sagt. Schreib selbst keinen Code.
+Website-Projekte: frag kurz nach Seiten, Stil und Inhalten, fasse den Plan in zwei Saetzen zusammen,
+frag "Soll Claude das bauen?" und rufe projekt_bauen erst nach einem klaren Ja auf.
+Wenn der Nutzer "danke", "tschuess" oder "das war's" sagt, verabschiede dich kurz und rufe gespraech_beenden auf.
+Redet er hoerbar mit jemand anderem (z. B. einem Kunden) und nicht mit dir, misch dich nicht ein: rufe gespraech_beenden auf.
+Sagt er "sei still", "Ruhe" oder "stumm", rufe stumm_schalten auf.
+Soll etwas geloescht werden: erst datei_suchen, dann Namen und Ordner nennen und fragen "Soll ich das in den Papierkorb
+verschieben?" - in_papierkorb erst nach einem klaren Ja. Bei mehreren Treffern nachfragen, welcher gemeint ist."""
+
+
+def bereit() -> bool:
+    return bool(API_KEY)
+
+
+# Spezialmodelle (nur Mitschrift/Uebersetzung/Robotik) und langsames "extended thinking" ausschliessen
+SPEZIAL = re.compile(r"transcribe|translate|robotics|extended|thinking", re.I)
+
+
+def waehle_modell(client) -> str:
+    """Neuestes regulaeres Live-Modell. Gemessen (Okt. 2026): gemini-3.8-live antwortet nach ~0,7 s,
+    3.1-flash-live nach ~1,4 s, 2.5-native-audio nach ~2,4 s."""
+    if MODELL:
+        return MODELL
+    kandidaten = []
+    for m in client.models.list():
+        name = m.name.removeprefix("models/")
+        if "bidiGenerateContent" in (getattr(m, "supported_actions", None) or []) and not SPEZIAL.search(name):
+            version = re.search(r"gemini-(\d+(?:\.\d+)?)", name)
+            kandidaten.append((float(version.group(1)) if version else 0, "preview" not in name, name))
+    if not kandidaten:
+        raise RuntimeError("Kein Gemini-Live-Modell fuer diesen Schluessel verfuegbar.")
+    return max(kandidaten)[2]
+
+
+class GeminiGespraech:
+    def __init__(self, assistent) -> None:
+        self.a = assistent  # fuer Signale (Orb, Widget, Chat) und Aktionen
+        self.modell = ""
+        self.ende = False
+        self.wiedergabe: queue.Queue[bytes | None] = queue.Queue()
+        self.spricht_bis = 0.0  # bis wann noch Klaus' Stimme aus dem Lautsprecher kommt
+        self.letzte_aktivitaet = 0.0
+        self.werkzeug_laeuft = 0
+        self.gefunden: set[str] = set()  # nur diese Pfade darf in_papierkorb anfassen
+        self._zustand = ""
+
+    # ---------------------------------------------------------------- von aussen
+    def fuehre(self, erster_satz: str) -> None:
+        """Ein ganzes Gespraech (blockiert, bis es vorbei ist)."""
+        self.ende = False
+        self._zustand = ""
+        self.letzte_aktivitaet = time.time()
+        asyncio.run(self._gespraech(erster_satz))
+
+    # ---------------------------------------------------------------- Werkzeuge
+    def _werkzeug(self, name: str, args: dict) -> str:
+        b = self.a.b
+        try:
+            if name == "oeffne":
+                treffer = apps.oeffne(args.get("ziel", ""))
+                if treffer:
+                    b.zustand.emit("aktion")
+                    return f"{treffer} wurde geoeffnet."
+                return "Nicht gefunden - frag nach, wie die App genau heisst."
+            if name == "google_suche":
+                apps.suche(args.get("begriff", ""))
+                return "Suche im Browser geoeffnet."
+            if name == "website_im_panel":
+                adresse = args.get("adresse", "").strip()
+                url = apps.WEBSEITEN.get(apps._norm(adresse)) or (adresse if adresse.startswith("http") else
+                                                                   f"https://{adresse.replace(' ', '')}")
+                b.panel.emit(json.dumps({"aktion": "web", "url": url}))
+                return f"{url} wird im Web-Widget angezeigt."
+            if name == "widget":
+                b.panel.emit(json.dumps({k: v for k, v in args.items() if v}))
+                return "Erledigt."
+            if name == "design":
+                b.thema.emit(args.get("name", "weiter"))
+                return "Design gewechselt."
+            if name == "merken":
+                gehirn.merke(args.get("fakt", ""))
+                b.gedaechtnis.emit()
+                b.nachricht.emit("info", f"Gemerkt: {args.get('fakt', '')}")
+                return "Gespeichert."
+            if name == "vergessen":
+                anzahl = gehirn.vergiss(args.get("stichwort", ""))
+                b.gedaechtnis.emit()
+                return f"{anzahl} Eintraege geloescht." if anzahl else "Dazu war nichts gespeichert."
+            if name == "recherche":
+                b.zustand.emit("denken")
+                return self.a.claude.frage(args.get("frage", ""))
+            if name == "frage_claude":
+                b.zustand.emit("denken")
+                b.nachricht.emit("info", "Ich frage Claude …")
+                return self.a.claude.frage(args.get("frage", ""), claude=True)
+            if name == "projekt_bauen":
+                auftrag, projekt = args.get("auftrag", ""), args.get("name", "projekt")
+                b.nachricht.emit("auftrag", auftrag)
+                threading.Thread(target=self.a.bauen, args=(auftrag, projekt), daemon=True).start()
+                return f"Claude baut jetzt '{projekt}'. Klaus meldet sich, wenn es fertig ist."
+            if name == "was_verpasst":
+                text = self.a.briefing_text()
+                self.a.letztes_briefing = ""
+                return text
+            if name == "datei_suchen":
+                treffer = dateien.suche(args.get("name", ""))
+                self.gefunden.update(t["pfad"] for t in treffer)
+                if not treffer:
+                    return "Nichts gefunden."
+                return "Gefunden: " + "; ".join(f"{t['art']} {t['pfad']}" for t in treffer)
+            if name == "in_papierkorb":
+                pfad = args.get("pfad", "")
+                if pfad not in self.gefunden:
+                    return "Abgelehnt: Ich loesche nur, was ich vorher mit datei_suchen gefunden habe. Bitte erst suchen."
+                ergebnis = dateien.in_papierkorb(pfad)
+                b.zustand.emit("aktion")
+                b.panel.emit(json.dumps({"aktion": "neu_laden", "typ": "projekte"}))
+                return ergebnis
+            if name == "briefe_erstellen":
+                return self.a.briefe_starten(int(args.get("anzahl") or 0))
+            if name == "entwuerfe_hochladen":
+                return hochladen.entwuerfe()
+            if name == "briefe_drucken":
+                return hochladen.drucken()
+            if name == "stumm_schalten":
+                self.a.setze_stumm(True)
+                return "Stumm geschaltet. Sag nur noch kurz 'Okay'."
+            if name == "gespraech_beenden":
+                self.ende = True
+                return "Okay."
+        except Exception as e:
+            traceback.print_exc()
+            return f"Fehler: {e}"
+        return "Unbekanntes Werkzeug."
+
+    # ---------------------------------------------------------------- Lautsprecher
+    def _abspielen(self) -> None:
+        """Eigener Thread: spielt Klaus' Stimme ab und meldet die Lautstaerke an den Orb."""
+        import sounddevice as sd
+
+        with sd.RawOutputStream(samplerate=LAUTSPRECHER_RATE, channels=1, dtype="int16") as aus:
+            while True:
+                stueck = self.wiedergabe.get()
+                if stueck is None:
+                    return
+                self.spricht_bis = time.time() + len(stueck) / 2 / LAUTSPRECHER_RATE + 0.25
+                werte = np.frombuffer(stueck, dtype=np.int16).astype(np.float32) / 32768
+                self.a.b.pegel.emit(min(1.0, float(np.sqrt((werte ** 2).mean())) * 6))
+                aus.write(stueck)
+
+    def _setze_zustand(self, zustand: str) -> None:
+        """Nur echte Wechsel melden (sonst bekommt der Orb ein Signal pro Audio-Stueck)."""
+        if zustand != self._zustand:
+            self._zustand = zustand
+            self.a.b.zustand.emit(zustand)
+
+    def _unterbrochen(self) -> None:
+        while not self.wiedergabe.empty():
+            try:
+                self.wiedergabe.get_nowait()
+            except queue.Empty:
+                break
+        self.spricht_bis = 0
+
+    # ---------------------------------------------------------------- Gespraech
+    async def _gespraech(self, erster_satz: str) -> None:
+        from google import genai
+        from google.genai import types
+
+        import sounddevice as sd
+
+        client = genai.Client(api_key=API_KEY)
+        if not self.modell:
+            self.modell = waehle_modell(client)
+            print(f"Gemini-Live-Modell: {self.modell}")
+
+        jetzt = dt.datetime.now().strftime("%A, %d.%m.%Y, %H:%M Uhr")
+        config = types.LiveConnectConfig(
+            response_modalities=["AUDIO"],
+            system_instruction=f"{gehirn.PERSONA}{ANWEISUNG}\n\nJetzt ist {jetzt}.{gehirn.gedaechtnis_text()}",
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=STIMME))),
+            input_audio_transcription=types.AudioTranscriptionConfig(),
+            output_audio_transcription=types.AudioTranscriptionConfig(),
+            tools=[types.Tool(function_declarations=WERKZEUGE)],
+        )
+
+        ohr = self.a.ohr
+        # Leises Mikro anheben: Schwelle ~ Raumrauschen*3, Sprache ist grob 10x lauter -> auf ~0.1 bringen
+        verstaerkung = float(np.clip(0.01 / max(ohr.schwelle, 1e-5), 1, 60))
+        print(f"[Gemini] Sitzung startet ({self.modell}, Mikro-Verstaerkung x{verstaerkung:.0f})")
+        schleife = asyncio.get_running_loop()
+        mikro: asyncio.Queue[bytes] = asyncio.Queue()
+
+        def aufnahme(daten, *_):
+            roh = daten[:, 0].astype(np.float32) / 32768
+            pegel = float(np.sqrt((roh ** 2).mean()))
+            klaus_spricht = time.time() < self.spricht_bis
+            if klaus_spricht and (not UNTERBRECHEN or pegel < ohr.schwelle * 8):
+                roh = np.zeros_like(roh)  # Echo-Schutz: eigene Stimme nicht an Gemini schicken
+            elif pegel > ohr.schwelle * 2:
+                self.letzte_aktivitaet = time.time()
+            if not klaus_spricht:
+                self.a.b.pegel.emit(min(1.0, pegel / (ohr.schwelle * 12)))
+            pcm = (np.clip(roh * verstaerkung, -1, 1) * 32767).astype(np.int16).tobytes()
+            schleife.call_soon_threadsafe(mikro.put_nowait, pcm)
+
+        abspieler = threading.Thread(target=self._abspielen, daemon=True)
+        abspieler.start()
+        du, klaus = [], []  # Mitschrift des laufenden Zugs
+
+        async with client.aio.live.connect(model=self.modell, config=config) as sitzung:
+            async def senden():
+                while not self.ende:
+                    pcm = await mikro.get()
+                    await sitzung.send_realtime_input(audio=types.Blob(data=pcm, mime_type=f"audio/pcm;rate={MIKRO_RATE}"))
+
+            async def empfangen():
+                while not self.ende:
+                    async for nachricht in sitzung.receive():
+                        inhalt = nachricht.server_content
+                        if inhalt:
+                            if inhalt.interrupted:
+                                self._unterbrochen()
+                            if inhalt.input_transcription and inhalt.input_transcription.text:
+                                du.append(inhalt.input_transcription.text)
+                                self.letzte_aktivitaet = time.time()
+                            if inhalt.output_transcription and inhalt.output_transcription.text:
+                                klaus.append(inhalt.output_transcription.text)
+                            if inhalt.model_turn:
+                                for teil in inhalt.model_turn.parts or []:
+                                    if teil.inline_data and teil.inline_data.data:
+                                        self._setze_zustand("sprechen")
+                                        self.wiedergabe.put(teil.inline_data.data)
+                                        self.letzte_aktivitaet = time.time()
+                            if inhalt.turn_complete:
+                                if du:
+                                    self.a.b.nachricht.emit("du", "".join(du).strip())
+                                    print(f"[Gemini] Du: {''.join(du).strip()}")
+                                if klaus:
+                                    self.a.b.nachricht.emit("klaus", "".join(klaus).strip())
+                                    print(f"[Gemini] Klaus: {''.join(klaus).strip()}")
+                                du.clear()
+                                klaus.clear()
+                        if nachricht.tool_call:
+                            antworten = []
+                            self.werkzeug_laeuft += 1  # waehrenddessen nie auflegen (Claude kann 30 s brauchen)
+                            try:
+                                for aufruf in nachricht.tool_call.function_calls:
+                                    print(f"[Gemini] Werkzeug {aufruf.name} {aufruf.args}")
+                                    ergebnis = await asyncio.to_thread(self._werkzeug, aufruf.name, dict(aufruf.args or {}))
+                                    antworten.append(types.FunctionResponse(id=aufruf.id, name=aufruf.name,
+                                                                            response={"ergebnis": ergebnis}))
+                                await sitzung.send_tool_response(function_responses=antworten)
+                            finally:
+                                self.werkzeug_laeuft -= 1
+                                self._zustand = ""
+                                self.letzte_aktivitaet = time.time()
+                        if nachricht.go_away:
+                            self.ende = True
+                    await asyncio.sleep(0)
+
+            async def waechter():
+                """Zustand fuer den Orb pflegen und nach Stille auflegen."""
+                while not self.ende:
+                    await asyncio.sleep(0.3)
+                    spricht = time.time() < self.spricht_bis
+                    if self.werkzeug_laeuft:
+                        continue  # Zustand setzt das Werkzeug selbst (z. B. "denken" bei Claude)
+                    if not spricht:
+                        self._setze_zustand("hoeren")
+                    if not spricht and time.time() - self.letzte_aktivitaet > NACHLAUF_SEK:
+                        print(f"[Gemini] {NACHLAUF_SEK} s Stille - lege auf")
+                        self.ende = True
+                # nach "gespraech_beenden" die Verabschiedung noch ausreden lassen
+                while time.time() < self.spricht_bis or not self.wiedergabe.empty():
+                    await asyncio.sleep(0.2)
+
+            if erster_satz:
+                self.a.b.nachricht.emit("du", erster_satz)
+                await sitzung.send_client_content(
+                    turns=types.Content(role="user", parts=[types.Part(text=erster_satz)]), turn_complete=True)
+            else:
+                await sitzung.send_client_content(
+                    turns=types.Content(role="user", parts=[types.Part(text="(Er hat dich gerufen. Sag nur kurz 'Ja?')")]),
+                    turn_complete=True)
+
+            with sd.InputStream(samplerate=MIKRO_RATE, channels=1, dtype="int16", device=ohr.geraet,
+                                blocksize=MIKRO_RATE // 10, callback=aufnahme):
+                aufgaben = [asyncio.create_task(f()) for f in (senden, empfangen)]
+                await waechter()
+                for a in aufgaben:
+                    a.cancel()
+
+        print("[Gemini] Sitzung beendet")
+        self.wiedergabe.put(None)
+        abspieler.join(timeout=2)
+        self.a.b.pegel.emit(0.0)
