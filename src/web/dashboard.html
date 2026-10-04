@@ -274,15 +274,7 @@
   .core-debug button:hover { background: rgba(var(--rgb), .3); }
   @media (prefers-reduced-motion: reduce) { .core-modus.glitch, .core-modus.glitch::before, .core-modus.glitch::after,
     [data-core="AWAITING_AUTH"] .core-label { animation: none; } }
-  /* Segment-Ring (SHIELD-OS-Stil): Ringausschnitte als Knoepfe */
-  .ring-menue .fuehrung { fill: none; stroke: var(--cyan-3); stroke-width: 1; stroke-dasharray: 1 5; }
-  .ring-menue .seg { cursor: pointer; }
-  .ring-menue .seg path { fill: rgba(var(--rgb), .07); stroke: var(--cyan-2); stroke-width: 1;
-    transition: fill .15s var(--ease), stroke .15s var(--ease); }
-  .ring-menue .seg text { fill: var(--cyan); font-family: "Rajdhani", sans-serif; font-weight: 700; letter-spacing: .14em;
-    text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
-  .ring-menue .seg:hover path { fill: rgba(var(--rgb), .28); stroke: var(--cyan); }
-  .ring-menue .seg:hover text { fill: #fff; }
+  /* Eck-Anzeigen um das Auge */
   .ring-menue .satellit { --farbe: var(--cyan); }
   .ring-menue .satellit.warm { --farbe: var(--bernstein); }
   .ring-menue .satellit.heiss { --farbe: var(--rot); }
@@ -294,8 +286,6 @@
   .ring-menue .satellit text { text-anchor: middle; dominant-baseline: middle; fill: var(--farbe); }
   .ring-menue .satellit .zahl { font-family: "Orbitron"; }
   .ring-menue .satellit .name { font-family: Consolas, monospace; letter-spacing: 2px; fill: var(--leise); }
-  .ring-menue .seg.aktiv path { animation: seg-blitz .6s var(--ease); }
-  @keyframes seg-blitz { 30% { fill: var(--gruen); } }
   .klaus.mit-briefing .verlauf { max-height: 72%; }
   .klaus.mit-briefing canvas { min-height: 70px; }
   .blase.briefing { align-self: stretch; max-width: none; padding: 0 0 6px; border: 1px solid var(--cyan-2); background: var(--cyan-4); }
@@ -556,7 +546,7 @@ const TYPEN = {
       const orb = new KlausOrb(c.inhalt.querySelector("canvas"), { platz: 0.7, pegelAbstand: 0.385 });
       const core = new KlausCore(c.inhalt.querySelector(".buehne"), orb, 0.7);
       if (!window.klausCore) { window.klausCore = core; coreDebug(core); }
-      ringMenue(c.inhalt.querySelector(".buehne"), c.inhalt.querySelector(".ring-menue"));
+      eckAnzeigen(c.inhalt.querySelector(".buehne"), c.inhalt.querySelector(".ring-menue"));
       const status = c.inhalt.querySelector(".status"), verlauf = c.inhalt.querySelector(".verlauf");
       // Kein Chatverlauf auf dem Bildschirm (steht im Obsidian-Vault unter Gespraeche/).
       // Nur Karten, die etwas zu tun geben: "Seit du weg warst" und ein Claude-Auftrag - je 3 Minuten.
@@ -1281,22 +1271,12 @@ function zellhoehe() {
   return Math.max(18, Math.floor((innerHeight - 86) / ZEILEN) - 0.5);  // unten Platz fuer die Fusszeile
 }
 
-// ================================================================ Segment-Ring um den Orb (wie SHIELD OS)
-const KURZNAMEN = { "Teamfight Tactics": "TFT", "Counter-Strike 2": "CS2", "League of Legends": "LOL",
-                    "Visual Studio Code": "CODE", "Microsoft Edge": "EDGE", "Riot Client": "RIOT" };
-
-const ringZeichner = [];  // alle Ring-Menues neu zeichnen, wenn neue Daten (Apps, Systemwerte) da sind
+// ================================================================ Eck-Anzeigen um das Auge
+const ringZeichner = [];  // alle Anzeigen neu zeichnen, wenn neue Systemwerte da sind
 let ringWerte = null;      // letzte Systemwerte fuer die Satelliten
 
-function ringApps() {
-  const klausM = modelle.find((m) => m.typ === "klaus"), schnell = modelle.find((m) => m.typ === "schnellstart");
-  const apps = (klausM && klausM.einst.ringApps) || (schnell && schnell.einst.apps)
-    || (zwischenspeicher.favoriten?.liste || []).map((f) => f.name);
-  return apps.slice(0, 10);
-}
-
-// Satelliten in den vier Ecken um den Ring: kleine Rundinstrumente mit Verbindungslinie zum Reaktor
-function satelliten(svg, mx, my, groesse, r2) {
+// Satelliten in den vier Ecken: kleine Rundinstrumente mit Verbindungslinie zum Auge
+function satelliten(svg, mx, my, groesse) {
   if (!ringWerte) return;
   const ns = "http://www.w3.org/2000/svg", d = ringWerte;
   const daten = [["CPU", d.cpu, `${Math.round(d.cpu)}%`], ["RAM", d.ram, `${d.ram_gb}G`],
@@ -1308,9 +1288,8 @@ function satelliten(svg, mx, my, groesse, r2) {
     const g = document.createElementNS(ns, "g");
     g.setAttribute("class", "satellit" + (wert > 85 ? " heiss" : wert > 65 ? " warm" : ""));
     const umfang = 2 * Math.PI * rs;
-    // Name oben unter dem Kreis, unten ueber dem Kreis (sonst schneidet der Rand ihn ab)
-    // Linie vom Satelliten diagonal zum Ring
-    const innen = r2 + 10, ex = mx + dx * innen * Math.SQRT1_2, ey = my + dy * innen * Math.SQRT1_2;
+    // Linie vom Satelliten diagonal Richtung Auge; Name oben unter, unten ueber dem Kreis
+    const innen = groesse * 0.36, ex = mx + dx * innen * Math.SQRT1_2, ey = my + dy * innen * Math.SQRT1_2;
     g.innerHTML = `<line x1="${x - dx * rs * 0.75}" y1="${y - dy * rs * 0.75}" x2="${ex}" y2="${ey}" class="verbindung"/>
       <circle cx="${ex}" cy="${ey}" r="2.5" class="knoten"/>
       <circle cx="${x}" cy="${y}" r="${rs + 6}" class="aussen"/>
@@ -1323,51 +1302,16 @@ function satelliten(svg, mx, my, groesse, r2) {
   });
 }
 
-// Zeichnet anklickbare Ringsegmente (Kreisring-Ausschnitte) mit Beschriftung entlang des Rings
-function ringMenue(buehne, svg) {
-  const ns = "http://www.w3.org/2000/svg";
+function eckAnzeigen(buehne, svg) {
   const zeichnen = () => {
-    const b = buehne.clientWidth, h = buehne.clientHeight, apps = ringApps();
+    const b = buehne.clientWidth, h = buehne.clientHeight;
     svg.setAttribute("viewBox", `0 0 ${b} ${h}`);
     svg.innerHTML = "";
     const groesse = Math.min(b, h);
-    if (groesse < 260 || !apps.length) return;  // zu klein: nur der Orb
-    const mx = b / 2, my = h / 2, r1 = groesse * 0.35, r2 = groesse * 0.415;
-    const punkt = (r, a) => `${(mx + Math.cos(a) * r).toFixed(1)} ${(my + Math.sin(a) * r).toFixed(1)}`;
-    // unten (6 Uhr) bleibt eine Luecke von 60 Grad - dort sitzt der Audio-Pegel des Orbs
-    const luecke = 0.035, freiHalb = Math.PI / 6, schritt = (Math.PI * 2 - 2 * freiHalb) / apps.length;
-    // duenne Fuehrungsringe innen und aussen
-    for (const r of [r1 - 6, r2 + 6]) {
-      const kreis = document.createElementNS(ns, "circle");
-      kreis.setAttribute("cx", mx); kreis.setAttribute("cy", my); kreis.setAttribute("r", r); kreis.setAttribute("class", "fuehrung");
-      svg.append(kreis);
-    }
-    apps.forEach((name, i) => {
-      const a0 = Math.PI / 2 + freiHalb + i * schritt + luecke, a1 = a0 + schritt - 2 * luecke, mitte = (a0 + a1) / 2;
-      const gross = a1 - a0 > Math.PI ? 1 : 0;
-      const g = document.createElementNS(ns, "g");
-      g.setAttribute("class", "seg");
-      const pfad = document.createElementNS(ns, "path");
-      pfad.setAttribute("d", `M ${punkt(r2, a0)} A ${r2} ${r2} 0 ${gross} 1 ${punkt(r2, a1)} L ${punkt(r1, a1)} A ${r1} ${r1} 0 ${gross} 0 ${punkt(r1, a0)} Z`);
-      const text = document.createElementNS(ns, "text");
-      let drehung = (mitte * 180) / Math.PI + 90;
-      if (Math.sin(mitte) > 0.05) drehung += 180;  // untere Haelfte: nicht kopfueber
-      const [tx, ty] = punkt((r1 + r2) / 2, mitte).split(" ");
-      text.setAttribute("x", tx); text.setAttribute("y", ty);
-      text.setAttribute("transform", `rotate(${drehung.toFixed(1)} ${tx} ${ty})`);
-      text.setAttribute("font-size", ((r2 - r1) * 0.36).toFixed(1));
-      text.textContent = (KURZNAMEN[name] || name.split(" ")[0]).toUpperCase().slice(0, 9);
-      const titel = document.createElementNS(ns, "title");
-      titel.textContent = `${name} öffnen`;
-      g.append(titel, pfad, text);
-      g.onclick = () => { g.classList.remove("aktiv"); void g.getBBox(); g.classList.add("aktiv"); klaus.oeffne(name); };
-      svg.append(g);
-    });
-    satelliten(svg, mx, my, groesse, r2);
+    if (groesse >= 260) satelliten(svg, b / 2, h / 2, groesse);  // zu klein: nur das Auge
   };
   ringZeichner.push(zeichnen);
   new ResizeObserver(zeichnen).observe(buehne);
-  setTimeout(zeichnen, 1500);  // nachdem Schnellstart/Favoriten geladen sind
 }
 
 // ================================================================ Hightech-Details
@@ -1416,7 +1360,6 @@ function telemetrieStarten() {
       + `<span>UP <b>${String(werte.laufzeit_h).replace(".", ",")}H</b></span>` + zeit;
   };
   (abos.system = abos.system || []).push({ id: "__leiste", fn: (d) => { werte = d; zeichnen(); ringWerte = d; ringZeichner.forEach((f) => f()); } });
-  (abos.favoriten = abos.favoriten || []).push({ id: "__ring", fn: () => ringZeichner.forEach((f) => f()) });
   klaus.lade("favoriten", "");
   setInterval(zeichnen, 1000);
   setInterval(() => { if (!modelle.some((m) => m.typ === "system")) klaus.lade("system", ""); }, 5000);

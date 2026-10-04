@@ -29,7 +29,7 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 LEADS_PATH = BASE_DIR / "data" / "leads.csv"
-SPALTEN = ["name", "adresse", "telefon", "bewertung", "anzahl_bewertungen", "maps_link", "branche_suchbegriff", "quelle"]
+SPALTEN = ["name", "adresse", "telefon", "bewertung", "anzahl_bewertungen", "maps_link", "branche_suchbegriff", "quelle", "lat", "lon"]
 UA = {"User-Agent": f"Klaus-Leadsuche/1.0 ({os.getenv('KLESRO_ABSENDER_MAIL', 'kontakt@example.com')})"}
 # Oeffentliche Overpass-Server sind manchmal ueberlastet (504) -> der Reihe nach probieren
 OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter",
@@ -133,8 +133,8 @@ def suche(branchen: list[str], ort: str, radius_km: float = 12, max_adressen: in
         if any(k in tags for k in OHNE_WEBSITE):
             continue
         adresse = _adresse(tags)
+        mitte = e.get("center") or e
         if not adresse.count(",") and nachgeschlagen < max_adressen:  # Strasse oder Ort fehlt
-            mitte = e.get("center") or e
             adresse = _adresse_nachschlagen(mitte["lat"], mitte["lon"]) or adresse
             nachgeschlagen += 1
         if not re.search(r"\d{5}", adresse):
@@ -145,6 +145,7 @@ def suche(branchen: list[str], ort: str, radius_km: float = 12, max_adressen: in
             "bewertung": "", "anzahl_bewertungen": "",
             "maps_link": f"https://www.openstreetmap.org/{e['type']}/{e['id']}",
             "branche_suchbegriff": f"{ART_DE.get(art, art.replace('_', ' ').title())} {ortname}".strip(), "quelle": "osm",
+            "lat": mitte.get("lat", ""), "lon": mitte.get("lon", ""),  # fuer die Lead-Karte im Panel
         })
     print(f"OpenStreetMap: {len(leads)} Betriebe ohne eingetragene Website mit vollstaendiger Adresse ({nachgeschlagen} Adressen nachgeschlagen)")
     return leads

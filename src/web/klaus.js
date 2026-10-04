@@ -150,7 +150,7 @@ class KlausOrb {
     const aktiv = this.zustand !== "aus";
     const atem = 0.5 + 0.5 * Math.sin(this.t * 1.4);
     const energie = aktiv ? 0.55 + this.pegel * 0.45 : 0.28 + atem * 0.08;
-    const r0 = (60 + this.pegel * 20 + atem * 3) * s;
+    const r0 = 60 * s;
     const voll = Math.PI * 2;
 
     ctx.globalCompositeOperation = "lighter";
@@ -247,51 +247,6 @@ class KlausOrb {
     ctx.beginPath(); ctx.arc(mx, my, r0 + 112 * s, 0, voll); ctx.stroke();
     ctx.setLineDash([]);
 
-    // 5) Reaktor-Ring: 48 Segmente wie ein Equalizer
-    const ringR = r0 + 30 * s, segBreite = (voll / this.segmente.length) * 0.62;
-    for (let i = 0; i < this.segmente.length; i++) {
-      const wert = this.segmente[i];
-      const a = (i / this.segmente.length) * voll - this.drehung * 0.6;
-      ctx.strokeStyle = this.rgba(0.12 + wert * 0.85, wert * 0.5);
-      ctx.lineWidth = (5 + wert * 9) * s;
-      ctx.beginPath(); ctx.arc(mx, my, ringR + wert * 5 * s, a, a + segBreite); ctx.stroke();
-    }
-
-    // 5b) Klang-Blob: gefuellte Flaeche Hauptfarbe -> Zweitfarbe, waechst mit der Stimme
-    const blobAusschlag = (aktiv ? 4 + this.pegel * 42 : 2 + atem * 2) * s;
-    const zweit = ORB_FARBEN.denken;
-    const verlauf = ctx.createLinearGradient(mx - r0 * 1.4, my - r0 * 1.4, mx + r0 * 1.4, my + r0 * 1.4);
-    verlauf.addColorStop(0, this.rgba(aktiv ? 0.34 : 0.12));
-    verlauf.addColorStop(1, `rgba(${zweit[0]},${zweit[1]},${zweit[2]},${aktiv ? 0.3 : 0.08})`);
-    ctx.fillStyle = verlauf;
-    ctx.beginPath();
-    for (let k = 0; k <= 90; k++) {
-      const a = (k / 90) * voll;
-      const v = Math.sin(a * 2 + this.t * 1.7) * 0.55 + Math.sin(a * 4 - this.t * 2.9) * 0.3 + Math.sin(a * 7 + this.t * 4.3) * 0.15;
-      const r = r0 + 14 * s + Math.max(0, v) * blobAusschlag;
-      k ? ctx.lineTo(mx + Math.cos(a) * r, my + Math.sin(a) * r) : ctx.moveTo(mx + Math.cos(a) * r, my + Math.sin(a) * r);
-    }
-    ctx.closePath();
-    ctx.fill();
-
-    // 6) Stimm-Welle: glühende, sich verformende Kontur um den Kern
-    for (const [versatz, alpha, breite] of [[0, 0.16, 9], [0, 0.95, 2.4], [1.7, 0.45, 1.2]]) {
-      ctx.strokeStyle = this.rgba(aktiv ? alpha : alpha * 0.45, 0.35);
-      ctx.lineWidth = breite * s;
-      ctx.beginPath();
-      for (let k = 0; k <= 120; k++) {
-        const a = (k / 120) * voll;
-        const verformung = Math.sin(a * 3 + this.t * 2.3 + versatz) * 0.5 + Math.sin(a * 5 - this.t * 3.7 + versatz) * 0.35
-          + Math.sin(a * 9 + this.t * 6.1) * 0.15;
-        const ausschlag = (aktiv ? 2 + this.pegel * 20 : 1.5 + atem * 1.5) * s;
-        const r = r0 + 10 * s + verformung * ausschlag;
-        const x = mx + Math.cos(a) * r, y = my + Math.sin(a) * r;
-        k ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-      }
-      ctx.closePath();
-      ctx.stroke();
-    }
-
     // 6b) Fadenkreuz-Klammern links/rechts mit Datenpunkt + Audio-Pegel als Segmentbalken (nur bei genug Platz)
     if (s > 0.4) {
       const ax = r0 + 150 * s;
@@ -319,60 +274,80 @@ class KlausOrb {
       ctx.fillText(`AUDIO LEVEL · ${String(Math.round(this.pegel * 100)).padStart(3, "0")}`, mx, y + 17 * s);
     }
 
-    // 7) Plasma-Kern: Grundkugel + drei kreisende Lichtwolken, auf den Kreis beschnitten
-    ctx.save();
-    ctx.beginPath(); ctx.arc(mx, my, r0, 0, voll); ctx.clip();
-    ctx.globalCompositeOperation = "source-over";
-    g = ctx.createRadialGradient(mx, my, 0, mx, my, r0);
-    g.addColorStop(0, this.rgba(0.95, 0.55));
-    g.addColorStop(0.55, this.rgba(0.75));
-    g.addColorStop(1, this.rgba(0.35, -0.6));
-    ctx.fillStyle = g;
-    ctx.fillRect(mx - r0, my - r0, r0 * 2, r0 * 2);
-    ctx.globalCompositeOperation = "lighter";
-    for (let i = 0; i < 3; i++) {
-      const a = this.t * (0.7 + i * 0.45) * (i % 2 ? -1 : 1) + i * 2.1;
-      const versatz = r0 * (0.32 + 0.12 * Math.sin(this.t * 1.3 + i));
-      const bx = mx + Math.cos(a) * versatz, by = my + Math.sin(a) * versatz;
-      const wolke = ctx.createRadialGradient(bx, by, 0, bx, by, r0 * 0.75);
-      wolke.addColorStop(0, this.rgba(0.55 * energie + 0.15, 0.7));
-      wolke.addColorStop(1, this.rgba(0));
-      ctx.fillStyle = wolke;
-      ctx.fillRect(mx - r0, my - r0, r0 * 2, r0 * 2);
-    }
-    // heller Kernpunkt
-    g = ctx.createRadialGradient(mx - r0 * 0.18, my - r0 * 0.22, 0, mx, my, r0 * 0.55);
-    g.addColorStop(0, `rgba(255,255,255,${0.75 + this.pegel * 0.25})`);
-    g.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = g;
-    ctx.fillRect(mx - r0, my - r0, r0 * 2, r0 * 2);
-    ctx.restore();
-
-    // Arc-Reactor-Dreieck (Mark VI, Spitze nach unten) im Kern: aussen kraeftig, innen fein
-    const dreieck = (rad) => {
+    // 7) HAL-Auge: Spektrum-Kranz, Metallgehaeuse, Glaslinse mit gluehender Pupille, Reflexe
+    const gehaeuse = r0 + 16 * s, linse = r0;
+    // Spektrum-Kranz: 64 feine Striche ums Gehaeuse, Laenge = Stimme bzw. Denk-Welle
+    ctx.lineCap = "round";
+    for (let i = 0; i < 64; i++) {
+      const wert = this.segmente[i % this.segmente.length];
+      const a = (i / 64) * voll - Math.PI / 2;
+      const innen = gehaeuse + 7 * s, laenge = (2 + wert * 20) * s;
+      ctx.strokeStyle = this.rgba(0.18 + wert * 0.8, wert * 0.4);
+      ctx.lineWidth = 1.6 * s;
       ctx.beginPath();
-      for (let k = 0; k < 3; k++) {
-        const a = Math.PI / 2 + (k * voll) / 3;
-        k ? ctx.lineTo(mx + Math.cos(a) * rad, my + Math.sin(a) * rad) : ctx.moveTo(mx + Math.cos(a) * rad, my + Math.sin(a) * rad);
-      }
-      ctx.closePath();
-    };
-    dreieck(r0 * 0.7);
-    ctx.fillStyle = this.rgba(0.16 + this.pegel * 0.2, 0.6);
-    ctx.fill();
-    ctx.strokeStyle = this.rgba(0.95, 0.75);
-    ctx.lineWidth = 3.2 * s;
-    ctx.lineJoin = "round";
-    ctx.stroke();
-    dreieck(r0 * 0.44);
-    ctx.strokeStyle = this.rgba(0.7, 0.6);
-    ctx.lineWidth = 1.3 * s;
-    ctx.stroke();
+      ctx.moveTo(mx + Math.cos(a) * innen, my + Math.sin(a) * innen);
+      ctx.lineTo(mx + Math.cos(a) * (innen + laenge), my + Math.sin(a) * (innen + laenge));
+      ctx.stroke();
+    }
 
-    // Kernrand
-    ctx.strokeStyle = this.rgba(0.85, 0.5);
-    ctx.lineWidth = 1.5 * s;
-    ctx.beginPath(); ctx.arc(mx, my, r0, 0, voll); ctx.stroke();
+    ctx.globalCompositeOperation = "source-over";
+    // Gehaeuse: dunkles gebuerstetes Metall
+    g = ctx.createRadialGradient(mx, my - gehaeuse * 0.3, gehaeuse * 0.2, mx, my, gehaeuse);
+    g.addColorStop(0, "#2a2b30"); g.addColorStop(0.75, "#141519"); g.addColorStop(1, "#060607");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(mx, my, gehaeuse, 0, voll); ctx.fill();
+    // Chromkante: oben hell, unten dunkel
+    const chrom = ctx.createLinearGradient(mx, my - gehaeuse, mx, my + gehaeuse);
+    chrom.addColorStop(0, "rgba(255,255,255,0.55)"); chrom.addColorStop(0.5, "rgba(120,120,130,0.25)"); chrom.addColorStop(1, "rgba(0,0,0,0.6)");
+    ctx.strokeStyle = chrom; ctx.lineWidth = 2.4 * s;
+    ctx.beginPath(); ctx.arc(mx, my, gehaeuse - 1.2 * s, 0, voll); ctx.stroke();
+    ctx.strokeStyle = "rgba(0,0,0,0.9)"; ctx.lineWidth = 3 * s;
+    ctx.beginPath(); ctx.arc(mx, my, linse + 1.5 * s, 0, voll); ctx.stroke();
+
+    // Linse: schwarzes Glas, innen gluehend. Pupille weitet sich mit der Stimme, pulsiert beim Denken.
+    const denkPuls = this.zustand === "denken" ? 0.5 + 0.5 * Math.sin(this.t * 7) : 0;
+    const pupille = Math.min(0.62, 0.2 + this.pegel * 0.3 + atem * 0.03 + denkPuls * 0.1 + (aktiv ? 0.05 : 0));
+    const dunkel = (f, a) => `rgba(${this.farbe[0] * f | 0},${this.farbe[1] * f | 0},${this.farbe[2] * f | 0},${a})`;
+    g = ctx.createRadialGradient(mx, my, 0, mx, my, linse);
+    g.addColorStop(0, this.rgba(1, 0.75));
+    g.addColorStop(pupille * 0.35, this.rgba(1, 0.35));
+    g.addColorStop(pupille, dunkel(0.95, 1));
+    g.addColorStop(Math.min(0.9, pupille + 0.25), dunkel(0.35, 1));
+    g.addColorStop(0.92, dunkel(0.08, 1));
+    g.addColorStop(1, "rgba(0,0,0,1)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(mx, my, linse, 0, voll); ctx.fill();
+
+    // Linsen-Elemente: feine konzentrische Ringe im Glas
+    ctx.globalCompositeOperation = "lighter";
+    for (const [f, a] of [[0.34, 0.16], [0.55, 0.1], [0.76, 0.07]]) {
+      ctx.strokeStyle = this.rgba(a * (0.7 + energie * 0.6), 0.2);
+      ctx.lineWidth = 1 * s;
+      ctx.beginPath(); ctx.arc(mx, my, linse * f, 0, voll); ctx.stroke();
+    }
+    // Lichtschein der Pupille
+    g = ctx.createRadialGradient(mx, my, 0, mx, my, linse * (pupille + 0.15));
+    g.addColorStop(0, this.rgba(0.55 + energie * 0.35, 0.5));
+    g.addColorStop(1, this.rgba(0));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(mx, my, linse, 0, voll); ctx.fill();
+
+    // Glasreflexe: weicher Glanz oben, heller Bogen links oben, zwei Lichtpunkte
+    ctx.globalCompositeOperation = "source-over";
+    ctx.save();
+    ctx.beginPath(); ctx.arc(mx, my, linse, 0, voll); ctx.clip();
+    g = ctx.createLinearGradient(mx, my - linse, mx, my);
+    g.addColorStop(0, "rgba(255,255,255,0.13)"); g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(mx, my - linse * 0.42, linse * 0.82, linse * 0.5, 0, 0, voll); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = "rgba(255,255,255,0.38)"; ctx.lineWidth = 2.6 * s; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.arc(mx, my, linse * 0.8, Math.PI * 1.08, Math.PI * 1.36); ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.75)";
+    ctx.beginPath(); ctx.arc(mx - linse * 0.36, my - linse * 0.5, 2.6 * s, 0, voll); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.3)";
+    ctx.beginPath(); ctx.arc(mx + linse * 0.42, my + linse * 0.4, 1.6 * s, 0, voll); ctx.fill();
+    ctx.globalCompositeOperation = "lighter";
 
     // 8) Schockwelle + Funken bei Aktionen
     if (this.blitz > 0) {
