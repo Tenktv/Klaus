@@ -22,8 +22,7 @@ const DENK_PHASEN = ["PARSING INTENT", "QUERYING", "SYNTHESIZING"];
 const PHASE_MS = 1100;
 const MIN_AUSFUEHREN_MS = 900;   // "EXECUTING" bleibt mindestens so lange sichtbar
 const FERTIG_MS = 1400;          // danach "COMPLETE" mit Ring-Burst
-const FRAGMENTE = ["klesro://intent", "klesro://query", "QRY::lead", "SYN>>", "NODE 07", "Δ 0.73", "AUTH?", "ROUTE 4/9",
-                   "klesro://memory", "CTX 12k", "VEC 0.91", "klesro://web", "ACK", "PING 18ms"];
+
 
 // Reiner Uebergang (zustand, ereignis) -> zustand. Kein DOM, damit er leicht pruefbar bleibt.
 // zustand: { name, seit, danach }  ereignis: { typ: "melde", wert, jetzt } | { typ: "zeit", jetzt }
@@ -68,7 +67,6 @@ class KlausCore {
     this.labelEl = this.hud.querySelector(".core-label");
     this.zielEl = this.hud.querySelector(".core-ziel");
     this.teilchen = [];    // Datenstrom von aussen zum Kern (Denken)
-    this.fragmente = [];   // vorbeiziehende Hex-/Datenschnipsel (Denken)
     this.wellen = [];      // Ringe nach aussen (Zuhoeren) bzw. Burst (Fertig)
     this.pegel = 0;
     this.simuliert = false;   // Debug: Mikro-Pegel vortaeuschen
@@ -167,7 +165,7 @@ class KlausCore {
     }
 
     const aktiv = ["THINKING", "EXECUTING", "AWAITING_AUTH", "LISTENING", "DONE"].includes(name)
-      || this.teilchen.length || this.fragmente.length || this.wellen.length;
+      || this.teilchen.length || this.wellen.length;
     if (!aktiv || this.ruhig) {
       if (!this.leer) { this.ctx.clearRect(0, 0, this.fx.width, this.fx.height); this.leer = true; }
       setTimeout(() => requestAnimationFrame((t) => this.tick(t)), 120);  // nichts zu zeichnen -> kaum CPU
@@ -186,22 +184,14 @@ class KlausCore {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     const mx = w / 2, my = h / 2, s = (Math.min(w, h) / 460) * this.platz;
-    const kern = 64 * s, aussen = kern + 170 * s, voll = Math.PI * 2, name = this.z.name;
+    const kern = 64 * s, aussen = kern + 120 * s, voll = Math.PI * 2, name = this.z.name;
     const farbe = (a, hell = 0) => this.orb.rgba(a, hell);
     ctx.globalCompositeOperation = "lighter";
 
-    // --- Denken: Datenstrom zum Kern + vorbeiziehende Fragmente
-    if (name === "THINKING") {
-      for (let i = 0; i < 3 && this.teilchen.length < 70; i++) {
-        this.teilchen.push({ w: Math.random() * voll, r: aussen * (1.05 + Math.random() * 0.45), v: (90 + Math.random() * 160) * s,
-                             drall: (Math.random() - 0.5) * 1.2, laenge: (8 + Math.random() * 22) * s });
-      }
-      if (this.fragmente.length < 12 && Math.random() < dt * 9) {
-        const hex = "0x" + (Math.random() * 0xffff | 0).toString(16).toUpperCase().padStart(4, "0");
-        this.fragmente.push({ text: Math.random() < 0.5 ? hex : FRAGMENTE[Math.random() * FRAGMENTE.length | 0],
-                              w: Math.random() * voll, r: kern + (55 + Math.random() * 130) * s,
-                              v: (Math.random() < 0.5 ? -1 : 1) * (0.25 + Math.random() * 0.4), leben: 0, dauer: 1.4 + Math.random() * 1.2 });
-      }
+    // --- Denken: wenige feine Lichtstriche fliessen ins Auge
+    if (name === "THINKING" && this.teilchen.length < 26 && Math.random() < dt * 24) {
+      this.teilchen.push({ w: Math.random() * voll, r: aussen * (1.05 + Math.random() * 0.35), v: (70 + Math.random() * 90) * s,
+                           drall: (Math.random() - 0.5) * 0.6, laenge: (10 + Math.random() * 18) * s });
     }
     ctx.lineCap = "round";
     for (const p of this.teilchen) {
@@ -209,8 +199,8 @@ class KlausCore {
       p.r -= p.v * zug * dt;
       p.w += p.drall * dt;
       const nah = Math.max(0, Math.min(1, (aussen * 1.3 - p.r) / (aussen * 1.3 - kern)));
-      ctx.strokeStyle = farbe(0.15 + nah * 0.75, 0.35);
-      ctx.lineWidth = (0.8 + nah * 1.4) * s;
+      ctx.strokeStyle = farbe(0.08 + nah * 0.5, 0.35);
+      ctx.lineWidth = (0.7 + nah * 0.9) * s;
       ctx.beginPath();
       ctx.moveTo(mx + Math.cos(p.w) * (p.r + p.laenge), my + Math.sin(p.w) * (p.r + p.laenge));
       ctx.lineTo(mx + Math.cos(p.w) * p.r, my + Math.sin(p.w) * p.r);
@@ -218,18 +208,7 @@ class KlausCore {
     }
     this.teilchen = this.teilchen.filter((p) => p.r > kern * 1.02);
 
-    ctx.font = `${Math.max(8, Math.round(9.5 * s))}px Consolas, monospace`;
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    for (const f of this.fragmente) {
-      f.leben += dt;
-      f.w += f.v * dt * 0.6;
-      const k = f.leben / f.dauer, alpha = Math.sin(Math.min(1, k) * Math.PI);
-      ctx.fillStyle = farbe(alpha * 0.85, 0.5);
-      ctx.fillText(f.text, mx + Math.cos(f.w) * f.r, my + Math.sin(f.w) * f.r);
-    }
-    this.fragmente = this.fragmente.filter((f) => f.leben < f.dauer);
-
-    // --- Ausfuehren: Scan-Linie von oben nach unten + Raster-Ticks
+    // --- Ausfuehren: Scan-Linie von oben nach unten
     if (name === "EXECUTING") {
       const k = ((jetzt - this.z.seit) / 1000 / 0.9) % 1, y = my - aussen + k * aussen * 2;
       const breite = Math.sqrt(Math.max(0, aussen * aussen - (y - my) * (y - my)));
@@ -239,12 +218,6 @@ class KlausCore {
       ctx.fillRect(mx - breite, y - 26 * s, breite * 2, 29 * s);
       ctx.strokeStyle = farbe(0.95, 0.6); ctx.lineWidth = 1.4 * s;
       ctx.beginPath(); ctx.moveTo(mx - breite, y); ctx.lineTo(mx + breite, y); ctx.stroke();
-      for (let i = 0; i < 4; i++) {  // vier Zielmarken, die sich zum Kern ziehen
-        const a = i * (voll / 4) + Math.PI / 4, r = aussen - ((jetzt - this.z.seit) / 1000 % 0.9) / 0.9 * (aussen - kern * 1.4);
-        const x = mx + Math.cos(a) * r, yy = my + Math.sin(a) * r, l = 9 * s;
-        ctx.strokeStyle = farbe(0.8, 0.4); ctx.lineWidth = 1.3 * s;
-        ctx.beginPath(); ctx.moveTo(x - l, yy); ctx.lineTo(x + l, yy); ctx.moveTo(x, yy - l); ctx.lineTo(x, yy + l); ctx.stroke();
-      }
     }
 
     // --- Freigabe: Schloss-Ring aus drei Segmenten, pulsiert
@@ -291,6 +264,8 @@ function coreDebug(core) {
   }
   let demo = null;
   const demoKnopf = knopf("▶ DEMO", () => (demo ? stop() : start()));
+  knopf("▶ FENSTER", () => popupDemo());
+  knopf("✕ FENSTER", () => holoBefehl({ aktion: "alle_zu" }));
   const ablauf = [["hoeren", 1800], ["denken", 3600], ["aktion", 1300], ["freigabe", 3200], ["aktion", 1200], ["sprechen", 1600], ["aus", 2500]];
   const start = () => {
     let i = 0;
@@ -309,5 +284,9 @@ function coreDebug(core) {
   addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "d") box.classList.toggle("offen");
   });
-  if (new URLSearchParams(location.search).get("debug") === "1") { box.classList.add("offen"); start(); }
+  if (new URLSearchParams(location.search).get("debug") === "1") {
+    box.classList.add("offen");
+    start();
+    setTimeout(popupDemo, 4500);  // nach der Boot-Sequenz
+  }
 }

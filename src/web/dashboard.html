@@ -8,6 +8,7 @@
 <script src="klaus.js"></script>
 <script src="core.js"></script>
 <script src="holo.js"></script>
+<script src="popups.js"></script>
 <style>
   @font-face { font-family: "Rajdhani"; font-weight: 500; src: url(vendor/rajdhani-500.woff2) format("woff2"); }
   @font-face { font-family: "Rajdhani"; font-weight: 700; src: url(vendor/rajdhani-700.woff2) format("woff2"); }
@@ -118,7 +119,7 @@
   #raster { position: absolute; left: 24px; right: 24px; top: 66px; bottom: 20px; }
   .fenster { position: absolute; padding: 5px; transition: opacity .4s, filter .4s; }
   .fenster > .w { height: 100%; }
-  .fenster.zu { height: 42px !important; }
+  .fenster.zu { height: 46px !important; }
   .fenster.zieht { transition: none; cursor: grabbing; }
   .fenster.zieht > .w { box-shadow: inset 0 0 0 1px rgba(var(--rgb), .35), 0 0 30px rgba(var(--rgb), .15); }
   .fenster.gleitet { transition: left .45s var(--ease), top .45s var(--ease), width .45s var(--ease), height .45s var(--ease); }
@@ -158,48 +159,112 @@
   @keyframes hl-zu { 0% { clip-path: inset(0 0 0 0); filter: brightness(1); } 40% { filter: brightness(2.2); }
     100% { clip-path: inset(50% 0 50% 0); opacity: 0; } }
 
-  /* ---------- Widgets: Holo-Rahmen */
-  /* Holo-Rahmen: kein gefuellter Kasten - nur Eckklammern, hauchduenne Kontur und ein Schimmer.
-     Das Hexagon-Raster scheint durch, die Daten "schweben" wie in einem Iron-Man-HUD. */
-  .w { --k: 20px; --e: var(--cyan); display: flex; flex-direction: column; overflow: hidden !important;
+  /* ---------- Pop-ups rund ums Auge: dunkler hinterlegt (liegen ueber Widgets), Leuchtlinie zum Kern */
+  .fenster.popup > .w { background-color: rgba(2, 3, 6, .55);
+    box-shadow: inset 0 0 0 1px rgba(var(--rgb), .22), 0 0 40px rgba(var(--rgb), .1), 0 18px 50px rgba(0, 0, 0, .5); }
+  .fenster.popup .w-kopf { cursor: grab; }
+  /* Fokus wie im Video: solange Klaus Fenster offen hat, treten die Widgets zurueck - nur Auge + Holo-Fenster */
+  body.fokus .fenster:not(.popup):not(:has(.klaus)) { opacity: .05; filter: blur(4px); pointer-events: none; transition: opacity .6s, filter .6s; }
+  body.fokus .klaus .verlauf, body.fokus .klaus .sprachhinweis, body.fokus .klaus .status { opacity: 0; transition: opacity .4s; }
+  body.fokus .ring-menue { opacity: .25; transition: opacity .6s; }
+  #holo-linien { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999; overflow: visible; }
+  .holo-linie path { fill: none; }
+  .holo-linie .hl-grund { stroke: var(--cyan); stroke-width: 1.2; opacity: .55; stroke-dasharray: 1; stroke-dashoffset: 1;
+    animation: hl-ziehen .55s var(--ease) forwards; filter: drop-shadow(0 0 4px var(--cyan)); }
+  .holo-linie .hl-fluss { stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 2 26; opacity: 0;
+    animation: hl-fluss 1.1s linear infinite, hl-an .3s .5s forwards; filter: drop-shadow(0 0 4px var(--cyan)); }
+  .holo-linie .hl-knoten { fill: var(--cyan); filter: drop-shadow(0 0 6px var(--cyan)); opacity: 0; animation: hl-an .2s .5s forwards; }
+  .holo-linie .hl-start { fill: #fff; opacity: .8; }
+  .holo-linie.weg { transition: opacity .35s; opacity: 0; }
+  @keyframes hl-ziehen { to { stroke-dashoffset: 0; } }
+  @keyframes hl-fluss { to { stroke-dashoffset: -28; } }
+  @keyframes hl-an { to { opacity: .9; } }
+  .p-inhalt { font-family: var(--mono); font-size: 11.5px; }
+  /* Live-Log */
+  .p-zeile { display: flex; gap: 8px; line-height: 1.55; letter-spacing: .03em; animation: rein .2s both; }
+  .p-zeit { color: var(--leise); flex-shrink: 0; }
+  .p-text { color: var(--text); overflow-wrap: anywhere; }
+  /* Pipeline */
+  .p-pipe { display: flex; flex-direction: column; gap: 7px; }
+  .p-schritt { display: grid; grid-template-columns: 14px 1fr auto; gap: 2px 10px; align-items: center; padding: 6px 8px;
+    border-left: 2px solid var(--cyan-3); background: rgba(var(--rgb), .04); animation: rein .3s both; }
+  .p-punkt { width: 9px; height: 9px; border: 1.5px solid var(--leise); transform: rotate(45deg); }
+  .p-name { font-family: var(--hud); font-weight: 700; font-size: 13px; letter-spacing: .08em; color: var(--text); }
+  .p-info { grid-column: 2; font-size: 10px; color: var(--leise); }
+  .p-info:empty { display: none; }
+  .p-status { grid-column: 3; grid-row: 1; font-weight: 400; font-size: 10px; letter-spacing: .16em; color: var(--leise); }
+  .p-schritt[data-status="running"] { border-left-color: var(--cyan); background: rgba(var(--rgb), .1); }
+  .p-schritt[data-status="running"] .p-punkt { border-color: var(--cyan); border-top-color: transparent; border-radius: 50%;
+    transform: none; animation: drehen .7s linear infinite; }
+  .p-schritt[data-status="running"] .p-status { color: var(--cyan); }
+  .p-schritt[data-status="complete"] { border-left-color: var(--gruen); }
+  .p-schritt[data-status="complete"] .p-punkt { background: var(--gruen); border-color: var(--gruen); box-shadow: 0 0 8px var(--gruen); }
+  .p-schritt[data-status="complete"] .p-status { color: var(--gruen); }
+  .p-schritt[data-status="warten"] { border-left-color: #ffa000; }
+  .p-schritt[data-status="warten"] .p-punkt { border-color: #ffa000; animation: core-blinken 1s infinite; }
+  .p-schritt[data-status="warten"] .p-status { color: #ffa000; }
+  .p-schritt[data-status="fehler"] .p-status, .p-schritt[data-status="fehler"] .p-punkt { color: var(--rot); border-color: var(--rot); }
+  .p-schritt.wechsel { animation: p-wechsel .5s var(--ease); }
+  @keyframes p-wechsel { 30% { background: rgba(var(--rgb), .3); } }
+  /* Brief-Entwurf */
+  .p-betreff { font-family: var(--hud); font-weight: 700; font-size: 14px; color: var(--cyan); margin-bottom: 10px; letter-spacing: .04em; }
+  .p-brief { white-space: pre-wrap; font-family: "Segoe UI", sans-serif; font-size: 13px; line-height: 1.55; color: var(--text); }
+  .p-brief::after { content: "▌"; color: var(--cyan); animation: blink 1s steps(2) infinite; }
+  /* Lead-Karte: links Karte, rechts Trefferliste */
+  .p-karte { display: grid; grid-template-columns: 1.6fr 1fr; grid-template-rows: 1fr auto; gap: 8px; overflow: hidden !important; }
+  .p-karte-bild { width: 100%; height: 100%; min-height: 0; border: 1px solid var(--cyan-3); background: rgba(0, 0, 0, .4); }
+  .p-karte-liste { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+  .p-karte-info { grid-column: 1 / -1; font-size: 9.5px; letter-spacing: .14em; color: var(--leise); }
+  .p-treffer { padding: 4px 6px; border-left: 2px solid var(--cyan-2); animation: rein .25s both; }
+  .p-treffer b { display: block; font-family: var(--hud); font-size: 12.5px; color: var(--text); font-weight: 700; }
+  .p-treffer span { font-size: 9.5px; color: var(--leise); }
+  .p-treffer[data-status="ohne"] { border-left-color: var(--gruen); }
+  .p-treffer[data-status="ohne"] b { color: var(--gruen); }
+  .p-treffer[data-status="website"] { opacity: .45; border-left-color: #777; }
+  .p-treffer[data-status="website"] b { text-decoration: line-through; }
+
+  /* ---------- Widgets: Holo-Glas
+     Dunkles Milchglas mit feiner durchgehender Kontur, kurzen hellen Eck-Akzenten und einer Lichtkante oben.
+     Ruhig und hochwertig: keine Kennungen, keine Punktlinien. */
+  .w { --k: 12px; --e: rgba(var(--rgb), .85); display: flex; flex-direction: column; overflow: hidden !important;
     background:
-      linear-gradient(var(--e), var(--e)) top left / var(--k) 2px no-repeat,
-      linear-gradient(var(--e), var(--e)) top left / 2px var(--k) no-repeat,
-      linear-gradient(var(--e), var(--e)) top right / var(--k) 2px no-repeat,
-      linear-gradient(var(--e), var(--e)) top right / 2px var(--k) no-repeat,
-      linear-gradient(var(--e), var(--e)) bottom left / var(--k) 2px no-repeat,
-      linear-gradient(var(--e), var(--e)) bottom left / 2px var(--k) no-repeat,
-      linear-gradient(var(--e), var(--e)) bottom right / var(--k) 2px no-repeat,
-      linear-gradient(var(--e), var(--e)) bottom right / 2px var(--k) no-repeat,
-      linear-gradient(180deg, rgba(var(--rgb), .09), rgba(var(--rgb), .015) 35%, rgba(var(--rgb), .015) 70%, rgba(var(--rgb), .06));
-    box-shadow: inset 0 0 0 1px rgba(var(--rgb), .09); }
+      linear-gradient(var(--e), var(--e)) top left / var(--k) 1.5px no-repeat,
+      linear-gradient(var(--e), var(--e)) top left / 1.5px var(--k) no-repeat,
+      linear-gradient(var(--e), var(--e)) top right / var(--k) 1.5px no-repeat,
+      linear-gradient(var(--e), var(--e)) top right / 1.5px var(--k) no-repeat,
+      linear-gradient(var(--e), var(--e)) bottom left / var(--k) 1.5px no-repeat,
+      linear-gradient(var(--e), var(--e)) bottom left / 1.5px var(--k) no-repeat,
+      linear-gradient(var(--e), var(--e)) bottom right / var(--k) 1.5px no-repeat,
+      linear-gradient(var(--e), var(--e)) bottom right / 1.5px var(--k) no-repeat,
+      linear-gradient(90deg, transparent, rgba(var(--rgb), .55) 50%, transparent) top / 60% 1px no-repeat,
+      linear-gradient(180deg, rgba(var(--rgb), .085), rgba(4, 6, 10, .55) 38%, rgba(4, 6, 10, .62));
+    box-shadow: inset 0 0 0 1px rgba(var(--rgb), .14), 0 10px 40px rgba(0, 0, 0, .35);
+    backdrop-filter: blur(7px) saturate(1.2); }
   .w-innen { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
-  .w-innen::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 5px; height: 1px; pointer-events: none;
-    background: repeating-linear-gradient(90deg, rgba(var(--rgb), .25) 0 1px, transparent 1px 8px); }
-  .w.frei .w-innen::after { display: none; }
-  /* Text muss ohne Hintergrund lesbar bleiben */
-  .w-inhalt { text-shadow: 0 1px 3px rgba(0, 0, 0, .9); }
-  .w-kopf { position: relative; display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px 0 20px; flex-shrink: 0; cursor: grab; }
-  .w-kopf::after { content: ""; position: absolute; left: 20px; right: 10px; bottom: 0; height: 1px;
-    background: linear-gradient(90deg, var(--cyan-2), rgba(var(--rgb), .1) 55%, transparent); }
+  .w-inhalt { text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
+  .w-kopf { position: relative; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px 0 18px; flex-shrink: 0; cursor: grab; }
+  .w-kopf::after { content: ""; position: absolute; left: 18px; right: 18px; bottom: 0; height: 1px;
+    background: linear-gradient(90deg, rgba(var(--rgb), .35), rgba(var(--rgb), .06) 70%, transparent); }
   .w-kopf:active { cursor: grabbing; }
-  .w-titel { font-weight: 700; font-size: 12px; letter-spacing: .3em; text-transform: uppercase; color: var(--cyan); flex: 1 0 auto;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 0 8px rgba(var(--rgb), .5); }
-  .w-titel::before { content: "◢ "; font-size: 9px; color: var(--cyan); }
+  .w-titel { font-weight: 600; font-size: 12.5px; letter-spacing: .28em; text-transform: uppercase; color: var(--text); flex: 1 0 auto;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 9px; }
+  .w-titel::before { content: ""; width: 3px; height: 12px; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); flex-shrink: 0; }
+  .w-id { display: none; }
   .w-extra { display: flex; gap: 4px; font-family: var(--mono); font-size: 10px; letter-spacing: .08em; color: var(--leise); align-items: center;
     min-width: 0; overflow: hidden; white-space: nowrap; flex: 0 1 auto; }
-  .w-knopf { width: 22px; height: 22px; display: grid; place-items: center; color: var(--leise); font-size: 13px;
-    transition: color .15s var(--ease), background .15s var(--ease); }
+  .w-knopf { width: 24px; height: 24px; display: grid; place-items: center; color: var(--leise); font-size: 12px; opacity: .55;
+    transition: color .15s var(--ease), background .15s var(--ease), opacity .15s; }
+  .w:hover .w-knopf { opacity: 1; }
   .w-knopf:hover { color: var(--cyan); background: var(--cyan-4); }
   .w-knopf.weg:hover { color: var(--rot); background: rgba(255, 61, 90, .1); }
-  .w-inhalt { flex: 1; min-height: 0; padding: 10px 14px 12px 16px; overflow-y: auto; position: relative; }
+  .w-inhalt { flex: 1; min-height: 0; padding: 12px 18px 14px; overflow-y: auto; position: relative; }
   .w-inhalt::-webkit-scrollbar { width: 3px; }
-  .w-inhalt::-webkit-scrollbar-thumb { background: var(--cyan-2); }
+  .w-inhalt::-webkit-scrollbar-thumb { background: var(--cyan-3); }
   .zu .w-inhalt { display: none; }
   .zu .w-knopf.klapp { transform: rotate(-90deg); }
 
   /* Freischwebende Widgets (Klaus-Orb, Uhr): kein Rahmen, Titel nur beim Drueberfahren */
-  .w.frei { background: none; box-shadow: none; }
+  .w.frei { background: none; box-shadow: none; backdrop-filter: none; }
   .w.frei .w-kopf { opacity: 0; transition: opacity .2s var(--ease); }
   .w.frei .w-kopf::after { display: none; }
   .w.frei:hover .w-kopf, .w.frei.zu .w-kopf { opacity: 1; }
@@ -291,10 +356,7 @@
   @keyframes core-scheibe { 0% { transform: translateX(-6px); opacity: 1; } 50% { transform: translateX(5px); } 100% { transform: none; opacity: 0; } }
   @keyframes core-blinken { 50% { opacity: .35; } }
   /* Freigabe: Rahmen blinkt bernstein, alles andere wird abgedunkelt */
-  .klaus .buehne[data-core="AWAITING_AUTH"]::after { content: ""; position: absolute; inset: 4px; pointer-events: none;
-    border: 1px solid rgba(255, 160, 0, .8); box-shadow: 0 0 26px rgba(255, 160, 0, .35), inset 0 0 26px rgba(255, 160, 0, .18);
-    animation: core-blinken 1.1s ease-in-out infinite; }
-  body.core-auth .fenster:not(:has(.klaus)) { opacity: .3; filter: saturate(.4); }
+  body.core-auth .fenster:not(.popup):not(:has(.klaus)) { opacity: .3; filter: saturate(.4); }
   /* Debug-Panel */
   .core-debug { position: fixed; left: 16px; bottom: 16px; z-index: 50; display: none; flex-wrap: wrap; gap: 5px; max-width: 330px;
     padding: 10px; background: rgba(0, 0, 0, .75); border: 1px solid var(--cyan-2); font: 11px var(--mono); color: var(--cyan); }
@@ -1446,6 +1508,7 @@ klausBereit.then((k) => {
   klaus.thema.connect((name) => wendeThemaAn(name));
   klaus.webUrl.connect((id, url) => adressHoerer[id] && adressHoerer[id](url));
   klaus.panelBefehl.connect(panelBefehl);
+  klaus.holo.connect(holoBefehl);  // Pop-up-Fenster rund ums Auge (assistent.holo)
   // Stumm / Mikro aus: Knoepfe, Statuszeile und gedimmter Orb
   const schalter = { stumm: false, mikroAus: false };
   const schalterZeigen = () => {

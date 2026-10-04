@@ -357,7 +357,7 @@ EINSTELLUNGEN_PATH = BASE_DIR / "data" / "einstellungen.json"
 
 def lade_einstellungen() -> dict:
     try:
-        return json.loads(EINSTELLUNGEN_PATH.read_text(encoding="utf-8"))
+        return json.loads(EINSTELLUNGEN_PATH.read_text(encoding="utf-8-sig"))  # -sig: auch mit BOM lesbar
     except (OSError, json.JSONDecodeError):
         return {"panel": True}
 

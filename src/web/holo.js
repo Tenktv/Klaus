@@ -5,7 +5,12 @@ const HOLO_RUHIG = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const MAGNET_PX = 10;   // so nah an einer Kante rastet das Fenster ein
 let holoOben = 10;       // z-index des vordersten Fensters
 
-function holoVorne(fenster) { fenster.style.zIndex = ++holoOben; return holoOben; }
+// Pop-ups liegen immer ueber den Widgets (Basis 1000), untereinander gilt: zuletzt angefasst = vorne
+function holoVorne(fenster) {
+  ++holoOben;
+  fenster.style.zIndex = (fenster.classList.contains("popup") ? 1000 : 0) + holoOben;
+  return holoOben;
+}
 
 // Titel kurz verschluesselt einblenden (Glitch-Reveal)
 function holoTitel(ziel, text, dauer = 520) {
@@ -50,7 +55,7 @@ function holoAus(fenster) {
 // Freies Ziehen am Griff + Groesse an der Ecke. flaeche = Arbeitsflaeche, m = Modell mit x/y/w/h (Anteile).
 // optionen: minB/minH (Pixel), andere() -> andere Fenster (fuer Magnet-Kanten), beimStart(), beimEnde()
 function holoFrei(fenster, m, griff, ecke, flaeche, optionen) {
-  const { minB = 160, minH = 90, andere = () => [], beimStart = () => {}, beimEnde = () => {} } = optionen;
+  const { minB = 160, minH = 90, andere = () => [], beimStart = () => {}, beimEnde = () => {}, beimAnfassen = () => {} } = optionen;
 
   const kanten = () => {
     const F = flaeche.getBoundingClientRect();
@@ -135,7 +140,7 @@ function holoFrei(fenster, m, griff, ecke, flaeche, optionen) {
     ecke.addEventListener("pointercancel", los);
   });
 
-  fenster.addEventListener("pointerdown", () => { m.z = holoVorne(fenster); }, true);
+  fenster.addEventListener("pointerdown", () => { m.z = holoVorne(fenster); beimAnfassen(); }, true);
 }
 
 // Modell-Lage (Anteile) aufs Element schreiben - in %, damit es mit der Bildschirmgroesse mitgeht

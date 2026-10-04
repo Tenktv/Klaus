@@ -298,6 +298,7 @@ def main() -> None:
     bruecke.zustand.connect(steuerung.zustand)
     bruecke.thema.connect(steuerung.thema)
     bruecke.panel.connect(panel_bruecke.panelBefehl)
+    bruecke.holo.connect(panel_bruecke.holo)
     steuerung.panel_bruecke = panel_bruecke
     bruecke.nachricht.connect(gehirn.protokolliere)  # Tagesnotiz im Obsidian-Vault
     bruecke.gedaechtnis.connect(lambda: panel_bruecke.lade("gedaechtnis", ""))  # nur Thread-Start, kein Fenster

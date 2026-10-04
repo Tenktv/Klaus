@@ -151,13 +151,16 @@ def suche(branchen: list[str], ort: str, radius_km: float = 12, max_adressen: in
     return leads
 
 
-def websites_pruefen(leads: list[dict], gruppe: int = 10, claude: bool = False) -> list[dict]:
+def websites_pruefen(leads: list[dict], gruppe: int = 10, claude: bool = False, fortschritt=None) -> list[dict]:
     """Bleiben nur Betriebe ohne eigene Website. Kostenlos (Domains raten + Tavily/Gemini).
-    Was ohne Websuche unklar bleibt, prueft Claude nur mit claude=True - sonst bleibt es mit Hinweis drin."""
+    Was ohne Websuche unklar bleibt, prueft Claude nur mit claude=True - sonst bleibt es mit Hinweis drin.
+    fortschritt(lead, website, sicher) wird nach jedem Betrieb aufgerufen (Lead-Karte im Panel)."""
     import recherche
     ohne, unklar = [], []
     for lead in leads:
         website, sicher = recherche.hat_website(lead["name"], lead["adresse"])
+        if fortschritt:
+            fortschritt(lead, website, sicher)
         if website:
             print(f"  - {lead['name']}: hat eine Website ({website})")
         elif sicher:

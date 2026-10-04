@@ -111,6 +111,32 @@ class Bruecke(QObject):
     stumm = Signal(bool)  # Stummschaltung an/aus (Knopf, Orb, Taskleiste)
     mikro_aus = Signal(bool)  # Mikrofon komplett aus/an
     nachricht = Signal(str, str)  # (rolle, text) fuers Chat-Fenster: du/klaus/info/auftrag
+    holo = Signal(str)  # Pop-up-Fenster rund ums Auge als JSON: {aktion, id, art, titel, daten} (web/popups.js)
+
+
+class Pipeline:
+    """Phasen-Checkliste im Panel (Pop-up "pipeline"): pending -> running -> complete / warten / fehler."""
+
+    def __init__(self, assistent: "Assistent", titel: str, schritte: list[str]) -> None:
+        self.a = assistent
+        self.titel = titel
+        self.schritte = [{"name": n, "status": "pending", "info": ""} for n in schritte]
+        self._senden("oeffne")
+
+    def _senden(self, aktion: str = "update") -> None:
+        self.a.holo(aktion, "pipeline", art="pipeline", titel=self.titel, daten={"schritte": self.schritte})
+
+    def setze(self, i: int, status: str, info: str | None = None) -> None:
+        self.schritte[i]["status"] = status
+        if info is not None:
+            self.schritte[i]["info"] = info
+        self._senden()
+
+    def fehler(self, info: str) -> None:
+        for s in self.schritte:
+            if s["status"] == "running":
+                s.update(status="fehler", info=info)
+        self._senden()
 
 
 class Assistent:
@@ -161,13 +187,32 @@ class Assistent:
         if fehlt:
             return f"Vorher fehlt noch {' und '.join(fehlt)} in der .env (KLESRO_ADRESSE, KLESRO_TELEFON), sonst sind die Briefe unvollständig."
 
+        pipe = Pipeline(self, "BRIEF-PIPELINE", ["Leads laden", "Briefe + Entwürfe erstellen", "Entwürfe hochladen", "Drucken"])
+
         def los() -> None:
+            pipe.setze(0, "complete", f"{daten.leads()['leads']} Firmen")
+            pipe.setze(1, "running")
             befehl = [sys.executable, str(daten.BASE_DIR / "src" / "briefe.py"), "--leads", str(leads), "--ki", "gemini"]
             if anzahl:
                 befehl += ["--nur", str(anzahl)]
-            subprocess.run(befehl, cwd=daten.BASE_DIR, creationflags=subprocess.CREATE_NO_WINDOW)
+            start = time.time()
+            prozess = subprocess.Popen(befehl, cwd=daten.BASE_DIR, creationflags=subprocess.CREATE_NO_WINDOW)
+            gezeigt: set = set()
+            while prozess.poll() is None:  # neue Briefe live im Entwurf-Fenster zeigen
+                time.sleep(2)
+                gezeigt |= self._neue_briefe(daten.BASE_DIR / "data" / "briefe", start, gezeigt, pipe)
+            self._neue_briefe(daten.BASE_DIR / "data" / "briefe", start, gezeigt, pipe)
+            pipe.setze(1, "complete" if gezeigt else "fehler", f"{len(gezeigt)} Briefe")
             # Entwuerfe gleich online stellen, damit die QR-Codes funktionieren
-            online = hochladen.entwuerfe() if hochladen.eingerichtet() else "Die Entwürfe sind noch nicht online (Webspace-Zugang fehlt in der .env)."
+            if hochladen.eingerichtet():
+                pipe.setze(2, "running")
+                online = hochladen.entwuerfe()
+                pipe.setze(2, "complete")
+            else:
+                online = "Die Entwürfe sind noch nicht online (Webspace-Zugang fehlt in der .env)."
+                pipe.setze(2, "uebersprungen", "Webspace-Zugang fehlt")
+            pipe.setze(3, "warten", "sag: Klaus, druck die Briefe")
+            self.log(f"briefe/fertig {len(gezeigt)} · {online}")
             print(f"[Klaus] Briefe: {online}")
             self.b.meldung.emit("Briefe fertig – " + online)
             os.startfile(daten.BASE_DIR / "data" / "briefe")
@@ -176,6 +221,80 @@ class Assistent:
 
         threading.Thread(target=los, daemon=True).start()
         return "Ich erstelle die Briefe im Hintergrund und öffne den Ordner, wenn sie fertig sind."
+
+    def _neue_briefe(self, ordner, seit: float, gezeigt: set, pipe: "Pipeline") -> set:
+        """Briefe, die seit `seit` fertig geworden sind: Text ins Entwurf-Fenster, Zaehler in die Pipeline."""
+        neu = set()
+        for datei in sorted(ordner.glob("*/brief.html"), key=lambda p: p.stat().st_mtime):
+            if datei.parent.name in gezeigt or datei.stat().st_mtime < seit:
+                continue
+            neu.add(datei.parent.name)
+            html = datei.read_text(encoding="utf-8", errors="replace")
+            betreff = re.search(r'class="betreff">(.*?)</div>', html, re.S)
+            koerper = re.search(r'class="betreff">.*?</div>(.*?)<div class="gruss">', html, re.S)
+            text = re.sub(r"</p>\s*", "\n\n", koerper.group(1)) if koerper else ""
+            text = re.sub(r"<[^>]+>", "", text).strip()
+            self.holo("oeffne", "entwurf", art="entwurf", titel=f"BRIEF · {datei.parent.name.upper()[:28]}",
+                      daten={"betreff": re.sub(r"<[^>]+>", "", betreff.group(1)).strip() if betreff else "", "text": text})
+            self.log(f"briefe/pdf {datei.parent.name}")
+        if neu:
+            pipe.setze(1, "running", f"{len(gezeigt) + len(neu)} fertig")
+        return neu
+
+    # ---------------------------------------------------------------- Holo-Fenster im Panel
+    def holo(self, aktion: str, fid: str, **felder) -> None:
+        """Pop-up rund ums Auge: aktion oeffne/update/zu, art log/pipeline/karte/entwurf (siehe web/popups.js)."""
+        self.b.holo.emit(json.dumps({"aktion": aktion, "id": fid, **felder}, ensure_ascii=False, default=str))
+
+    def log(self, text: str) -> None:
+        """Zeile im Live-Log-Fenster (klesro://...)."""
+        self.b.holo.emit(json.dumps({"aktion": "log", "text": text}, ensure_ascii=False))
+
+    def leads_suchen(self, branchen: str, ort: str = "Göppingen", radius_km: float = 12) -> str:
+        """OSM-Lead-Suche im Hintergrund - mit Lead-Karte und Pipeline im Panel. Meldet sich, wenn sie fertig ist."""
+        import osm_leads
+
+        liste = [x.strip() for x in re.split(r",|;|\bund\b", branchen) if x.strip()]
+        if not liste:
+            return "Welche Branchen soll ich suchen, zum Beispiel Schreiner, Maler oder Friseure?"
+        ort = ort or "Göppingen"
+        pipe = Pipeline(self, f"LEAD-PIPELINE · {ort.upper()}", ["Betriebe finden (OpenStreetMap)", "Websites prüfen",
+                                                                  "In Lead-Liste speichern", "Briefe erstellen"])
+
+        def los() -> None:
+            try:
+                pipe.setze(0, "running", ", ".join(liste))
+                self.log(f"osm/suche {', '.join(liste)} · {ort} · {radius_km:g} km")
+                lat, lon, ortname = osm_leads.koordinaten(ort)
+                gefunden = osm_leads.suche(liste, ort, radius_km)
+                self.holo("oeffne", "karte", art="karte", titel=f"LEAD MAP · {ortname.upper()}", daten={
+                    "mitte": [lat, lon], "radius_km": radius_km,
+                    "leads": [{"name": l["name"], "lat": l.get("lat"), "lon": l.get("lon"), "adresse": l["adresse"]} for l in gefunden]})
+                pipe.setze(0, "complete", f"{len(gefunden)} ohne Website-Eintrag")
+                pipe.setze(1, "running")
+
+                def geprueft(lead: dict, website: str | None, sicher: bool) -> None:
+                    status = "website" if website else ("ohne" if sicher else "neu")
+                    self.holo("update", "karte", daten={"status": {lead["name"]: status}})
+                    self.log(f"web/check {lead['name']} -> {website or ('keine website' if sicher else 'unklar')}")
+
+                ohne = osm_leads.websites_pruefen(gefunden, fortschritt=geprueft)
+                pipe.setze(1, "complete", f"{len(gefunden) - len(ohne)} verworfen")
+                pipe.setze(2, "running")
+                neu = osm_leads.speichern(ohne)
+                pipe.setze(2, "complete", f"{neu} neu")
+                pipe.setze(3, "warten", "sag: Klaus, erstell die Briefe")
+                namen = ", ".join(l["name"] for l in ohne[:3])
+                self.sage(f"Fertig: {len(ohne)} Betriebe ohne Website, {neu} davon neu in der Lead-Liste."
+                          + (f" Zum Beispiel {namen}." if namen else ""), zustand="aktion")
+            except Exception as e:
+                print(f"[Klaus] Lead-Suche: {e}")
+                pipe.fehler(str(e)[:80])
+                self.sage(f"Die Lead-Suche hat nicht geklappt: {str(e)[:120]}")
+            self.verschwinde(nach=1.0)
+
+        threading.Thread(target=los, daemon=True).start()
+        return f"Ich suche {', '.join(liste)} rund um {ort}. Das dauert ein paar Minuten, die Karte siehst du im Panel."
 
     def setze_mikro_aus(self, aus: bool) -> None:
         """Mikrofon komplett aus: Klaus hoert gar nichts (auch kein "Klaus"). Nur Taste/Knopf schaltet es wieder an."""

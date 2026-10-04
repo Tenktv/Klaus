@@ -120,6 +120,7 @@ class WebBruecke(QObject):
     thema = Signal(str)  # Design-Variante (siehe THEMEN in web/klaus.js)
     webUrl = Signal(str, str)  # Web-Widget id, neue Adresse
     panelBefehl = Signal(str)  # Widget-Befehl von Klaus als JSON (siehe assistent.panel_wunsch)
+    holo = Signal(str)  # Pop-up-Fenster rund ums Auge als JSON (siehe assistent.holo / web/popups.js)
     untertitel = Signal(str)  # Text unter dem Orb im Overlay
     sichtbar = Signal(bool)  # False = Panel ist von einem Vollbild-Fenster verdeckt -> Animationen pausieren
     stummStatus = Signal(bool)  # Klaus stumm (hoert nur noch auf "Klaus, wieder an")

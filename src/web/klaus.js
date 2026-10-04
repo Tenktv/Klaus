@@ -57,18 +57,8 @@ class KlausOrb {
     this.blitz = 0;
     this.t = 0;
     this.drehung = 0;   // gemeinsamer Drehwinkel der Ringe, Tempo haengt vom Zustand ab
-    this.sog = 0;       // 0..1: Partikel werden beim Zuhoeren zur Mitte gezogen
     this.letzte = performance.now();
     this.ruhig = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    // Orbit-Partikel: Bahnradius als Faktor von r0, eigenes Tempo und Neigung
-    this.teilchen = Array.from({ length: 48 }, () => ({
-      winkel: Math.random() * Math.PI * 2,
-      bahn: 1.35 + Math.random() * 0.9,
-      tempo: (0.25 + Math.random() * 0.6) * (Math.random() < 0.5 ? -1 : 1),
-      groesse: 0.6 + Math.random() * 1.6,
-      neigung: 0.55 + Math.random() * 0.45,  // elliptische Bahn = leichter 3D-Eindruck
-      phase: Math.random() * 6.3,
-    }));
     this.funken = [];
     // Equalizer-Werte fuer den Reaktor-Ring (geglaettet)
     this.segmente = new Float32Array(48);
@@ -114,9 +104,7 @@ class KlausOrb {
 
     const tempo = { aus: 0.12, start: 0.6, hoeren: 0.5, denken: 2.6, sprechen: 0.9, aktion: 1.6, fehler: 0.3, freigabe: 0.45, fertig: 1.1 }[this.zustand] ?? 0.3;
     this.drehung += dt * tempo * (this.ruhig ? 0.2 : 1);
-    this.sog += ((this.zustand === "hoeren" ? 0.35 + this.pegel * 0.4 : 0) - this.sog) * 0.06;
 
-    for (const p of this.teilchen) p.winkel += dt * p.tempo * (0.4 + tempo * 1.4 + this.pegel * 2.5);
     for (const f of this.funken) { f.r += f.v * dt * 60 * 0.9; f.v *= 0.965; f.leben -= dt * 1.1; }
     this.funken = this.funken.filter((f) => f.leben > 0);
 
@@ -157,121 +145,42 @@ class KlausOrb {
 
     // 1) Weiter Lichtschein
     let g = ctx.createRadialGradient(mx, my, r0 * 0.4, mx, my, r0 * 3.4);
-    g.addColorStop(0, this.rgba(0.32 * energie));
+    g.addColorStop(0, this.rgba(0.24 * energie));
     g.addColorStop(0.35, this.rgba(0.1 * energie));
     g.addColorStop(1, this.rgba(0));
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(mx, my, r0 * 3.4, 0, voll); ctx.fill();
 
-    // 2) Orbit-Partikel mit Leuchtspur (elliptische Bahnen, beim Zuhoeren nach innen gezogen)
-    for (const p of this.teilchen) {
-      const bahn = r0 * (p.bahn - this.sog * (p.bahn - 1.05)) + Math.sin(this.t * 2 + p.phase) * 3 * s;
-      const spur = 0.22 * Math.sign(p.tempo);
-      const helligkeit = (aktiv ? 0.55 : 0.28) * (0.6 + 0.4 * Math.sin(this.t * 3 + p.phase));
-      ctx.strokeStyle = this.rgba(helligkeit, 0.3);
-      ctx.lineWidth = p.groesse * s;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      for (let k = 0; k <= 6; k++) {
-        const a = p.winkel - spur * (k / 6);
-        const x = mx + Math.cos(a) * bahn, y = my + Math.sin(a) * bahn * p.neigung;
-        k ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-      }
-      ctx.stroke();
-      ctx.fillStyle = this.rgba(helligkeit * 1.4, 0.6);
-      ctx.beginPath();
-      ctx.arc(mx + Math.cos(p.winkel) * bahn, my + Math.sin(p.winkel) * bahn * p.neigung, p.groesse * 1.1 * s, 0, voll);
-      ctx.fill();
-    }
-
-    // 2b) Radar-Sweep: ein rotierender Lichtfaecher hinter allem
-    const sweepR = r0 + 118 * s, sweepWinkel = this.t * (aktiv ? 1.4 : 0.5);
-    if (ctx.createConicGradient) {
-      const kegel = ctx.createConicGradient(sweepWinkel, mx, my);
-      kegel.addColorStop(0, this.rgba(aktiv ? 0.16 : 0.07));
-      kegel.addColorStop(0.12, this.rgba(0));
-      kegel.addColorStop(1, this.rgba(0));
-      ctx.fillStyle = kegel;
-      ctx.beginPath(); ctx.arc(mx, my, sweepR, 0, voll); ctx.fill();
-      ctx.strokeStyle = this.rgba(aktiv ? 0.5 : 0.22, 0.3);
-      ctx.lineWidth = 1 * s;
-      ctx.beginPath(); ctx.moveTo(mx, my);
-      ctx.lineTo(mx + Math.cos(sweepWinkel) * sweepR, my + Math.sin(sweepWinkel) * sweepR); ctx.stroke();
-    }
-
-    // 2c) Beschriftung: Gradzahlen und Sektor-Namen am Aussenrand (nur bei genug Platz)
-    if (s > 0.55) {
-      ctx.fillStyle = this.rgba(aktiv ? 0.7 : 0.4, 0.2);
-      ctx.font = `${Math.round(9 * s)}px Consolas, monospace`;
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      const textR = r0 + 128 * s;
-      for (let grad = 0; grad < 360; grad += 30) {
-        const a = (grad / 180) * Math.PI - Math.PI / 2 + this.drehung * 0.25;
-        ctx.fillText(String(grad).padStart(3, "0"), mx + Math.cos(a) * textR, my + Math.sin(a) * textR);
-      }
-      ctx.font = `bold ${Math.round(10 * s)}px Consolas, monospace`;
-      ["AUDIO", "NEURAL", "UPLINK", "CORE"].forEach((name, i) => {
-        const a = (i / 4) * voll + Math.PI / 4 - this.drehung * 0.12;
-        ctx.fillStyle = this.rgba(aktiv ? 0.85 : 0.45, 0.3);
-        ctx.fillText(name, mx + Math.cos(a) * (r0 + 97 * s), my + Math.sin(a) * (r0 + 97 * s));
-      });
-    }
-
-    // 3) Skala aussen (90 Striche, jeder 5. lang)
-    const skala = r0 + 86 * s;
+    // 2) Ruhiger Rahmen ums Auge: ein feiner Fuehrungsring, zwei langsame Boegen, dezenter Radar-Schein
+    const ring1 = r0 + 44 * s, ring2 = r0 + 78 * s;
+    ctx.strokeStyle = this.rgba(aktiv ? 0.16 : 0.08);
     ctx.lineWidth = 1 * s;
-    for (let i = 0; i < 90; i++) {
-      const a = (i / 90) * voll + this.drehung * 0.25, lang = i % 5 === 0;
-      ctx.strokeStyle = this.rgba(lang ? 0.5 : 0.18);
-      ctx.beginPath();
-      ctx.moveTo(mx + Math.cos(a) * skala, my + Math.sin(a) * skala);
-      ctx.lineTo(mx + Math.cos(a) * (skala + (lang ? 10 : 4) * s), my + Math.sin(a) * (skala + (lang ? 10 : 4) * s));
-      ctx.stroke();
+    ctx.beginPath(); ctx.arc(mx, my, ring2, 0, voll); ctx.stroke();
+    if (aktiv && ctx.createConicGradient) {
+      const a = this.t * 1.1, kegel = ctx.createConicGradient(a, mx, my);
+      kegel.addColorStop(0, this.rgba(0.12)); kegel.addColorStop(0.1, this.rgba(0)); kegel.addColorStop(1, this.rgba(0));
+      ctx.fillStyle = kegel;
+      ctx.beginPath(); ctx.arc(mx, my, ring2, 0, voll); ctx.fill();
     }
-
-    // 4) Gegenlaeufige Boegen mit Endpunkten
-    [[r0 + 62 * s, 1, 1.1, 2.2], [r0 + 70 * s, -1.4, 0.7, 1.4], [r0 + 104 * s, 0.6, 0.45, 1]].forEach(([r, v, spanne, breite], i) => {
-      ctx.strokeStyle = this.rgba(aktiv ? 0.75 - i * 0.18 : 0.32 - i * 0.07);
-      ctx.lineWidth = breite * s;
+    [[ring1, 0.8, 1.6], [ring2, -0.5, 0.9]].forEach(([r, v, spanne], i) => {
+      ctx.strokeStyle = this.rgba(aktiv ? 0.7 - i * 0.2 : 0.3 - i * 0.08, 0.15);
+      ctx.lineWidth = (i ? 1.2 : 1.8) * s;
+      ctx.lineCap = "round";
       for (const versatz of [0, Math.PI]) {
         const a = this.drehung * v + versatz;
         ctx.beginPath(); ctx.arc(mx, my, r, a, a + spanne); ctx.stroke();
-        ctx.fillStyle = this.rgba(aktiv ? 0.9 : 0.4, 0.4);
-        ctx.beginPath(); ctx.arc(mx + Math.cos(a + spanne) * r, my + Math.sin(a + spanne) * r, 2.2 * s, 0, voll); ctx.fill();
       }
     });
-    ctx.setLineDash([3 * s, 7 * s]);
-    ctx.lineDashOffset = -this.drehung * 30 * s;
-    ctx.strokeStyle = this.rgba(aktiv ? 0.35 : 0.14);
-    ctx.lineWidth = 1 * s;
-    ctx.beginPath(); ctx.arc(mx, my, r0 + 112 * s, 0, voll); ctx.stroke();
-    ctx.setLineDash([]);
 
-    // 6b) Fadenkreuz-Klammern links/rechts mit Datenpunkt + Audio-Pegel als Segmentbalken (nur bei genug Platz)
+    // 3) Audio-Pegel: feine Balken unter dem Auge
     if (s > 0.4) {
-      const ax = r0 + 150 * s;
-      ctx.strokeStyle = this.rgba(aktiv ? 0.75 : 0.4, 0.2);
-      ctx.fillStyle = this.rgba(aktiv ? 0.9 : 0.5, 0.4);
-      ctx.lineWidth = 1.2 * s;
-      for (const seite of [-1, 1]) {
-        const x = mx + seite * ax;
-        ctx.beginPath();  // Klammer [ bzw. ]
-        ctx.moveTo(x - seite * 8 * s, my - 22 * s); ctx.lineTo(x, my - 22 * s); ctx.lineTo(x, my + 22 * s); ctx.lineTo(x - seite * 8 * s, my + 22 * s);
-        ctx.stroke();
-        ctx.beginPath(); ctx.arc(x - seite * 22 * s, my, 3 * s, 0, voll); ctx.fill();  // Datenpunkt
-        ctx.beginPath(); ctx.moveTo(x - seite * 22 * s, my); ctx.lineTo(x - seite * 46 * s, my); ctx.stroke();
+      const balken = 32, breite = 120 * s, an = this.pegel * balken;
+      const y = this.pegelAbstand ? my + Math.min(w, h) * this.pegelAbstand - 6 * s : my + r0 + 120 * s;
+      for (let i = 0; i < balken; i++) {
+        const voll_ = i < an, hoehe = (voll_ ? 4 + Math.min(1, an - i) * 6 : 2) * s;
+        ctx.fillStyle = voll_ ? this.rgba(0.9, 0.3) : this.rgba(0.14);
+        ctx.fillRect(mx - breite / 2 + (i * breite) / balken, y - hoehe / 2, 1.6 * s, hoehe);
       }
-      // Audio-Pegel: 24 Segmente unter dem Orb
-      const segmente = 24, breite = (this.pegelAbstand ? 120 : 150) * s, an = Math.round(this.pegel * segmente);
-      const y = this.pegelAbstand ? my + Math.min(w, h) * this.pegelAbstand - 6 * s : my + r0 + 156 * s;
-      for (let i = 0; i < segmente; i++) {
-        ctx.fillStyle = i < an ? this.rgba(0.95, i / segmente * 0.5) : this.rgba(0.14);
-        ctx.fillRect(mx - breite / 2 + (i * breite) / segmente, y, breite / segmente - 2 * s, 7 * s);
-      }
-      ctx.fillStyle = this.rgba(aktiv ? 0.7 : 0.4, 0.2);
-      ctx.font = `${Math.round(8.5 * s)}px Consolas, monospace`;
-      ctx.textAlign = "center";
-      ctx.fillText(`AUDIO LEVEL · ${String(Math.round(this.pegel * 100)).padStart(3, "0")}`, mx, y + 17 * s);
     }
 
     // 7) HAL-Auge: Spektrum-Kranz, Metallgehaeuse, Glaslinse mit gluehender Pupille, Reflexe

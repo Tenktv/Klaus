@@ -96,6 +96,12 @@ WERKZEUGE = [
      "NUR mit einem Pfad aus datei_suchen, und NUR nachdem du dem Nutzer Namen und Ort genannt und er ausdruecklich ja gesagt hat.",
      "parameters": {"type": "OBJECT", "properties": {"pfad": {"type": "STRING", "description": "Vollstaendiger Pfad aus datei_suchen"}},
                     "required": ["pfad"]}},
+    {"name": "leads_suchen", "description": "Sucht ueber OpenStreetMap Betriebe ohne eigene Website (Leads) in einer Region, "
+     "prueft ihre Website und speichert sie in der Lead-Liste. Laeuft im Hintergrund, Karte und Fortschritt erscheinen im Panel.",
+     "parameters": {"type": "OBJECT", "properties": {
+         "branchen": {"type": "STRING", "description": "Kommagetrennt, z. B. 'schreiner, maler, friseur' oder 'handwerk'"},
+         "ort": {"type": "STRING", "description": "Mittelpunkt der Suche, Standard Göppingen"},
+         "radius_km": {"type": "NUMBER", "description": "Umkreis in km, Standard 12"}}, "required": ["branchen"]}},
     {"name": "briefe_erstellen", "description": "Erstellt fuer die Leads (Firmen ohne Website) persoenliche Briefe mit "
      "Website-Entwurf und QR-Code als druckfertige PDFs (dauert pro Firma etwa eine halbe Minute, laeuft im Hintergrund).",
      "parameters": {"type": "OBJECT", "properties": {"anzahl": {"type": "INTEGER", "description": "Wie viele (0 = alle)"}}}},
@@ -234,6 +240,9 @@ class GeminiGespraech:
                 b.zustand.emit("aktion")
                 b.panel.emit(json.dumps({"aktion": "neu_laden", "typ": "projekte"}))
                 return ergebnis
+            if name == "leads_suchen":
+                return self.a.leads_suchen(args.get("branchen", ""), args.get("ort") or "Göppingen",
+                                           float(args.get("radius_km") or 12))
             if name == "briefe_erstellen":
                 return self.a.briefe_starten(int(args.get("anzahl") or 0))
             if name == "entwuerfe_hochladen":
@@ -366,7 +375,10 @@ class GeminiGespraech:
                             try:
                                 for aufruf in nachricht.tool_call.function_calls:
                                     print(f"[Gemini] Werkzeug {aufruf.name} {aufruf.args}")
+                                    werte = " ".join(f"{k}={str(v)[:40]}" for k, v in (aufruf.args or {}).items())
+                                    self.a.log(f"intent/{aufruf.name} {werte}".strip())
                                     ergebnis = await asyncio.to_thread(self._werkzeug, aufruf.name, dict(aufruf.args or {}))
+                                    self.a.log(f"ack/{aufruf.name} {str(ergebnis)[:90]}")
                                     antworten.append(types.FunctionResponse(id=aufruf.id, name=aufruf.name,
                                                                             response={"ergebnis": ergebnis}))
                                 await sitzung.send_tool_response(function_responses=antworten)
