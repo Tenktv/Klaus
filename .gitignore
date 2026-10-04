@@ -8,3 +8,4 @@ data/browser/
 data/briefe/
 data/*.bak
 *.log
+data/klaus.lock

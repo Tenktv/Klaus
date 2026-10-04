@@ -4,11 +4,10 @@
 <meta charset="utf-8">
 <meta name="theme-color" content="#02060c">
 <title>Klaus Desktop</title>
-<link rel="stylesheet" href="vendor/gridstack.min.css">
-<script src="vendor/gridstack-all.js"></script>
 <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
 <script src="klaus.js"></script>
 <script src="core.js"></script>
+<script src="holo.js"></script>
 <style>
   @font-face { font-family: "Rajdhani"; font-weight: 500; src: url(vendor/rajdhani-500.woff2) format("woff2"); }
   @font-face { font-family: "Rajdhani"; font-weight: 700; src: url(vendor/rajdhani-700.woff2) format("woff2"); }
@@ -115,13 +114,51 @@
   .w-id { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; color: var(--cyan-3); white-space: nowrap;
     min-width: 0; overflow: hidden; text-overflow: clip; flex: 0 1 auto; }  /* weicht zuerst, wenn es eng wird */
   .w-id::after { content: " ◆◆◇"; color: var(--cyan-2); letter-spacing: 1px; }
-  .grid-stack-item.einflug > .w { animation: einflug .55s var(--ease) both; }
-  @keyframes einflug { from { opacity: 0; transform: scale(.95) translateY(10px); filter: brightness(2.4); } }
+  /* ---------- Arbeitsflaeche + freie Holo-Fenster (kein Raster: Lage in % der Flaeche) */
+  #raster { position: absolute; left: 24px; right: 24px; top: 66px; bottom: 20px; }
+  .fenster { position: absolute; padding: 5px; transition: opacity .4s, filter .4s; }
+  .fenster > .w { height: 100%; }
+  .fenster.zu { height: 42px !important; }
+  .fenster.zieht { transition: none; cursor: grabbing; }
+  .fenster.zieht > .w { box-shadow: inset 0 0 0 1px rgba(var(--rgb), .35), 0 0 30px rgba(var(--rgb), .15); }
+  .fenster.gleitet { transition: left .45s var(--ease), top .45s var(--ease), width .45s var(--ease), height .45s var(--ease); }
+  .fenster-ecke { position: absolute; right: 3px; bottom: 3px; width: 16px; height: 16px; cursor: nwse-resize; z-index: 3;
+    border-right: 2px solid var(--cyan-2); border-bottom: 2px solid var(--cyan-2); opacity: 0; transition: opacity .15s; }
+  .fenster:hover > .fenster-ecke { opacity: 1; }
+  .fenster.zu > .fenster-ecke { display: none; }
 
-  /* ---------- Raster + Widgets: abgeschraegte HUD-Rahmen
-     Trick: aeusseres Element = Rahmenfarbe (Verlauf), inneres 1px kleiner mit gleicher Schraege = Flaeche.
-     So bekommen auch die schraegen Ecken eine Linie. */
-  #raster { margin: 8px 24px 0; }
+  /* Holo-Boot: Rahmen zeichnet sich Linie fuer Linie, Scanline wischt runter, Inhalt flackert auf */
+  .fenster > .hl { position: absolute; z-index: 4; pointer-events: none; background: var(--cyan);
+    box-shadow: 0 0 10px var(--cyan), 0 0 2px #fff; }
+  .hl-o, .hl-u { left: 5px; right: 5px; height: 1px; }
+  .hl-l, .hl-r { top: 5px; bottom: 5px; width: 1px; }
+  .hl-o { top: 5px; transform-origin: left; } .hl-u { bottom: 5px; transform-origin: right; }
+  .hl-r { right: 5px; transform-origin: top; } .hl-l { left: 5px; transform-origin: bottom; }
+  .hl-scan { left: 5px; right: 5px; top: 5px; height: 2px; opacity: 0;
+    box-shadow: 0 0 14px 3px rgba(var(--rgb), .8), 0 -18px 26px rgba(var(--rgb), .25); }
+  .holo-boot > .hl-o, .holo-boot > .hl-u { animation: hl-x .22s var(--ease) both, hl-weg .4s ease-in .95s both; }
+  .holo-boot > .hl-r, .holo-boot > .hl-l { animation: hl-y .22s var(--ease) both, hl-weg .4s ease-in .95s both; }
+  .holo-boot > .hl-o { animation-delay: var(--v), calc(var(--v) + .95s); }
+  .holo-boot > .hl-r { animation-delay: calc(var(--v) + .1s), calc(var(--v) + .95s); }
+  .holo-boot > .hl-u { animation-delay: calc(var(--v) + .2s), calc(var(--v) + .95s); }
+  .holo-boot > .hl-l { animation-delay: calc(var(--v) + .3s), calc(var(--v) + .95s); }
+  .holo-boot > .hl-scan { animation: hl-scan .5s cubic-bezier(.5, 0, .5, 1) calc(var(--v) + .4s) both; }
+  .holo-boot > .w { animation: hl-wisch .5s cubic-bezier(.5, 0, .5, 1) calc(var(--v) + .4s) both,
+    hl-flackern .5s steps(1) calc(var(--v) + .4s) both; }
+  @keyframes hl-x { from { transform: scaleX(0); } }
+  @keyframes hl-y { from { transform: scaleY(0); } }
+  @keyframes hl-weg { to { opacity: 0; } }
+  @keyframes hl-scan { 0% { opacity: 1; transform: translateY(0); } 90% { opacity: 1; } 100% { opacity: 0; transform: translateY(calc(var(--hoehe) - 12px)); } }
+  @keyframes hl-wisch { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
+  @keyframes hl-flackern { 0% { opacity: .5; } 20% { opacity: .15; } 30% { opacity: .9; } 45% { opacity: .4; } 60%, 100% { opacity: 1; } }
+  /* Schliessen: rueckwaerts - Inhalt faellt auf eine Linie zusammen, Rahmen zieht sich ein */
+  .holo-aus > .w { animation: hl-zu .32s cubic-bezier(.6, 0, .8, .4) both; }
+  .holo-aus > .hl-o, .holo-aus > .hl-u { animation: hl-x .26s ease-in .2s reverse both; }
+  .holo-aus > .hl-r, .holo-aus > .hl-l { animation: hl-y .26s ease-in .2s reverse both; }
+  @keyframes hl-zu { 0% { clip-path: inset(0 0 0 0); filter: brightness(1); } 40% { filter: brightness(2.2); }
+    100% { clip-path: inset(50% 0 50% 0); opacity: 0; } }
+
+  /* ---------- Widgets: Holo-Rahmen */
   /* Holo-Rahmen: kein gefuellter Kasten - nur Eckklammern, hauchduenne Kontur und ein Schimmer.
      Das Hexagon-Raster scheint durch, die Daten "schweben" wie in einem Iron-Man-HUD. */
   .w { --k: 20px; --e: var(--cyan); display: flex; flex-direction: column; overflow: hidden !important;
@@ -167,10 +204,6 @@
   .w.frei .w-kopf::after { display: none; }
   .w.frei:hover .w-kopf, .w.frei.zu .w-kopf { opacity: 1; }
 
-  .grid-stack-placeholder > .placeholder-content { border: 1px dashed var(--cyan-2) !important; background: var(--cyan-4) !important; }
-  .grid-stack > .grid-stack-item > .ui-resizable-se { background: none; width: 14px; height: 14px; right: 2px; bottom: 2px; transform: none;
-    border-right: 2px solid var(--cyan-2); border-bottom: 2px solid var(--cyan-2); opacity: 0; transition: opacity .15s; }
-  .grid-stack-item:hover > .ui-resizable-se { opacity: 1; }
 
   /* ---------- Bausteine ---------- */
   .leer { font-family: var(--mono); font-size: 12px; color: var(--leise); padding: 6px 2px; }
@@ -261,8 +294,7 @@
   .klaus .buehne[data-core="AWAITING_AUTH"]::after { content: ""; position: absolute; inset: 4px; pointer-events: none;
     border: 1px solid rgba(255, 160, 0, .8); box-shadow: 0 0 26px rgba(255, 160, 0, .35), inset 0 0 26px rgba(255, 160, 0, .18);
     animation: core-blinken 1.1s ease-in-out infinite; }
-  .grid-stack-item { transition: opacity .4s, filter .4s; }
-  body.core-auth .grid-stack-item:not(:has(.klaus)) { opacity: .3; filter: saturate(.4); }
+  body.core-auth .fenster:not(:has(.klaus)) { opacity: .3; filter: saturate(.4); }
   /* Debug-Panel */
   .core-debug { position: fixed; left: 16px; bottom: 16px; z-index: 50; display: none; flex-wrap: wrap; gap: 5px; max-width: 330px;
     padding: 10px; background: rgba(0, 0, 0, .75); border: 1px solid var(--cyan-2); font: 11px var(--mono); color: var(--cyan); }
@@ -450,20 +482,18 @@
   <button class="hud-knopf" id="knopf-standard" title="Alle Widgets auf Standard zurücksetzen">↺ Standard</button>
 </header>
 
-<div class="grid-stack" id="raster"></div>
+<div id="raster"></div>
 
 <div id="katalog" role="dialog" aria-label="Widget hinzufügen">
   <div class="katalog-box">
     <h3>WIDGET HINZUFÜGEN</h3>
     <button class="katalog-zu" id="katalog-zu" aria-label="Schließen">✕</button>
     <div class="katalog-liste" id="katalog-liste"></div>
-    <div class="hinweis">Am Titel ziehen = verschieben · Ecke unten rechts = Größe · ▾ = einklappen · Rechtsklick auf Einträge = entfernen</div>
+    <div class="hinweis">Am Titel ziehen = frei verschieben (rastet an Kanten ein) · Ecke unten rechts = Größe · ▾ = einklappen · Rechtsklick auf Einträge = entfernen</div>
   </div>
 </div>
 
 <script>
-const GS = window.GridStack.GridStack || window.GridStack;
-const SPALTEN = 12, ZEILEN = 24;
 const ZUSTAND_TEXT = {
   aus: "SYSTEM BEREIT · SAG „KLAUS“", start: "INITIALISIERE …", hoeren: "HÖRE ZU …", denken: "VERARBEITE …",
   sprechen: "ANTWORTE …", aktion: "AUSGEFÜHRT", fehler: "FEHLER · SIEHE LOG",
@@ -471,7 +501,7 @@ const ZUSTAND_TEXT = {
 };
 const ZUSTAND_FARBE = { denken: "var(--bernstein)", aktion: "#3dffa8", fehler: "#ff3d5a", freigabe: "#ffa000", fertig: "#3dffa8" };
 
-let klaus, grid;
+let klaus;
 let modelle = [];                 // gespeicherter Zustand aller Widgets
 const laufend = {};               // id -> { timer: [], abos: [] }
 const abos = {};                  // datenschluessel -> [{id, fn}]
@@ -874,16 +904,30 @@ ${p.pfad}`)) klaus.papierkorb(p.pfad);
   },
 };
 
+// Lage als Anteil der Arbeitsflaeche (0..1). Groessen in TYPEN (w/h, minW/minH) sind in "Zwoelftel Breite / Vierundzwanzigstel Hoehe".
+const EINHEIT_B = 12, EINHEIT_H = 24;
 const STANDARD = [
-  { typ: "uhr", x: 0, y: 0, w: 3, h: 10 },
-  { typ: "system", x: 0, y: 10, w: 3, h: 8 },
-  { typ: "projekte", x: 0, y: 18, w: 3, h: 6 },
-  { typ: "klaus", x: 3, y: 0, w: 6, h: 24 },
-  { typ: "datum", x: 9, y: 0, w: 3, h: 4 },
-  { typ: "wetter", x: 9, y: 4, w: 3, h: 5 },
-  { typ: "boerse", x: 9, y: 9, w: 3, h: 7 },
-  { typ: "nachrichten", x: 9, y: 16, w: 3, h: 8 },
+  { typ: "uhr", x: 0, y: 0, w: 0.25, h: 0.417 },
+  { typ: "system", x: 0, y: 0.417, w: 0.25, h: 0.333 },
+  { typ: "projekte", x: 0, y: 0.75, w: 0.25, h: 0.25 },
+  { typ: "klaus", x: 0.25, y: 0, w: 0.5, h: 1 },
+  { typ: "datum", x: 0.75, y: 0, w: 0.25, h: 0.167 },
+  { typ: "wetter", x: 0.75, y: 0.167, w: 0.25, h: 0.208 },
+  { typ: "boerse", x: 0.75, y: 0.375, w: 0.25, h: 0.292 },
+  { typ: "nachrichten", x: 0.75, y: 0.667, w: 0.25, h: 0.333 },
 ];
+
+// Altes Raster-Layout (Version 1: 12 Spalten x 24 Zeilen) in Anteile umrechnen
+function layoutUmrechnen(liste, version) {
+  if (version >= 2) return liste;
+  return liste.map((m) => {
+    const t = TYPEN[m.typ] || { w: 3, h: 6, minH: 3 };
+    const h = m.zu ? (m.h || t.h) : Math.max(m.h || t.h, t.minH || 1);  // alte Speicherfehler (h=1) reparieren
+    const neu = { ...m, w: (m.w || t.w) / EINHEIT_B, h: h / EINHEIT_H };
+    if (m.x !== undefined) { neu.x = m.x / EINHEIT_B; neu.y = m.y / EINHEIT_H; }
+    return neu;
+  });
+}
 
 // ================================================================ Hilfen
 const gespraech = [];  // [rolle, text] dieser Sitzung, damit ein neu gebautes Klaus-Widget den Verlauf zeigt
@@ -996,14 +1040,15 @@ let speicherTimer;
 function speichern() {
   clearTimeout(speicherTimer);
   speicherTimer = setTimeout(() => {
-    // GridStack laesst Werte weg, die 0 bzw. 1 sind -> mit ?? auffuellen.
-    // Eingeklappt bleibt h die volle Hoehe von vorher.
-    for (const pos of grid.save(false)) {
-      const m = modelle.find((x) => x.id === pos.id);
-      if (m) Object.assign(m, { x: pos.x ?? 0, y: pos.y ?? 0, w: pos.w ?? 1, h: m.zu ? m.h : (pos.h ?? 1) });
-    }
-    klaus.speichereLayout(JSON.stringify({ version: 1, widgets: modelle }));
+    // Die Modelle tragen ihre Lage selbst (Anteile 0..1); eingeklappt bleibt h die volle Hoehe.
+    klaus.speichereLayout(JSON.stringify({ version: 2, widgets: modelle }));
   }, 400);
+}
+
+// Belegte Flaechen der anderen Widgets (eingeklappte nur mit ihrer Kopfzeile)
+function belegt(ohne) {
+  const kopf = 42 / (document.getElementById("raster").clientHeight || 1000);
+  return modelle.filter((m) => m !== ohne && m.x !== undefined).map((m) => ({ x: m.x, y: m.y, w: m.w, h: m.zu ? kopf : m.h }));
 }
 
 // ================================================================ Widgets bauen
@@ -1011,15 +1056,20 @@ function widgetHinzufuegen(m, einflugNr) {
   const typ = TYPEN[m.typ];
   if (!typ) return;
   m.einst = m.einst || {};
-  m.w = m.w || typ.w;
-  m.h = m.h || typ.h;
-  const item = el("div", "grid-stack-item");
-  const attr = { "gs-id": m.id, "gs-w": m.w, "gs-h": m.zu ? 1 : m.h, "gs-min-w": typ.minW, "gs-min-h": m.zu ? 1 : typ.minH };
-  if (m.x === undefined) attr["gs-auto-position"] = "true"; else { attr["gs-x"] = m.x; attr["gs-y"] = m.y; }
-  for (const [k, v] of Object.entries(attr)) item.setAttribute(k, v);
+  m.w = m.w || typ.w / EINHEIT_B;
+  m.h = m.h || typ.h / EINHEIT_H;
+  if (m.x === undefined) {  // noch keine Lage: erste freie Stelle, sonst leicht versetzt in die Mitte
+    const r = holoPlatz(m.w, m.h, belegt(m));
+    Object.assign(m, r || { x: Math.min(0.3, 1 - m.w), y: Math.min(0.15, 1 - m.h) });
+  }
+  const item = el("div", "fenster" + (m.zu ? " zu" : ""));
+  item.dataset.id = m.id;
+  holoLage(item, m);
+  if (m.z) { item.style.zIndex = m.z; holoOben = Math.max(holoOben, m.z); }
 
-  const w = el("div", "grid-stack-item-content w" + (m.zu ? " zu" : "") + (typ.frei ? " frei" : ""));
+  const w = el("div", "w" + (m.zu ? " zu" : "") + (typ.frei ? " frei" : ""));
   const kopf = el("div", "w-kopf"), titel = el("div", "w-titel", typ.titel), extra = el("div", "w-extra");
+  titel.dataset.text = typ.titel;
   const klapp = el("button", "w-knopf klapp", "▾"), weg = el("button", "w-knopf weg", "✕");
   klapp.title = "Einklappen / Ausklappen"; weg.title = "Widget entfernen";
   const kennung = el("span", "w-id", modulId(m));
@@ -1028,14 +1078,20 @@ function widgetHinzufuegen(m, einflugNr) {
   const innen = el("div", "w-innen");
   innen.append(kopf, inhalt);
   w.append(innen);
-  item.append(w);
-  document.getElementById("raster").append(item);
-  grid.makeWidget(item);
-  if (einflugNr !== undefined) {
-    item.classList.add("einflug");
-    w.style.animationDelay = `${BOOT_DAUER / 1000 + einflugNr * 0.07}s`;
-    setTimeout(() => { item.classList.remove("einflug"); w.style.animationDelay = ""; }, BOOT_DAUER + 1500 + einflugNr * 70);
-  }
+  const ecke = el("div", "fenster-ecke");
+  ecke.title = "Größe ändern";
+  item.append(w, ecke);
+  const flaeche = document.getElementById("raster");
+  flaeche.append(item);
+  holoFrei(item, m, kopf, ecke, flaeche, {
+    minB: (typ.minW / EINHEIT_B) * flaeche.clientWidth * 0.75,
+    minH: (typ.minH / EINHEIT_H) * flaeche.clientHeight * 0.75,
+    andere: () => flaeche.querySelectorAll(".fenster"),
+    beimStart: () => webVerdecken(true),  // Browser-Ansichten liegen sonst ueber dem gezogenen Fenster
+    beimEnde: () => { speichern(); setTimeout(() => { webVerdecken(false); lauf.klappen.forEach((fn) => fn()); }, 60); },
+  });
+  // Beim Start nacheinander hochbooten (nach der Boot-Sequenz), neue Widgets sofort
+  holoBoot(item, einflugNr !== undefined ? BOOT_DAUER + einflugNr * 110 : 0);
 
   const lauf = (laufend[m.id] = { timer: [], abos: [], entfernen: [], klappen: [] });
   const kontext = {
@@ -1067,28 +1123,29 @@ function widgetHinzufuegen(m, einflugNr) {
   lauf.klappe = () => klapp.onclick();
   lauf.entferne = () => weg.onclick();
   klapp.onclick = () => {
-    if (!m.zu) m.h = item.gridstackNode.h;  // volle Hoehe merken, bevor eingeklappt wird
     m.zu = !m.zu;
     w.classList.toggle("zu", m.zu);
-    grid.update(item, m.zu ? { h: 1, minH: 1 } : { h: m.h, minH: typ.minH });
-    setTimeout(() => lauf.klappen.forEach((fn) => fn()), 320);  // nach der Animation
+    item.classList.toggle("zu", m.zu);
+    if (!m.zu) holoBoot(item);  // beim Aufklappen neu hochbooten
+    setTimeout(() => { lauf.klappen.forEach((fn) => fn()); webAlleMelden(); }, 320);
     speichern();
   };
-  weg.onclick = () => {
+  weg.onclick = async () => {
     lauf.entfernen.forEach((fn) => fn());
     delete adressHoerer[m.id];
     lauf.timer.forEach(clearInterval);
     for (const schl of Object.keys(abos)) abos[schl] = abos[schl].filter((a) => a.id !== m.id);
     for (const art of Object.keys(klausHoerer)) klausHoerer[art] = klausHoerer[art].filter((a) => a.id !== m.id);
-    grid.removeWidget(item);
     modelle = modelle.filter((x) => x !== m);
     speichern();
+    await holoAus(item);  // rueckwaerts ausblenden, dann weg
+    item.remove();
   };
 }
 
 function aufbauen(liste) {
   for (const lauf of Object.values(laufend)) lauf.entfernen.forEach((fn) => fn());
-  grid.removeAll();
+  document.getElementById("raster").querySelectorAll(".fenster").forEach((f) => f.remove());
   for (const lauf of Object.values(laufend)) lauf.timer.forEach(clearInterval);
   // Widget-Abos weg, globale (id "__…", z. B. Telemetrie-Leiste) bleiben
   for (const k of Object.keys(abos)) abos[k] = abos[k].filter((a) => a.id.startsWith("__"));
@@ -1123,12 +1180,16 @@ function katalogZeigen() {
 // Neues Widget in der groessten Groesse, die noch auf den Bildschirm passt. -> Modell oder null
 function widgetNeu(typ, einst = {}) {
   const def = TYPEN[typ];
-  let w = def.w, h = def.h;
-  while (!grid.willItFit({ w, h, autoPosition: true }) && (h > def.minH || w > def.minW)) {
-    if (h > def.minH) h--; else w--;
+  // Groesste freie Stelle suchen (erst Standardgroesse, dann schrittweise kleiner bis zur Mindestgroesse).
+  // Ist nirgends Platz, schwebt es trotzdem frei ueber den anderen - Fenster duerfen sich ueberlappen.
+  let w = def.w / EINHEIT_B, h = def.h / EINHEIT_H, r = null;
+  const minW = def.minW / EINHEIT_B, minH = def.minH / EINHEIT_H;
+  while (!(r = holoPlatz(w, h, belegt())) && (h > minH || w > minW)) {
+    h = Math.max(minH, h - 1 / EINHEIT_H);
+    if (h === minH) w = Math.max(minW, w - 1 / EINHEIT_B);
   }
-  if (!grid.willItFit({ w, h, autoPosition: true })) return null;
-  const m = { id: `${typ}-${Date.now()}`, typ, w, h, einst };
+  r = r || { x: (1 - w) / 2, y: (1 - h) / 2, w, h };
+  const m = { id: `${typ}-${Date.now()}`, typ, ...r, z: holoOben + 1, einst };
   modelle.push(m);
   widgetHinzufuegen(m);
   speichern();
@@ -1173,71 +1234,71 @@ function panelBefehl(json) {
     case "entfernen": if (m) lauf.entferne(); break;
     case "groesser": {
       if (!m || m.zu) break;
-      const n = lauf.item.gridstackNode;
-      // Erst dort wachsen, wo frei ist: rechts, links, unten, oben (erst viel, dann wenig)
-      const versuche = [[0, 0, 2, 0], [-2, 0, 2, 0], [0, 0, 0, 3], [0, -3, 0, 3], [0, 0, 1, 0], [-1, 0, 1, 0], [0, 0, 0, 1], [0, -1, 0, 1]];
-      const ziel = versuche.map(([dx, dy, dw, dh]) => ({ x: n.x + dx, y: n.y + dy, w: n.w + dw, h: n.h + dh }))
-        .find((r) => frei(r, n));
-      if (ziel) { grid.update(lauf.item, ziel); hervorheben(m.id); }
+      // Um die Mitte wachsen, an den Raendern gehalten; erst viel, dann weniger - ohne andere zu ueberdecken
+      const ziel = [1.3, 1.18, 1.08].map((f) => gewachsen(m, f)).find((r) => !belegt(m).some((b) => holoUeberlappt(r, b)));
+      if (ziel) { gleiten(m, ziel); hervorheben(m.id); }
       else klausHinweis(`Kein Platz, um ${def.titel} zu vergrößern. Verkleinere oder schließ erst ein Widget daneben.`);
       break;
     }
     case "kleiner": {
       if (!m || m.zu) break;
-      const n = lauf.item.gridstackNode;
-      grid.update(lauf.item, { w: Math.max(def.minW, n.w - 2), h: Math.max(def.minH, n.h - 3) });
+      const r = gewachsen(m, 0.8);
+      gleiten(m, { ...r, w: Math.max(def.minW / EINHEIT_B * 0.75, r.w), h: Math.max(def.minH / EINHEIT_H * 0.75, r.h) });
       hervorheben(m.id);
       break;
     }
     case "verschieben": {
       if (!m) break;
-      verschiebe(lauf.item.gridstackNode, a.richtung);
+      verschiebe(m, a.richtung);
       hervorheben(m.id);
       break;
     }
   }
-  setTimeout(() => { speichern(); webAlleMelden(); }, 350);
+  setTimeout(() => { speichern(); webAlleMelden(); }, 500);
 }
 
-// Ist das Rechteck im Raster und von keinem anderen Widget belegt?
-function frei(r, ohne) {
-  if (r.x < 0 || r.y < 0 || r.x + r.w > SPALTEN || r.y + r.h > ZEILEN) return false;
-  return grid.engine.nodes.every((n) => n === ohne || n.x >= r.x + r.w || n.x + n.w <= r.x || n.y >= r.y + r.h || n.y + n.h <= r.y);
+// Rechteck um die eigene Mitte skaliert und in die Flaeche geschoben
+function gewachsen(m, f) {
+  const w = Math.min(1, m.w * f), h = Math.min(1, m.h * f);
+  const x = Math.max(0, Math.min(1 - w, m.x + (m.w - w) / 2)), y = Math.max(0, Math.min(1 - h, m.y + (m.h - h) / 2));
+  return { x, y, w, h };
 }
 
-// So weit wie moeglich in die Richtung rutschen; geht gar nichts, mit dem Nachbarn dort den Platz tauschen
-function verschiebe(n, richtung) {
-  const schritt = { links: [-1, 0], rechts: [1, 0], oben: [0, -1], unten: [0, 1] }[richtung];
+// Fenster sanft an eine neue Lage gleiten lassen (nur bei Sprachbefehlen; Ziehen mit der Maus ist direkt)
+function gleiten(m, r) {
+  const f = laufend[m.id] && laufend[m.id].item;
+  Object.assign(m, r);
+  if (!f) return;
+  f.classList.add("gleitet");
+  holoLage(f, m);
+  setTimeout(() => { f.classList.remove("gleitet"); laufend[m.id].klappen.forEach((fn) => fn()); }, 480);
+}
+
+// So weit wie moeglich in die Richtung rutschen; geht gar nichts, mit dem naechsten Nachbarn dort die Plaetze tauschen
+function verschiebe(m, richtung) {
+  const andere = belegt(m), frei = (r) => holoImBild(r) && !andere.some((b) => holoUeberlappt(r, b));
+  const eigen = { x: m.x, y: m.y, w: m.w, h: m.h };
   if (richtung === "mitte") {
-    const x = Math.round((SPALTEN - n.w) / 2);
-    if (frei({ ...n, x, y: n.y, w: n.w, h: n.h }, n)) grid.update(n.el, { x });
+    const r = { ...eigen, x: (1 - m.w) / 2 };
+    if (frei(r)) gleiten(m, r); else klausHinweis("In der Mitte ist kein Platz frei.");
     return;
   }
+  const schritt = { links: [-1, 0], rechts: [1, 0], oben: [0, -1], unten: [0, 1] }[richtung];
   if (!schritt) return;
-  let r = { x: n.x, y: n.y, w: n.w, h: n.h };
-  while (frei({ ...r, x: r.x + schritt[0], y: r.y + schritt[1] }, n)) { r.x += schritt[0]; r.y += schritt[1]; }
-  if (r.x !== n.x || r.y !== n.y) { grid.update(n.el, { x: r.x, y: r.y }); return; }
+  let r = { ...eigen };
+  while (frei({ ...r, x: r.x + schritt[0] * 0.005, y: r.y + schritt[1] * 0.005 })) { r.x += schritt[0] * 0.005; r.y += schritt[1] * 0.005; }
+  if (Math.abs(r.x - m.x) + Math.abs(r.y - m.y) > 0.004) { gleiten(m, r); return; }
 
-  // Naechster Nachbar in dieser Richtung, der sich mit uns ueberlappt (in der anderen Achse)
-  const nachbarn = grid.engine.nodes.filter((o) => o !== n && (schritt[0]
-    ? o.y < n.y + n.h && o.y + o.h > n.y && (schritt[0] < 0 ? o.x + o.w <= n.x : o.x >= n.x + n.w)
-    : o.x < n.x + n.w && o.x + o.w > n.x && (schritt[1] < 0 ? o.y + o.h <= n.y : o.y >= n.y + n.h)));
+  // Naechster Nachbar in dieser Richtung, der sich in der anderen Achse mit uns ueberlappt -> Plaetze tauschen
+  const nachbarn = modelle.filter((o) => o !== m && o.x !== undefined && (schritt[0]
+    ? o.y < m.y + m.h && o.y + o.h > m.y && (schritt[0] < 0 ? o.x + o.w <= m.x + 1e-3 : o.x >= m.x + m.w - 1e-3)
+    : o.x < m.x + m.w && o.x + o.w > m.x && (schritt[1] < 0 ? o.y + o.h <= m.y + 1e-3 : o.y >= m.y + m.h - 1e-3)));
   if (!nachbarn.length) return;
-  const abstand = (o) => Math.abs(schritt[0] ? o.x - n.x : o.y - n.y);
+  const abstand = (o) => Math.abs(schritt[0] ? o.x - m.x : o.y - m.y);
   const o = nachbarn.sort((a, b) => abstand(a) - abstand(b))[0];
-  const platzA = { x: n.x, y: n.y, w: n.w, h: n.h }, platzB = { x: o.x, y: o.y, w: o.w, h: o.h };
-  const minN = TYPEN[modelle.find((m) => m.id === n.id).typ], minO = TYPEN[modelle.find((m) => m.id === o.id).typ];
-  if (platzB.w < minN.minW || platzB.h < minN.minH || platzA.w < minO.minW || platzA.h < minO.minH) {
-    klausHinweis(`${minN.titel} und ${minO.titel} passen nicht in den Platz des anderen. Zieh sie am Titel selbst hin.`);
-    return;
-  }
-  // Tauschen: Nachbarn kurz unter dem sichtbaren Raster parken, damit sich nichts ueberlappt
-  const max = grid.opts.maxRow;
-  grid.opts.maxRow = grid.engine.maxRow = max + 40;
-  grid.update(o.el, { y: max + 1 });
-  grid.update(n.el, platzB);
-  grid.update(o.el, platzA);
-  grid.opts.maxRow = grid.engine.maxRow = max;
+  const platzO = { x: o.x, y: o.y, w: o.w, h: o.h };
+  gleiten(o, eigen);
+  gleiten(m, platzO);
 }
 
 function klausHinweis(text) {
@@ -1267,9 +1328,6 @@ function designMenue() {
   }
 }
 
-function zellhoehe() {
-  return Math.max(18, Math.floor((innerHeight - 86) / ZEILEN) - 0.5);  // unten Platz fuer die Fusszeile
-}
 
 // ================================================================ Eck-Anzeigen um das Auge
 const ringZeichner = [];  // alle Anzeigen neu zeichnen, wenn neue Systemwerte da sind
@@ -1381,16 +1439,8 @@ addEventListener("mousemove", (e) => {
 // ================================================================ Start
 klausBereit.then((k) => {
   klaus = k;
-  grid = GS.init({
-    column: SPALTEN, maxRow: ZEILEN, cellHeight: zellhoehe(), margin: 5, float: true, animate: true,
-    handle: ".w-kopf", resizable: { handles: "se" }, draggable: { cancel: ".w-knopf" },
-  }, "#raster");
-  grid.on("change", speichern);
-  // Beim Ziehen/Groesse-Aendern die Browser-Ansichten kurz ausblenden, danach neu ausrichten
-  grid.on("dragstart resizestart", () => webVerdecken(true));
-  grid.on("dragstop resizestop", () => setTimeout(() => webVerdecken(false), 320));
-  grid.on("change", () => setTimeout(webAlleMelden, 320));
-  addEventListener("resize", () => { grid.cellHeight(zellhoehe()); setTimeout(webAlleMelden, 320); });
+  // Fenster liegen in % der Flaeche -> bei neuer Bildschirmgroesse nur die Browser-Ansichten neu ausrichten
+  addEventListener("resize", () => setTimeout(webAlleMelden, 120));
 
   klaus.ladeThema((name) => wendeThemaAn(name));
   klaus.thema.connect((name) => wendeThemaAn(name));
@@ -1443,7 +1493,7 @@ klausBereit.then((k) => {
 
   klaus.ladeLayout((text) => {
     let liste = STANDARD;
-    try { const g = JSON.parse(text); if (g.widgets && g.widgets.length) liste = g.widgets; } catch {}
+    try { const g = JSON.parse(text); if (g.widgets && g.widgets.length) liste = layoutUmrechnen(g.widgets, g.version || 1); } catch {}
     aufbauen(liste);
   });
 
