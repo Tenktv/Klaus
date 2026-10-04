@@ -18,6 +18,7 @@ const THEMEN = {
 const ORB_FARBEN = {
   aus: [0, 229, 255], start: [0, 229, 255], hoeren: [0, 229, 255], denken: [255, 179, 0],
   sprechen: [0, 200, 255], aktion: [61, 255, 168], fehler: [255, 61, 90],
+  freigabe: [255, 150, 0], fertig: [61, 255, 168],   // Freigabe immer Bernstein, Ausfuehren/Fertig immer Gruen
 };
 
 let aktuellesThema = "jarvis";
@@ -111,7 +112,7 @@ class KlausOrb {
     const ziel = ORB_FARBEN[this.zustand] || ORB_FARBEN.aus;
     this.farbe = this.farbe.map((w, i) => w + (ziel[i] - w) * 0.08);
 
-    const tempo = { aus: 0.12, start: 0.6, hoeren: 0.5, denken: 2.6, sprechen: 0.9, aktion: 1.6, fehler: 0.3 }[this.zustand] ?? 0.3;
+    const tempo = { aus: 0.12, start: 0.6, hoeren: 0.5, denken: 2.6, sprechen: 0.9, aktion: 1.6, fehler: 0.3, freigabe: 0.45, fertig: 1.1 }[this.zustand] ?? 0.3;
     this.drehung += dt * tempo * (this.ruhig ? 0.2 : 1);
     this.sog += ((this.zustand === "hoeren" ? 0.35 + this.pegel * 0.4 : 0) - this.sog) * 0.06;
 

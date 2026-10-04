@@ -8,6 +8,7 @@
 <script src="vendor/gridstack-all.js"></script>
 <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
 <script src="klaus.js"></script>
+<script src="core.js"></script>
 <style>
   @font-face { font-family: "Rajdhani"; font-weight: 500; src: url(vendor/rajdhani-500.woff2) format("woff2"); }
   @font-face { font-family: "Rajdhani"; font-weight: 700; src: url(vendor/rajdhani-700.woff2) format("woff2"); }
@@ -223,6 +224,56 @@
   .klaus { height: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
   .klaus .buehne { position: relative; flex: 1 1 0; min-height: 120px; width: 100%; }
   .klaus .buehne canvas, .klaus .buehne svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .klaus .buehne .core-fx { pointer-events: none; }
+
+  /* Klaus Core: Kopfzeile mit Modus, Zustand/Phasen, Ziel */
+  .core-hud { position: absolute; left: 0; right: 0; top: 4px; display: flex; flex-direction: column; align-items: center;
+    gap: 3px; pointer-events: none; font-family: var(--mono); letter-spacing: .22em; }
+  .core-kopf { display: flex; gap: 10px; align-items: baseline; font-size: 11px; }
+  .core-name { font-family: "Orbitron", var(--hud); font-size: 12px; letter-spacing: .32em; color: var(--cyan);
+    text-shadow: 0 0 12px rgba(var(--rgb), .7); }
+  .core-trenner { color: var(--leise); }
+  .core-modus { position: relative; color: var(--leise); transition: color .3s; }
+  .core-label { font-size: 10.5px; color: var(--cyan); min-height: 1.3em; white-space: nowrap; }
+  .core-label span { color: var(--leise); transition: color .25s, text-shadow .25s; }
+  .core-label span.fertig { color: var(--cyan-2); }
+  .core-label span.an { color: #fff; text-shadow: 0 0 10px rgba(var(--rgb2), .9); }
+  .core-label .pfeil { font-style: normal; color: var(--leise); margin: 0 .35em; }
+  [data-core="THINKING"] .core-label { font-size: 9.5px; letter-spacing: .1em; }
+  .core-ziel { font-size: 9.5px; color: var(--leise); min-height: 1.2em; letter-spacing: .14em; }
+  [data-core="THINKING"] .core-modus, [data-core="SPEAKING"] .core-modus,
+  [data-core="EXECUTING"] .core-modus, [data-core="DONE"] .core-modus { color: #3dffa8; text-shadow: 0 0 12px rgba(61, 255, 168, .7); }
+  [data-core="THINKING"] .core-label span.an { text-shadow: 0 0 10px rgba(var(--rgb), .9); }
+  [data-core="EXECUTING"] .core-label, [data-core="DONE"] .core-label { color: #3dffa8; }
+  [data-core="AWAITING_AUTH"] .core-label, [data-core="AWAITING_AUTH"] .core-modus { color: #ffa000; text-shadow: 0 0 12px rgba(255, 160, 0, .8); }
+  [data-core="AWAITING_AUTH"] .core-label { animation: core-blinken 1s steps(2, jump-none) infinite; }
+  [data-core="ERROR"] .core-label { color: var(--rot); }
+  /* Glitch beim Moduswechsel: zwei versetzte, beschnittene Kopien */
+  .core-modus.glitch { animation: core-zittern .65s steps(8) both; }
+  .core-modus.glitch::before, .core-modus.glitch::after { content: attr(data-text); position: absolute; inset: 0; }
+  .core-modus.glitch::before { color: #ff2e63; clip-path: inset(0 0 55% 0); animation: core-scheibe .65s steps(6) both; }
+  .core-modus.glitch::after { color: #2ef2ff; clip-path: inset(50% 0 0 0); animation: core-scheibe .65s steps(5) reverse both; }
+  @keyframes core-zittern { 0%, 100% { transform: none; } 20% { transform: translateX(-3px) skewX(-8deg); }
+    40% { transform: translateX(3px); opacity: .6; } 60% { transform: translateX(-1px) skewX(6deg); } 80% { transform: translateX(2px); } }
+  @keyframes core-scheibe { 0% { transform: translateX(-6px); opacity: 1; } 50% { transform: translateX(5px); } 100% { transform: none; opacity: 0; } }
+  @keyframes core-blinken { 50% { opacity: .35; } }
+  /* Freigabe: Rahmen blinkt bernstein, alles andere wird abgedunkelt */
+  .klaus .buehne[data-core="AWAITING_AUTH"]::after { content: ""; position: absolute; inset: 4px; pointer-events: none;
+    border: 1px solid rgba(255, 160, 0, .8); box-shadow: 0 0 26px rgba(255, 160, 0, .35), inset 0 0 26px rgba(255, 160, 0, .18);
+    animation: core-blinken 1.1s ease-in-out infinite; }
+  .grid-stack-item { transition: opacity .4s, filter .4s; }
+  body.core-auth .grid-stack-item:not(:has(.klaus)) { opacity: .3; filter: saturate(.4); }
+  /* Debug-Panel */
+  .core-debug { position: fixed; left: 16px; bottom: 16px; z-index: 50; display: none; flex-wrap: wrap; gap: 5px; max-width: 330px;
+    padding: 10px; background: rgba(0, 0, 0, .75); border: 1px solid var(--cyan-2); font: 11px var(--mono); color: var(--cyan); }
+  .core-debug.offen { display: flex; }
+  .core-debug b { flex-basis: 100%; letter-spacing: .2em; }
+  .core-debug-zu { position: absolute; right: 8px; top: 6px; cursor: pointer; }
+  .core-debug button { font: inherit; color: var(--text); background: rgba(var(--rgb), .1); border: 1px solid var(--cyan-3);
+    padding: 3px 7px; cursor: pointer; letter-spacing: .1em; }
+  .core-debug button:hover { background: rgba(var(--rgb), .3); }
+  @media (prefers-reduced-motion: reduce) { .core-modus.glitch, .core-modus.glitch::before, .core-modus.glitch::after,
+    [data-core="AWAITING_AUTH"] .core-label { animation: none; } }
   /* Segment-Ring (SHIELD-OS-Stil): Ringausschnitte als Knoepfe */
   .ring-menue .fuehrung { fill: none; stroke: var(--cyan-3); stroke-width: 1; stroke-dasharray: 1 5; }
   .ring-menue .seg { cursor: pointer; }
@@ -426,8 +477,9 @@ const SPALTEN = 12, ZEILEN = 24;
 const ZUSTAND_TEXT = {
   aus: "SYSTEM BEREIT · SAG „KLAUS“", start: "INITIALISIERE …", hoeren: "HÖRE ZU …", denken: "VERARBEITE …",
   sprechen: "ANTWORTE …", aktion: "AUSGEFÜHRT", fehler: "FEHLER · SIEHE LOG",
+  freigabe: "WARTE AUF FREIGABE · SAG „FREIGEBEN“", fertig: "ERLEDIGT",
 };
-const ZUSTAND_FARBE = { denken: "var(--bernstein)", aktion: "#3dffa8", fehler: "#ff3d5a" };
+const ZUSTAND_FARBE = { denken: "var(--bernstein)", aktion: "#3dffa8", fehler: "#ff3d5a", freigabe: "#ffa000", fertig: "#3dffa8" };
 
 let klaus, grid;
 let modelle = [];                 // gespeicherter Zustand aller Widgets
@@ -502,6 +554,8 @@ const TYPEN = {
         <div class="status">STATUS // BEREIT</div><div class="verlauf" aria-live="polite"></div>
         <div class="sprachhinweis">SAG „KLAUS“ · Z. B. „KLAUS, ÖFFNE STEAM“</div></div>`;
       const orb = new KlausOrb(c.inhalt.querySelector("canvas"), { platz: 0.7, pegelAbstand: 0.385 });
+      const core = new KlausCore(c.inhalt.querySelector(".buehne"), orb, 0.7);
+      if (!window.klausCore) { window.klausCore = core; coreDebug(core); }
       ringMenue(c.inhalt.querySelector(".buehne"), c.inhalt.querySelector(".ring-menue"));
       const status = c.inhalt.querySelector(".status"), verlauf = c.inhalt.querySelector(".verlauf");
       // Kein Chatverlauf auf dem Bildschirm (steht im Obsidian-Vault unter Gespraeche/).
@@ -519,12 +573,12 @@ const TYPEN = {
         requestAnimationFrame(() => { verlauf.scrollTop = 0; });
       };
       c.hoere("zustand", (z) => {
-        orb.setZustand(z);
+        core.melde(z);
         if (!document.body.classList.contains("stumm") && !document.body.classList.contains("mikro-aus")) {
-          status.textContent = "STATUS // " + ZUSTAND_TEXT[z].split(" ·")[0];
+          status.textContent = "STATUS // " + (ZUSTAND_TEXT[z] || z).split(" ·")[0];
         }
       });
-      c.hoere("pegel", (p) => orb.setPegel(p));
+      c.hoere("pegel", (p) => { orb.setPegel(p); core.setPegel(p); });
       c.hoere("nachricht", zeigen);
     },
   },

@@ -371,7 +371,10 @@ def _web_ansicht(ansicht: QWebEngineView, seite: str, bruecke: WebBruecke) -> No
     ansicht.page().setWebChannel(kanal)
     ansicht.page().setBackgroundColor(Qt.transparent)
     ansicht.setContextMenuPolicy(Qt.NoContextMenu)
-    ansicht.load(QUrl.fromLocalFile(str(WEB_DIR / seite)))
+    url = QUrl.fromLocalFile(str(WEB_DIR / seite))
+    if os.getenv("KLAUS_CORE_DEBUG") == "1":  # Debug-Panel fuer die Core-Zustaende gleich offen + Demo-Ablauf
+        url.setQuery("debug=1")
+    ansicht.load(url)
     ansicht._kanal, ansicht._bruecke = kanal, bruecke  # Referenzen halten, sonst raeumt Python sie weg
 
 
