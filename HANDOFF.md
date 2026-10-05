@@ -115,14 +115,15 @@ Sprachmodelle (`data/stimmen/`, über 500 MB) sind in `.gitignore`. Sicherung de
 
 Erledigt: **A** Design · **B** Leistung · **C** Freigabe-Gate · **D** Lagebericht + Konkurrenz-Check ·
 **F** Rechte · **G** Sicherheit · Globus · Bildschirm 2 · Pläne/Widgets ·
-**E** Fish Audio (Code fertig, wartet auf Schlüssel) · **H** Apple Kalender (Code fertig, wartet auf Zugang).
+**E** Fish Audio (Code fertig, wartet auf Schlüssel) · **H** Apple Kalender (Code fertig, wartet auf Zugang) +
+Meeting-Protokollant · **I** Markt-Analyse + Papier-Depot (nur lesend).
+Konkurrenz-Check am 05.10.2026 live geprüft (Bäckerei in Göppingen: 36 Mitbewerber im 5-km-Umkreis, 11 online,
+0,9 s). Die Abfrage nutzt jetzt ein Rechteck statt `around`; mit `around` lief sie auf den Spiegel-Servern in den Timeout.
 
 ### Offene Punkte aus den erledigten Phasen
 - Globus und Lagebericht laufen in der Regionsansicht mit ~55 statt 60 fps. GPU und Skript sind es nicht, Ursache
   vermutlich die Qt-Bildzusammensetzung im Hauptthread. Einen Versuch wert: Globus-Punkte in ein Offscreen-Canvas
   je Drehwinkel zwischenspeichern.
-- Konkurrenz-Check mit echten OSM-Daten noch nicht im Live-Test (Overpass war ausgefallen, die Logik ist mit
-  Testdaten geprüft).
 - Helligkeit lässt sich an externen Monitoren nicht steuern (keine WMI-Unterstützung). Möglich wäre DDC/CI über
   die Bibliothek `monitorcontrol`, falls Nikola das will.
 - Eigene Widgets lassen sich per Stimme ändern, aber noch nicht per Tastatur bearbeiten (gewollt: „nur Stimme“).

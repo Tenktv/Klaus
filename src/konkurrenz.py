@@ -46,8 +46,10 @@ def analyse(lead: dict, radius_km: float = RADIUS_KM) -> dict:
     if not f:
         raise ValueError(f"Branche von {lead.get('name')} unbekannt ({lead.get('branche_suchbegriff', '')}).")
     branche, osm = f
-    elemente = osm_leads._overpass(f'[out:json][timeout:60];nwr{osm}["name"](around:{int(radius_km * 1000)},{lat},{lon});out center tags;',
-                                  timeout=30, runden=1)  # im Gespraech nicht minutenlang warten
+    # Rechteck statt around: fuer die (oft ueberlasteten) Overpass-Server viel billiger; den Kreis schneiden wir selbst
+    dlat, dlon = radius_km / 110.57, radius_km / (111.32 * math.cos(math.radians(lat)))
+    elemente = osm_leads._overpass(f'[out:json][timeout:40];nwr{osm}["name"]({lat - dlat:.5f},{lon - dlon:.5f},{lat + dlat:.5f},'
+                                  f'{lon + dlon:.5f});out center tags;', timeout=45, runden=1)  # im Gespraech nicht minutenlang warten
     eigene_id, eigener_name = _osm_id(lead), osm_leads._norm(lead.get("name", ""))
     selbst, andere = {}, []
     for e in elemente:
@@ -56,7 +58,7 @@ def analyse(lead: dict, radius_km: float = RADIUS_KM) -> dict:
             selbst = tags
             continue
         p = (e.get("lat") or e.get("center", {}).get("lat"), e.get("lon") or e.get("center", {}).get("lon"))
-        if None in p:
+        if None in p or _km((lat, lon), p) > radius_km:
             continue
         andere.append({"name": tags["name"], "lat": p[0], "lon": p[1], "km": round(_km((lat, lon), p), 1),
                        "website": next((tags[k] for k in WEB if tags.get(k)), ""),
