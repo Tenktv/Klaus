@@ -7,16 +7,16 @@ const CORE_AUS_PYTHON = {
   aus: "IDLE", start: "LISTENING", hoeren: "LISTENING", denken: "THINKING", sprechen: "SPEAKING",
   aktion: "EXECUTING", fehler: "ERROR", freigabe: "AWAITING_AUTH", fertig: "DONE",
 };
-// orb: Zustand fuer KlausOrb, modus: Kopfzeile, label: Zeile darunter (null = Denk-Phasen)
+// orb: Zustand fuer KlausOrb, modus: Kopfzeile, label: grosser Zustandstext; auge: Farbe fuer Halo/Buehne (CSS --eye)
 const CORE_ZUSTAENDE = {
   IDLE:          { orb: "aus",      modus: "normal", label: "STANDBY" },
   LISTENING:     { orb: "hoeren",   modus: "normal", label: "LISTENING" },
-  THINKING:      { orb: "denken",   modus: "klaus",  label: null },
+  THINKING:      { orb: "denken",   modus: "klaus",  label: "THINKING" },
   SPEAKING:      { orb: "sprechen", modus: "klaus",  label: "RESPONDING" },
   EXECUTING:     { orb: "aktion",   modus: "klaus",  label: "EXECUTING" },
-  AWAITING_AUTH: { orb: "freigabe", modus: "klaus",  label: "AWAITING AUTHORIZATION" },
+  AWAITING_AUTH: { orb: "freigabe", modus: "klaus",  label: "AWAITING AUTH" },
   DONE:          { orb: "fertig",   modus: "klaus",  label: "COMPLETE" },
-  ERROR:         { orb: "fehler",   modus: "normal", label: "FAULT · SIEHE LOG" },
+  ERROR:         { orb: "fehler",   modus: "normal", label: "FAULT" },
 };
 const DENK_PHASEN = ["PARSING INTENT", "QUERYING", "SYNTHESIZING"];
 const PHASE_MS = 1100;
@@ -57,15 +57,18 @@ class KlausCore {
     this.ruhig = matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.fx = el("canvas", "core-fx");
     this.ctx = this.fx.getContext("2d");
-    buehne.insertBefore(this.fx, buehne.querySelector("svg"));
+    const auge = buehne.querySelector(".auge-platz");
+    if (auge) auge.after(this.fx); else buehne.append(this.fx);
     this.hud = el("div", "core-hud");
     this.hud.innerHTML = `<div class="core-kopf"><span class="core-name">KLAUS CORE</span><span class="core-trenner">//</span>
       <span class="core-modus" data-text="NORMAL MODE">NORMAL MODE</span></div>
-      <div class="core-label"></div><div class="core-ziel"></div>`;
+      <div class="core-zustand"></div><div class="core-phasen"></div><div class="core-ziel"></div>`;
     buehne.append(this.hud);
     this.modusEl = this.hud.querySelector(".core-modus");
-    this.labelEl = this.hud.querySelector(".core-label");
+    this.labelEl = this.hud.querySelector(".core-zustand");
+    this.phasenEl = this.hud.querySelector(".core-phasen");
     this.zielEl = this.hud.querySelector(".core-ziel");
+    this.sperrText = null;   // "STUMM" / "MIKROFON AUS" ersetzt den Zustandstext
     this.teilchen = [];    // Datenstrom von aussen zum Kern (Denken)
     this.wellen = [];      // Ringe nach aussen (Zuhoeren) bzw. Burst (Fertig)
     this.pegel = 0;
@@ -77,6 +80,13 @@ class KlausCore {
     this.leer = true;
     this.anwenden(null);
     requestAnimationFrame((t) => this.tick(t));
+  }
+
+  // Stumm/Mikro aus: grosser Text zeigt das statt des Zustands (null = normal)
+  sperre(text) {
+    if (text === this.sperrText) return;
+    this.sperrText = text;
+    this.tippe(this.labelEl, text || CORE_ZUSTAENDE[this.z.name].label);
   }
 
   melde(wert) { this.wechsel(coreSchritt(this.z, { typ: "melde", wert, jetzt: performance.now() })); }
@@ -94,12 +104,15 @@ class KlausCore {
   anwenden(alt) {
     const name = this.z.name, def = CORE_ZUSTAENDE[name];
     this.buehne.dataset.core = name;
+    document.body.dataset.eye = { EXECUTING: "ok", DONE: "ok", AWAITING_AUTH: "auth", ERROR: "fehler" }[name] || "basis";
     document.body.classList.toggle("core-auth", name === "AWAITING_AUTH");
     this.orb.setZustand(def.orb);
     const modus = def.modus === "klaus" ? "KLAUS MODE ACTIVE" : "NORMAL MODE";
     if (this.modusEl.dataset.text !== modus) this.glitch(modus);
     this.phase = -1;
-    if (def.label) this.tippe(this.labelEl, def.label);
+    this.phasenEl.classList.toggle("an", name === "THINKING");
+    if (name !== "THINKING") this.phasenEl.innerHTML = "";
+    this.tippe(this.labelEl, this.sperrText || def.label);
     if (name === "DONE") this.burst();
     if (name === "IDLE") this.setZiel("");
     this.leer = false;
@@ -134,7 +147,7 @@ class KlausCore {
   }
 
   phasenZeile(index) {
-    this.labelEl.innerHTML = DENK_PHASEN.map((p, i) =>
+    this.phasenEl.innerHTML = DENK_PHASEN.map((p, i) =>
       `<span class="${i < index ? "fertig" : i === index ? "an" : ""}">${p}</span>`).join('<i class="pfeil">→</i>');
   }
 
@@ -177,14 +190,18 @@ class KlausCore {
   }
 
   zeichne(dt, jetzt) {
-    const c = this.fx, ctx = this.ctx, dpr = window.devicePixelRatio || 1;
+    const c = this.fx, ctx = this.ctx, dpr = Math.min(1.5, window.devicePixelRatio || 1);
     const w = c.clientWidth, h = c.clientHeight;
     if (!w || !h) return;
     if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    const mx = w / 2, my = h / 2, s = (Math.min(w, h) / 460) * this.platz;
-    const kern = 64 * s, aussen = kern + 120 * s, voll = Math.PI * 2, name = this.z.name;
+    // Mitte und Groesse des echten Auges (Canvas des Orbs) relativ zur Effekt-Canvas
+    const fr = c.getBoundingClientRect(), or = this.orb.c.getBoundingClientRect(), geo = this.orb.geometrie();
+    const mx = or.left - fr.left + geo.mx, my = or.top - fr.top + geo.my, s = geo.gehaeuse / 290;
+    // aussen nie ueber den Rand der Canvas hinaus, sonst werden Ringe sichtbar gerade abgeschnitten
+    const rand = Math.min(mx, my, w - mx, h - my) - 6;
+    const kern = geo.linse, aussen = Math.min(geo.gehaeuse * 1.3, rand / 1.25), voll = Math.PI * 2, name = this.z.name;
     const farbe = (a, hell = 0) => this.orb.rgba(a, hell);
     ctx.globalCompositeOperation = "lighter";
 
@@ -210,8 +227,9 @@ class KlausCore {
 
     // --- Ausfuehren: Scan-Linie von oben nach unten
     if (name === "EXECUTING") {
-      const k = ((jetzt - this.z.seit) / 1000 / 0.9) % 1, y = my - aussen + k * aussen * 2;
-      const breite = Math.sqrt(Math.max(0, aussen * aussen - (y - my) * (y - my)));
+      const rs = geo.gehaeuse * 0.96;  // nur ueber dem Auge, nicht quer durchs Panel
+      const k = ((jetzt - this.z.seit) / 1000 / 0.9) % 1, y = my - rs + k * rs * 2;
+      const breite = Math.sqrt(Math.max(0, rs * rs - (y - my) * (y - my)));
       const band = ctx.createLinearGradient(0, y - 26 * s, 0, y + 3 * s);
       band.addColorStop(0, farbe(0)); band.addColorStop(1, farbe(0.32, 0.3));
       ctx.fillStyle = band;
@@ -244,7 +262,7 @@ class KlausCore {
     for (const welle of this.wellen) {
       if (welle.verz > 0) { welle.verz -= dt; continue; }
       welle.leben -= dt * (welle.burst ? 0.9 : 1.2);
-      welle.r = (1 - welle.leben) * (welle.burst ? aussen * 1.25 : aussen - kern);
+      welle.r = (1 - welle.leben) * (welle.burst ? Math.min(aussen * 1.25, rand - kern) : aussen - kern);
       ctx.strokeStyle = farbe(Math.max(0, welle.leben) * (welle.burst ? 0.95 : 0.5), welle.burst ? 0.6 : 0.2);
       ctx.lineWidth = welle.breit * s * (welle.burst ? 2 : 1);
       ctx.beginPath(); ctx.arc(mx, my, kern + welle.r, 0, voll); ctx.stroke();

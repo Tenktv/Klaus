@@ -16,7 +16,7 @@ const THEMEN = {
 };
 
 const ORB_FARBEN = {
-  aus: [0, 229, 255], start: [0, 229, 255], hoeren: [0, 229, 255], denken: [255, 179, 0],
+  aus: [0, 229, 255], start: [0, 229, 255], hoeren: [0, 229, 255], denken: [0, 229, 255],
   sprechen: [0, 200, 255], aktion: [61, 255, 168], fehler: [255, 61, 90],
   freigabe: [255, 150, 0], fertig: [61, 255, 168],   // Freigabe immer Bernstein, Ausfuehren/Fertig immer Gruen
 };
@@ -38,86 +38,43 @@ function wendeThemaAn(name) {
   s.setProperty("--text", t.text);
   for (const z of ["aus", "start", "hoeren"]) ORB_FARBEN[z] = t.haupt;
   ORB_FARBEN.sprechen = t.haupt.map((w) => Math.round(w * 0.88));
-  ORB_FARBEN.denken = t.zweit;
+  ORB_FARBEN.denken = t.haupt;   // Stark: das Auge bleibt beim Denken in der Hauptfarbe
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", t.bg);
 }
 
+// Holo-Kern: nur Licht, kein Glas und kein Metall - heller Energiekern, gegenlaeufige Leuchtringe, feine Skala.
+// Gezeichnet in 600er-Einheiten und auf die Canvas skaliert; die Skala ist statisch (Offscreen-Canvas).
 class KlausOrb {
-  // platz < 1: Orb kleiner zeichnen, z. B. damit aussen noch der Segment-Ring passt
-  // pegelAbstand: Audio-Pegel bei dieser Hoehe (Anteil von min(Breite, Hoehe)) zeichnen, z. B. in der Luecke des Segment-Rings
-  constructor(canvas, { platz = 1, pegelAbstand = null } = {}) {
+  // platz < 1: Auge kleiner zeichnen (Rand fuer Effekte)
+  constructor(canvas, { platz = 1 } = {}) {
     this.platz = platz;
-    this.pegelAbstand = pegelAbstand;
     this.c = canvas;
     this.ctx = canvas.getContext("2d");
     this.zustand = "aus";
     this.farbe = [...ORB_FARBEN.aus];
     this.pegel = 0;
     this.pegelZiel = 0;
-    this.blitz = 0;
     this.t = 0;
-    this.drehung = 0;   // gemeinsamer Drehwinkel der Ringe, Tempo haengt vom Zustand ab
+    this.drehA = 0; this.drehB = 0; this.drehC = 0;
+    this.burst = -1;
     this.letzte = performance.now();
     this.ruhig = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    this.funken = [];
-    // Equalizer-Werte fuer den Reaktor-Ring (geglaettet)
-    this.segmente = new Float32Array(48);
+    this.statisch = null;   // { px, skala }
     requestAnimationFrame((z) => this.tick(z));
   }
 
   setZustand(z) {
-    if (z === "aktion" || (this.zustand === "aus" && z !== "aus")) {
-      this.blitz = 1;
-      this.funkenregen(z === "aktion" ? 60 : 28);
-    }
+    if ((z === "fertig" || z === "aktion") && z !== this.zustand) this.burst = performance.now();
     this.zustand = z;
   }
 
   setPegel(p) { this.pegelZiel = Math.max(0, Math.min(1, p)); }
+  funkenregen() { this.burst = performance.now(); }  // alte Schnittstelle
 
-  funkenregen(anzahl) {
-    for (let i = 0; i < anzahl; i++) {
-      const w = Math.random() * Math.PI * 2;
-      this.funken.push({ w, r: 1, v: 2.2 + Math.random() * 3.5, leben: 1, g: 0.6 + Math.random() * 1.4 });
-    }
-  }
-
-  tick(jetzt) {
-    // Panel verdeckt (Spiel im Vollbild): nichts zeichnen, nur selten nachschauen
-    if (window.klausPause) {
-      this.letzte = jetzt;
-      setTimeout(() => requestAnimationFrame((z) => this.tick(z)), 500);
-      return;
-    }
-    // Ruhezustand: 30 statt 60 Bilder pro Sekunde reichen fuers Atmen
-    if (this.zustand === "aus" && this.pegelZiel < 0.02 && !this.blitz && jetzt - this.letzte < 30) {
-      requestAnimationFrame((z) => this.tick(z));
-      return;
-    }
-    const dt = Math.min(0.05, (jetzt - this.letzte) / 1000);
-    this.letzte = jetzt;
-    this.t += dt;
-    this.pegel += (this.pegelZiel - this.pegel) * 0.3;
-    this.blitz = Math.max(0, this.blitz - dt * 1.3);
-    const ziel = ORB_FARBEN[this.zustand] || ORB_FARBEN.aus;
-    this.farbe = this.farbe.map((w, i) => w + (ziel[i] - w) * 0.08);
-
-    const tempo = { aus: 0.12, start: 0.6, hoeren: 0.5, denken: 2.6, sprechen: 0.9, aktion: 1.6, fehler: 0.3, freigabe: 0.45, fertig: 1.1 }[this.zustand] ?? 0.3;
-    this.drehung += dt * tempo * (this.ruhig ? 0.2 : 1);
-
-    for (const f of this.funken) { f.r += f.v * dt * 60 * 0.9; f.v *= 0.965; f.leben -= dt * 1.1; }
-    this.funken = this.funken.filter((f) => f.leben > 0);
-
-    // Equalizer: jedes Segment folgt einer eigenen Welle, skaliert mit der Lautstaerke
-    for (let i = 0; i < this.segmente.length; i++) {
-      const welle = 0.5 + 0.5 * Math.sin(i * 0.9 + this.t * 7) * Math.sin(i * 0.37 - this.t * 3.1);
-      let zielwert = this.pegel * (0.35 + 0.65 * welle);
-      if (this.zustand === "denken") zielwert = 0.5 + 0.5 * Math.sin(i * 0.52 - this.t * 9);
-      if (this.zustand === "aus") zielwert = 0.12 + 0.1 * Math.sin(i * 0.26 + this.t * 1.2);
-      this.segmente[i] += (zielwert - this.segmente[i]) * 0.25;
-    }
-    this.zeichne();
-    requestAnimationFrame((z) => this.tick(z));
+  // Lage des Kerns in CSS-Pixeln der Canvas: Mitte, aeusserer Ring (gehaeuse) und innerer Ring (linse)
+  geometrie() {
+    const w = this.c.clientWidth, h = this.c.clientHeight, r = (Math.min(w, h) / 2) * this.platz;
+    return { mx: w / 2, my: h / 2, gehaeuse: r * 0.95, linse: r * 0.37 };
   }
 
   rgba(a, hell = 0) {
@@ -125,151 +82,161 @@ class KlausOrb {
     return `rgba(${r | 0},${g | 0},${b | 0},${Math.max(0, Math.min(1, a))})`;
   }
 
-  zeichne() {
+  tick(jetzt) {
+    // Panel verdeckt (Spiel im Vollbild): nichts zeichnen, nur selten nachschauen
+    if (window.klausPause || document.hidden) {
+      this.letzte = jetzt;
+      setTimeout(() => requestAnimationFrame((z) => this.tick(z)), 500);
+      return;
+    }
+    const aktiv = this.zustand !== "aus" || this.burst >= 0 || this.pegelZiel > 0.02;
+    if (jetzt - this.letzte < (this.ruhig ? 110 : aktiv ? 15 : 48)) {  // Ruhe: ~20 Bilder/s reichen fuers Atmen
+      requestAnimationFrame((z) => this.tick(z));
+      return;
+    }
+    const dt = Math.min(0.064, (jetzt - this.letzte) / 1000);
+    this.letzte = jetzt;
+    this.t += dt;
+    this.pegel += (this.pegelZiel - this.pegel) * 0.3;
+    const ziel = ORB_FARBEN[this.zustand] || ORB_FARBEN.aus, k = Math.min(1, dt * 4);
+    this.farbe = this.farbe.map((w, i) => w + (ziel[i] - w) * k);
+    const tempo = { aus: 1, start: 1.4, hoeren: 1.6, denken: 7, sprechen: 2, aktion: 3.2, freigabe: 0.6, fertig: 2, fehler: 0.4 }[this.zustand] ?? 1;
+    if (!this.ruhig) { this.drehA += dt * 0.10 * tempo; this.drehB -= dt * 0.16 * tempo; this.drehC += dt * 0.42 * tempo; }
+    this.zeichne(jetzt);
+    requestAnimationFrame((z) => this.tick(z));
+  }
+
+  // Statische Skala (weiss, dezent) einmal pro Pixelgroesse vorzeichnen; pro Bild nur gedreht eingeblendet
+  baueStatisch(px) {
+    const c = document.createElement("canvas");
+    c.width = c.height = px;
+    const x = c.getContext("2d");
+    x.scale(px / 600, px / 600);
+    const cx = 300, cy = 300, voll = Math.PI * 2;
+    x.lineWidth = 1;
+    for (const [r, a] of [[284, 0.10], [226, 0.07], [128, 0.08]]) {
+      x.beginPath(); x.arc(cx, cy, r, 0, voll); x.strokeStyle = `rgba(255,255,255,${a})`; x.stroke();
+    }
+    // Skala: 120 Striche, jeder 10. lang
+    for (const lang of [true, false]) {
+      x.beginPath();
+      for (let i = 0; i < 120; i++) {
+        if ((i % 10 === 0) !== lang) continue;
+        const a = (i / 120) * voll, l = lang ? 11 : 4;
+        x.moveTo(cx + Math.cos(a) * (268 - l), cy + Math.sin(a) * (268 - l));
+        x.lineTo(cx + Math.cos(a) * 268, cy + Math.sin(a) * 268);
+      }
+      x.strokeStyle = lang ? "rgba(255,255,255,.38)" : "rgba(255,255,255,.14)";
+      x.stroke();
+    }
+    this.statisch = { px, skala: c };
+  }
+
+  // Segmentring als zwei Pfade (jedes 6. Segment heller)
+  segRing(r, breite, n, fuell, dreh, farbe, alpha) {
+    const ctx = this.ctx, schritt = (Math.PI * 2) / n;
+    ctx.save(); ctx.translate(300, 300); ctx.rotate(dreh);
+    ctx.lineWidth = breite; ctx.strokeStyle = farbe;
+    for (const hell of [true, false]) {
+      ctx.globalAlpha = alpha * (hell ? 1 : 0.55);
+      ctx.beginPath();
+      for (let i = hell ? 0 : 1; i < n; i += hell ? 6 : 1) {
+        if (!hell && i % 6 === 0) continue;
+        const a = i * schritt;
+        ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+        ctx.arc(0, 0, r, a, a + schritt * fuell);
+      }
+      ctx.stroke();
+    }
+    ctx.restore(); ctx.globalAlpha = 1;
+  }
+
+  // Leuchtende Boegen: breiter weicher Schein + duenne helle Linie
+  boegen(r, anzahl, spanne, dreh, breite, farbe, alpha) {
+    const ctx = this.ctx, schritt = (Math.PI * 2) / anzahl;
+    for (const [b, a] of [[breite * 4, alpha * 0.14], [breite, alpha]]) {
+      ctx.beginPath();
+      for (let i = 0; i < anzahl; i++) {
+        const s = dreh + i * schritt;
+        ctx.moveTo(300 + Math.cos(s) * r, 300 + Math.sin(s) * r);
+        ctx.arc(300, 300, r, s, s + spanne);
+      }
+      ctx.lineWidth = b; ctx.strokeStyle = farbe(a); ctx.stroke();
+    }
+  }
+
+  zeichne(jetzt) {
     const { c, ctx } = this;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(1.5, window.devicePixelRatio || 1);
     const w = c.clientWidth, h = c.clientHeight;
     if (!w || !h) return;
     if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    // Aeusserstes Element (Gradzahlen) liegt bei ca. 225 Einheiten -> so skalieren, dass es gerade in die Flaeche passt
-    const mx = w / 2, my = h / 2, s = (Math.min(w, h) / 460) * this.platz;
-    const aktiv = this.zustand !== "aus";
-    const atem = 0.5 + 0.5 * Math.sin(this.t * 1.4);
-    const energie = aktiv ? 0.55 + this.pegel * 0.45 : 0.28 + atem * 0.08;
-    const r0 = 60 * s;
-    const voll = Math.PI * 2;
+    const groesse = Math.min(w, h) * this.platz, px = Math.max(64, Math.round(groesse * dpr));
+    if (!this.statisch || this.statisch.px !== px) this.baueStatisch(px);
+    const u = (groesse / 600) * dpr;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.setTransform(u, 0, 0, u, (w * dpr - groesse * dpr) / 2, (h * dpr - groesse * dpr) / 2);
+    const cx = 300, cy = 300, voll = Math.PI * 2, t = this.t, z = this.zustand;
+    const col = this.farbe;
+    const rgba = (a, hell = 0) => `rgba(${(col[0] + (255 - col[0]) * hell) | 0},${(col[1] + (255 - col[1]) * hell) | 0},${(col[2] + (255 - col[2]) * hell) | 0},${Math.max(0, Math.min(1, a))})`;
+
+    // Energie des Kerns je Zustand
+    let pu;
+    if (z === "hoeren" || z === "start") pu = 0.9 + this.pegel * 0.6;
+    else if (z === "sprechen") pu = 0.95 + this.pegel * 0.5;
+    else if (z === "denken") pu = 1.05 + 0.1 * Math.sin(t * 9);
+    else if (z === "freigabe") pu = 1 + 0.2 * (0.5 + 0.5 * Math.sin(t * 5.6));
+    else if (z === "aktion" || z === "fertig") pu = 1.1 + 0.05 * Math.sin(t * 4);
+    else if (z === "fehler") pu = 0.8 + 0.05 * Math.sin(t * 3);
+    else pu = 1 + 0.07 * Math.sin((t * Math.PI * 2) / 5);   // Atmen
 
     ctx.globalCompositeOperation = "lighter";
-
-    // 1) Weiter Lichtschein
-    let g = ctx.createRadialGradient(mx, my, r0 * 0.4, mx, my, r0 * 3.4);
-    g.addColorStop(0, this.rgba(0.24 * energie));
-    g.addColorStop(0.35, this.rgba(0.1 * energie));
-    g.addColorStop(1, this.rgba(0));
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(mx, my, r0 * 3.4, 0, voll); ctx.fill();
-
-    // 2) Ruhiger Rahmen ums Auge: ein feiner Fuehrungsring, zwei langsame Boegen, dezenter Radar-Schein
-    const ring1 = r0 + 44 * s, ring2 = r0 + 78 * s;
-    ctx.strokeStyle = this.rgba(aktiv ? 0.16 : 0.08);
-    ctx.lineWidth = 1 * s;
-    ctx.beginPath(); ctx.arc(mx, my, ring2, 0, voll); ctx.stroke();
-    if (aktiv && ctx.createConicGradient) {
-      const a = this.t * 1.1, kegel = ctx.createConicGradient(a, mx, my);
-      kegel.addColorStop(0, this.rgba(0.12)); kegel.addColorStop(0.1, this.rgba(0)); kegel.addColorStop(1, this.rgba(0));
-      ctx.fillStyle = kegel;
-      ctx.beginPath(); ctx.arc(mx, my, ring2, 0, voll); ctx.fill();
-    }
-    [[ring1, 0.8, 1.6], [ring2, -0.5, 0.9]].forEach(([r, v, spanne], i) => {
-      ctx.strokeStyle = this.rgba(aktiv ? 0.7 - i * 0.2 : 0.3 - i * 0.08, 0.15);
-      ctx.lineWidth = (i ? 1.2 : 1.8) * s;
-      ctx.lineCap = "round";
-      for (const versatz of [0, Math.PI]) {
-        const a = this.drehung * v + versatz;
-        ctx.beginPath(); ctx.arc(mx, my, r, a, a + spanne); ctx.stroke();
-      }
-    });
-
-    // 3) Audio-Pegel: feine Balken unter dem Auge
-    if (s > 0.4) {
-      const balken = 32, breite = 120 * s, an = this.pegel * balken;
-      const y = this.pegelAbstand ? my + Math.min(w, h) * this.pegelAbstand - 6 * s : my + r0 + 120 * s;
-      for (let i = 0; i < balken; i++) {
-        const voll_ = i < an, hoehe = (voll_ ? 4 + Math.min(1, an - i) * 6 : 2) * s;
-        ctx.fillStyle = voll_ ? this.rgba(0.9, 0.3) : this.rgba(0.14);
-        ctx.fillRect(mx - breite / 2 + (i * breite) / balken, y - hoehe / 2, 1.6 * s, hoehe);
-      }
-    }
-
-    // 7) HAL-Auge: Spektrum-Kranz, Metallgehaeuse, Glaslinse mit gluehender Pupille, Reflexe
-    const gehaeuse = r0 + 16 * s, linse = r0;
-    // Spektrum-Kranz: 64 feine Striche ums Gehaeuse, Laenge = Stimme bzw. Denk-Welle
-    ctx.lineCap = "round";
-    for (let i = 0; i < 64; i++) {
-      const wert = this.segmente[i % this.segmente.length];
-      const a = (i / 64) * voll - Math.PI / 2;
-      const innen = gehaeuse + 7 * s, laenge = (2 + wert * 20) * s;
-      ctx.strokeStyle = this.rgba(0.18 + wert * 0.8, wert * 0.4);
-      ctx.lineWidth = 1.6 * s;
-      ctx.beginPath();
-      ctx.moveTo(mx + Math.cos(a) * innen, my + Math.sin(a) * innen);
-      ctx.lineTo(mx + Math.cos(a) * (innen + laenge), my + Math.sin(a) * (innen + laenge));
-      ctx.stroke();
-    }
-
-    ctx.globalCompositeOperation = "source-over";
-    // Gehaeuse: dunkles gebuerstetes Metall
-    g = ctx.createRadialGradient(mx, my - gehaeuse * 0.3, gehaeuse * 0.2, mx, my, gehaeuse);
-    g.addColorStop(0, "#2a2b30"); g.addColorStop(0.75, "#141519"); g.addColorStop(1, "#060607");
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(mx, my, gehaeuse, 0, voll); ctx.fill();
-    // Chromkante: oben hell, unten dunkel
-    const chrom = ctx.createLinearGradient(mx, my - gehaeuse, mx, my + gehaeuse);
-    chrom.addColorStop(0, "rgba(255,255,255,0.55)"); chrom.addColorStop(0.5, "rgba(120,120,130,0.25)"); chrom.addColorStop(1, "rgba(0,0,0,0.6)");
-    ctx.strokeStyle = chrom; ctx.lineWidth = 2.4 * s;
-    ctx.beginPath(); ctx.arc(mx, my, gehaeuse - 1.2 * s, 0, voll); ctx.stroke();
-    ctx.strokeStyle = "rgba(0,0,0,0.9)"; ctx.lineWidth = 3 * s;
-    ctx.beginPath(); ctx.arc(mx, my, linse + 1.5 * s, 0, voll); ctx.stroke();
-
-    // Linse: schwarzes Glas, innen gluehend. Pupille weitet sich mit der Stimme, pulsiert beim Denken.
-    const denkPuls = this.zustand === "denken" ? 0.5 + 0.5 * Math.sin(this.t * 7) : 0;
-    const pupille = Math.min(0.62, 0.2 + this.pegel * 0.3 + atem * 0.03 + denkPuls * 0.1 + (aktiv ? 0.05 : 0));
-    const dunkel = (f, a) => `rgba(${this.farbe[0] * f | 0},${this.farbe[1] * f | 0},${this.farbe[2] * f | 0},${a})`;
-    g = ctx.createRadialGradient(mx, my, 0, mx, my, linse);
-    g.addColorStop(0, this.rgba(1, 0.75));
-    g.addColorStop(pupille * 0.35, this.rgba(1, 0.35));
-    g.addColorStop(pupille, dunkel(0.95, 1));
-    g.addColorStop(Math.min(0.9, pupille + 0.25), dunkel(0.35, 1));
-    g.addColorStop(0.92, dunkel(0.08, 1));
-    g.addColorStop(1, "rgba(0,0,0,1)");
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(mx, my, linse, 0, voll); ctx.fill();
-
-    // Linsen-Elemente: feine konzentrische Ringe im Glas
-    ctx.globalCompositeOperation = "lighter";
-    for (const [f, a] of [[0.34, 0.16], [0.55, 0.1], [0.76, 0.07]]) {
-      ctx.strokeStyle = this.rgba(a * (0.7 + energie * 0.6), 0.2);
-      ctx.lineWidth = 1 * s;
-      ctx.beginPath(); ctx.arc(mx, my, linse * f, 0, voll); ctx.stroke();
-    }
-    // Lichtschein der Pupille
-    g = ctx.createRadialGradient(mx, my, 0, mx, my, linse * (pupille + 0.15));
-    g.addColorStop(0, this.rgba(0.55 + energie * 0.35, 0.5));
-    g.addColorStop(1, this.rgba(0));
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(mx, my, linse, 0, voll); ctx.fill();
-
-    // Glasreflexe: weicher Glanz oben, heller Bogen links oben, zwei Lichtpunkte
-    ctx.globalCompositeOperation = "source-over";
-    ctx.save();
-    ctx.beginPath(); ctx.arc(mx, my, linse, 0, voll); ctx.clip();
-    g = ctx.createLinearGradient(mx, my - linse, mx, my);
-    g.addColorStop(0, "rgba(255,255,255,0.13)"); g.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.ellipse(mx, my - linse * 0.42, linse * 0.82, linse * 0.5, 0, 0, voll); ctx.fill();
+    // Skala (statisch, langsam gedreht)
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(this.drehA * 0.3); ctx.translate(-cx, -cy);
+    ctx.drawImage(this.statisch.skala, 0, 0, 600, 600);
     ctx.restore();
-    ctx.strokeStyle = "rgba(255,255,255,0.38)"; ctx.lineWidth = 2.6 * s; ctx.lineCap = "round";
-    ctx.beginPath(); ctx.arc(mx, my, linse * 0.8, Math.PI * 1.08, Math.PI * 1.36); ctx.stroke();
-    ctx.fillStyle = "rgba(255,255,255,0.75)";
-    ctx.beginPath(); ctx.arc(mx - linse * 0.36, my - linse * 0.5, 2.6 * s, 0, voll); ctx.fill();
-    ctx.fillStyle = "rgba(255,255,255,0.3)";
-    ctx.beginPath(); ctx.arc(mx + linse * 0.42, my + linse * 0.4, 1.6 * s, 0, voll); ctx.fill();
-    ctx.globalCompositeOperation = "lighter";
 
-    // 8) Schockwelle + Funken bei Aktionen
-    if (this.blitz > 0) {
-      ctx.strokeStyle = `rgba(255,255,255,${this.blitz * 0.8})`;
-      ctx.lineWidth = (6 * this.blitz + 1) * s;
-      ctx.beginPath(); ctx.arc(mx, my, r0 + (1 - this.blitz) * 170 * s, 0, voll); ctx.stroke();
-    }
-    for (const f of this.funken) {
-      const r = r0 + f.r * s * 3;
-      ctx.fillStyle = this.rgba(f.leben, 0.6);
-      ctx.beginPath(); ctx.arc(mx + Math.cos(f.w) * r, my + Math.sin(f.w) * r, f.g * f.leben * 1.6 * s, 0, voll); ctx.fill();
+    // Abtast-Kegel beim Denken/Ausfuehren
+    if ((z === "denken" || z === "aktion") && ctx.createConicGradient) {
+      const kegel = ctx.createConicGradient(this.drehC * 2, cx, cy);
+      kegel.addColorStop(0, rgba(0.22)); kegel.addColorStop(0.12, rgba(0)); kegel.addColorStop(1, rgba(0));
+      ctx.fillStyle = kegel; ctx.beginPath(); ctx.arc(cx, cy, 262, 0, voll); ctx.fill();
     }
 
+    // Aeussere Ringe: zwei duenne Boegen, Segmentring, drei lange Lichtboegen
+    this.boegen(244, 2, 1.6, -this.drehA * 0.8, 1.4, rgba, 0.55);
+    this.segRing(204, 6, 36, 0.78, this.drehA, rgba(1), 0.22 + 0.14 * pu);
+    this.segRing(204, 1.2, 36, 0.78, this.drehA, rgba(1, 0.5), 0.55);
+    this.boegen(164, 3, 0.9, this.drehB, 3, rgba, 0.85);
+    this.segRing(110, 1.5, 60, 0.5, -this.drehB * 1.4, rgba(1, 0.3), 0.5);
+
+    // Kern: weiches Leuchten, heller Mittelpunkt, Rand, Plasma-Boegen
+    const r = 150 * pu;
+    let g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, "rgba(255,255,255,1)");
+    g.addColorStop(0.07, rgba(1, 0.75));
+    g.addColorStop(0.2, rgba(0.85, 0.15));
+    g.addColorStop(0.45, rgba(0.28));
+    g.addColorStop(1, rgba(0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r, 0, voll); ctx.fill();
+    ctx.lineWidth = 8; ctx.strokeStyle = rgba(0.12 * pu);
+    ctx.beginPath(); ctx.arc(cx, cy, 48 * pu, 0, voll); ctx.stroke();
+    ctx.lineWidth = 1.6; ctx.strokeStyle = rgba(0.85, 0.4);
+    ctx.beginPath(); ctx.arc(cx, cy, 48 * pu, 0, voll); ctx.stroke();
+    this.boegen(72 * (0.9 + pu * 0.1), 3, 1.1, this.drehC * 3, 2.4, (a) => rgba(a, 0.3), 0.8);
+    this.boegen(86, 4, 0.35, -this.drehC * 2, 1.2, rgba, 0.6);
+
+    // Ring-Burst bei Ausfuehren/Fertig
+    if (this.burst >= 0) {
+      const p = (jetzt - this.burst) / 1100;
+      if (p > 1) this.burst = -1;
+      else {
+        const e = 1 - Math.pow(1 - p, 3);
+        ctx.beginPath(); ctx.arc(cx, cy, 200 + e * 90, 0, voll); ctx.lineWidth = 6 * (1 - p) + 0.5; ctx.strokeStyle = rgba(1 - p); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx, cy, 200 + e * 56, 0, voll); ctx.lineWidth = 1; ctx.strokeStyle = `rgba(255,255,255,${(1 - p) * 0.8})`; ctx.stroke();
+      }
+    }
     ctx.globalCompositeOperation = "source-over";
   }
 }

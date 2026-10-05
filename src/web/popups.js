@@ -3,7 +3,7 @@
 // Arten: log (Live-Log), pipeline (Phasen-Checkliste), karte (Lead-Karte), entwurf (Brief tippt sich live).
 
 const holoPopups = {};   // id -> { item, m, art, ansicht, linie, zuletzt, dauer, angefasst }
-const POPUP_GROESSE = { log: [0.23, 0.26], pipeline: [0.2, 0.3], karte: [0.27, 0.44], entwurf: [0.24, 0.42] };
+const POPUP_GROESSE = { log: [0.27, 0.3], pipeline: [0.27, 0.38], karte: [0.33, 0.46], entwurf: [0.3, 0.44] };
 const POPUP_DAUER = { log: 25, pipeline: 90, karte: 120, entwurf: 120 };  // Sekunden ohne Neuigkeit -> schliesst sich
 const POPUP_TITEL = { log: "LIVE LOG", pipeline: "PIPELINE", karte: "LEAD MAP", entwurf: "BRIEF-ENTWURF" };
 let popupSchleifeLaeuft = false;
@@ -35,22 +35,23 @@ function holoBefehl(json) {
 
 // Wo sitzt das Auge? (Mitte der Klaus-Buehne in Koordinaten der Arbeitsflaeche) + Radius fuer den Linienstart
 function holoKern(flaeche) {
-  const F = flaeche.getBoundingClientRect(), buehne = document.querySelector(".klaus .buehne");
-  if (!buehne || !buehne.isConnected) return { x: F.width / 2, y: F.height / 2, r: 60 };
-  const b = buehne.getBoundingClientRect();
-  return { x: b.left + b.width / 2 - F.left, y: b.top + b.height / 2 - F.top, r: Math.min(b.width, b.height) * 0.13 };
+  const F = flaeche.getBoundingClientRect(), auge = document.querySelector(".klaus .auge-platz");
+  if (!auge || !auge.isConnected) return { x: F.width / 2, y: F.height / 2, r: 60 };
+  const b = auge.getBoundingClientRect();
+  return { x: b.left + b.width / 2 - F.left, y: b.top + b.height / 2 - F.top, r: b.width * 0.445 };
 }
 
-// Freier Platz rund ums Auge: erst die vier Diagonalen, dann links/rechts daneben, sonst versetzt gestapelt
+// Freier Platz rund ums Auge: links/rechts mit deutlichem Abstand zum Gehaeuse (lange Leuchtlinien),
+// erst oben, dann unten, dann unter dem Auge; sonst versetzt gestapelt
 function popupPlatz(art, flaeche) {
   const [w, h] = POPUP_GROESSE[art] || [0.22, 0.3];
   const F = flaeche.getBoundingClientRect(), k = holoKern(flaeche);
-  const kx = k.x / F.width, ky = k.y / F.height;
+  const kx = k.x / F.width, kr = k.r / F.width, luecke = 0.055;
   const offen = Object.values(holoPopups).map((p) => p.m);
-  const kandidaten = [[-1, -1], [1, -1], [-1, 1], [1, 1], [-1.6, 0], [1.6, 0]].map(([dx, dy]) => {
-    const x = Math.max(0, Math.min(1 - w, kx + dx * 0.25 - w / 2)), y = Math.max(0, Math.min(1 - h, ky + dy * 0.25 - h / 2));
-    return { x, y, w, h };
-  });
+  const links = Math.max(0.005, kx - kr - luecke - w), rechts = Math.min(0.995 - w, kx + kr + luecke);
+  const oben = 0.02, unten = Math.max(oben, 0.98 - h);
+  const kandidaten = [[links, oben], [rechts, oben], [links, unten], [rechts, unten], [(1 - w) / 2, unten]]
+    .map(([x, y]) => ({ x, y, w, h }));
   const frei = kandidaten.find((r) => !offen.some((o) => holoUeberlappt(r, o)));
   if (frei) return frei;
   const n = offen.length;
@@ -117,7 +118,8 @@ function popupLinie(flaeche) {
   }
   const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
   g.setAttribute("class", "holo-linie");
-  g.innerHTML = `<path class="hl-grund" pathLength="1"/><path class="hl-fluss"/><circle class="hl-knoten" r="3.5"/><circle class="hl-start" r="2.5"/>`;
+  g.innerHTML = `<path class="hl-grund" pathLength="1"/><path class="hl-kern" pathLength="1"/><path class="hl-fluss"/>`
+    + `<circle class="hl-knoten" r="4"/><circle class="hl-knoten-i" r="1.6"/><circle class="hl-start" r="4"/><circle class="hl-start-i" r="1.6"/>`;
   svg.append(g);
   return g;
 }
@@ -132,18 +134,26 @@ function popupSchleife() {
   for (const [id, p] of offen) {
     const r = p.item.getBoundingClientRect();
     const l = r.left - F.left + 5, t = r.top - F.top + 5, rr = r.right - F.left - 5, u = r.bottom - F.top - 5;
-    // naechster Punkt auf dem Fensterrand zum Auge
-    const px = Math.max(l, Math.min(rr, k.x)), py = Math.max(t, Math.min(u, k.y));
-    const winkel = Math.atan2(py - k.y, px - k.x), sx = k.x + Math.cos(winkel) * k.r, sy = k.y + Math.sin(winkel) * k.r;
-    // leicht gebogen: Kontrollpunkt seitlich versetzt
-    const mx = (sx + px) / 2 - (py - sy) * 0.12, my = (sy + py) / 2 + (px - sx) * 0.12;
-    const d = `M${sx.toFixed(1)},${sy.toFixed(1)} Q${mx.toFixed(1)},${my.toFixed(1)} ${px.toFixed(1)},${py.toFixed(1)}`;
+    // Anker am Fensterrand, der zum Auge zeigt; seitlich mit Knick (erst radial raus, dann waagerecht hinein)
+    let ax, ay, knick = null;
+    if (rr < k.x - k.r * 0.6 || l > k.x + k.r * 0.6) {
+      const rechtsVomAuge = l > k.x;
+      ax = rechtsVomAuge ? l : rr;
+      ay = Math.max(t + 30, Math.min(u - 30, k.y + ((t + u) / 2 - k.y) * 0.5));
+      knick = { x: ax + (rechtsVomAuge ? -46 : 46), y: ay };
+    } else {
+      ax = Math.max(l + 20, Math.min(rr - 20, k.x));
+      ay = t > k.y ? t : u;
+    }
+    const ziel = knick || { x: ax, y: ay };
+    const winkel = Math.atan2(ziel.y - k.y, ziel.x - k.x), sx = k.x + Math.cos(winkel) * k.r, sy = k.y + Math.sin(winkel) * k.r;
+    const d = `M${sx.toFixed(1)} ${sy.toFixed(1)}` + (knick ? `L${knick.x.toFixed(1)} ${knick.y.toFixed(1)}` : "") + `L${ax.toFixed(1)} ${ay.toFixed(1)}`;
     if (p.linie._d !== d) {
       p.linie._d = d;
       p.linie.querySelectorAll("path").forEach((pfad) => pfad.setAttribute("d", d));
-      const [knoten, start] = p.linie.querySelectorAll("circle");
-      knoten.setAttribute("cx", px); knoten.setAttribute("cy", py);
-      start.setAttribute("cx", sx); start.setAttribute("cy", sy);
+      const [kn, kni, st, sti] = p.linie.querySelectorAll("circle");
+      for (const c of [kn, kni]) { c.setAttribute("cx", ax); c.setAttribute("cy", ay); }
+      for (const c of [st, sti]) { c.setAttribute("cx", sx); c.setAttribute("cy", sy); }
     }
     if (++popupZaehler % 30 === 0 && !p.angefasst && Date.now() - p.zuletzt > p.dauer * 1000) popupZu(id);
   }
@@ -171,10 +181,13 @@ const POPUP_ARTEN = {
       update(d) {
         if (!d.zeile) return;
         const z = el("div", "p-zeile");
-        z.append(el("span", "p-zeit", new Date().toLocaleTimeString("de-DE")), el("span", "p-text"));
+        const text = d.zeile.replace(/^klesro:\/\//, ""), leer = text.indexOf(" ");
+        const pfad = leer < 0 ? text : text.slice(0, leer), rest = leer < 0 ? "" : text.slice(leer);
+        const stufe = /fehler|error|fault|abgebrochen/i.test(rest) ? " schlecht" : /wartet|freigabe|auth/i.test(rest) ? " warten"
+          : /\bok\b|fertig|erstellt|gefunden|keine website|complete/i.test(rest) ? " gut" : "";
+        z.append(el("span", "p-zeit", new Date().toLocaleTimeString("de-DE")), el("span", "p-pfad", `klesro://${pfad}`), el("span", "p-text" + stufe));
         liste.append(z);
-        const text = d.zeile.startsWith("klesro://") ? d.zeile : `klesro://${d.zeile}`;
-        holoTippen(z.lastChild, text, 2, 12, () => { box.scrollTop = box.scrollHeight; });
+        holoTippen(z.lastChild, rest, 2, 12, () => { box.scrollTop = box.scrollHeight; });
         while (liste.children.length > 80) liste.firstChild.remove();
         box.scrollTop = box.scrollHeight;
       },
@@ -183,22 +196,34 @@ const POPUP_ARTEN = {
 
   // Phasen-Checkliste: PENDING -> RUNNING (Spinner) -> COMPLETE
   pipeline(box) {
-    const liste = el("div", "p-pipe");
-    box.append(liste);
+    const liste = el("div", "p-pipe"), fuss = el("div", "p-pipe-fuss");
+    fuss.innerHTML = '<div class="p-balken"><i></i></div><div class="p-pipe-zahlen"><span></span><span></span></div>';
+    box.append(liste, fuss);
     const zeilen = [];
     const TEXT = { pending: "PENDING", running: "RUNNING", complete: "COMPLETE", fehler: "FAULT", warten: "AWAITING AUTH", uebersprungen: "SKIPPED" };
+    const fortschritt = (schritte) => {
+      const n = schritte.length || 1, fertig = schritte.filter((x) => ["complete", "uebersprungen"].includes(x.status)).length;
+      const pct = Math.round(((fertig + (schritte.some((x) => x.status === "running") ? 0.5 : 0)) / n) * 100);
+      fuss.querySelector("i").style.width = `${pct}%`;
+      const [links, rechts] = fuss.querySelectorAll("span");
+      links.textContent = fertig === n ? "ABGESCHLOSSEN" : `${fertig} / ${n} SCHRITTE`;
+      rechts.textContent = `${pct} %`;
+    };
     return {
       update(d) {
+        if (d.schritte) fortschritt(d.schritte);
         (d.schritte || []).forEach((s, i) => {
           let z = zeilen[i];
           if (!z) {
             z = el("div", "p-schritt");
             z.style.animationDelay = `${i * 90}ms`;
-            z.append(el("i", "p-punkt"), el("span", "p-name"), el("span", "p-info"), el("b", "p-status"));
+            const name = el("span", "p-name");
+            name.append(el("span", "p-name-text"), el("small", "p-info"));
+            z.append(el("i", "p-punkt"), name, el("b", "p-status"));
             liste.append(z);
             zeilen[i] = z;
           }
-          z.querySelector(".p-name").textContent = s.name;
+          z.querySelector(".p-name-text").textContent = s.name;
           z.querySelector(".p-info").textContent = s.info || "";
           const status = s.status || "pending";
           if (z.dataset.status !== status) {
@@ -213,13 +238,22 @@ const POPUP_ARTEN = {
 
   // Brief tippt sich live
   entwurf(box) {
-    const betreff = el("div", "p-betreff"), text = el("div", "p-brief");
-    box.append(betreff, text);
+    box.classList.add("p-entwurf");
+    const kopf = el("dl", "p-brief-kopf"), text = el("div", "p-brief"), fuss = el("div", "p-brief-fuss");
+    kopf.innerHTML = '<dt>BETREFF</dt><dd class="p-betreff"></dd>';
+    fuss.innerHTML = "<span>DIN 5008 · A4</span><span></span>";
+    box.append(kopf, text, fuss);
+    const woerter = fuss.lastChild;
     return {
       update(d) {
-        betreff.textContent = d.betreff || "";
-        holoTippen(text, d.text || "", 3, 16, () => {});
-        const folgen = setInterval(() => { box.scrollTop = box.scrollHeight; if (!text._tipp || !box.isConnected) clearInterval(folgen); }, 200);
+        kopf.querySelector(".p-betreff").textContent = d.betreff || "–";
+        text.classList.add("tippt");
+        holoTippen(text, d.text || "", 3, 16, () => text.classList.remove("tippt"));
+        const folgen = setInterval(() => {
+          text.scrollTop = text.scrollHeight;
+          woerter.textContent = `${text.textContent.split(/\s+/).filter(Boolean).length} WÖRTER`;
+          if (!text.classList.contains("tippt") || !box.isConnected) clearInterval(folgen);
+        }, 120);
       },
     };
   },
@@ -254,12 +288,12 @@ const POPUP_ARTEN = {
         for (let y = (h / 2) % 24; y < h; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
         const [mx, my, pxKm] = proj(d.mitte[0], d.mitte[1], w, h);
         // Entfernungsringe
-        ctx.font = "9px Consolas, monospace"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+        ctx.font = "10px 'JetBrains Mono', Consolas, monospace"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
         for (const km of [5, 10, d.radius_km].filter((v, i, a) => a.indexOf(v) === i && v <= d.radius_km)) {
           ctx.strokeStyle = f(km === d.radius_km ? 0.35 : 0.15);
           ctx.setLineDash(km === d.radius_km ? [] : [3, 5]);
           ctx.beginPath(); ctx.arc(mx, my, km * pxKm, 0, Math.PI * 2); ctx.stroke();
-          ctx.fillStyle = f(0.4); ctx.fillText(`${km} KM`, mx + km * pxKm + 4, my);
+          ctx.fillStyle = f(0.55); ctx.fillText(`${km} KM`, mx + 4, my - km * pxKm - 7);
         }
         ctx.setLineDash([]);
         // Radar-Sweep
@@ -269,13 +303,13 @@ const POPUP_ARTEN = {
           kegel.addColorStop(0, f(0)); kegel.addColorStop(0.095, f(0.16)); kegel.addColorStop(0.1, f(0));
           ctx.fillStyle = kegel; ctx.beginPath(); ctx.arc(mx, my, d.radius_km * pxKm, 0, Math.PI * 2); ctx.fill();
         }
-        // Orte
-        ctx.textAlign = "center";
+        // Orte (nur Punkte; die Namen kommen nach den Markern, damit sie lesbar bleiben)
+        const orte = [];
         for (const [name, lat, lon] of KARTEN_ORTE) {
           const [x, y] = proj(lat, lon, w, h);
           if (x < 0 || y < 0 || x > w || y > h) continue;
-          ctx.fillStyle = f(0.3); ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
-          ctx.fillStyle = f(0.42); ctx.fillText(name.toUpperCase(), x, y - 9);
+          ctx.fillStyle = "rgba(255,235,230,.45)"; ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
+          orte.push([name, x, y]);
         }
         // Fadenkreuz in der Mitte
         ctx.strokeStyle = f(0.6);
@@ -296,6 +330,13 @@ const POPUP_ARTEN = {
           ctx.beginPath(); ctx.arc(x, y, 3 + puls * 14, 0, Math.PI * 2); ctx.stroke();
           ctx.fillStyle = farbe(0.95);
           ctx.beginPath(); ctx.arc(x, y, (gruen ? 3.6 : 3) * (0.4 + pop * 0.6) + (1 - pop) * 6, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.font = "500 11px 'Barlow SC', 'Segoe UI', sans-serif"; ctx.textAlign = "center"; ctx.lineJoin = "round";
+        ctx.strokeStyle = "rgba(4,2,2,.92)"; ctx.lineWidth = 3.5;
+        for (const [name, x, y] of orte) {
+          const ty = y < 14 ? y + 14 : y - 8, text = name.toUpperCase();
+          ctx.strokeText(text, x, ty);
+          ctx.fillStyle = "rgba(240,225,222,.72)"; ctx.fillText(text, x, ty);
         }
       }
       requestAnimationFrame(zeichne);

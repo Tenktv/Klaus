@@ -25,31 +25,71 @@ function holoTitel(ziel, text, dauer = 520) {
   requestAnimationFrame(schritt);
 }
 
-// Boot: Rahmen zeichnet sich Linie fuer Linie, Scanline wischt runter, Inhalt flackert auf, Titel entschluesselt
+// Rahmen (Stark Holo-Tech): abgeschraegte Ecken, Leuchtkante mit Glow, Lichtreflex oben links, zwei Eck-Ticks.
+// Als SVG neben dem Glas (.w), weil clip-path am Glas sonst den Glow abschneiden wuerde. Folgt jeder Groessenaenderung.
+const RAHMEN_ECKE = 14, RAHMEN_RAND = 12, FENSTER_PADDING = 5;
+function holoRahmen(fenster) {
+  const glas = fenster.querySelector(":scope > .w");
+  if (!glas || glas.classList.contains("frei") || fenster.querySelector(":scope > .rahmen")) return;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "rahmen");
+  svg.setAttribute("aria-hidden", "true");
+  glas.after(svg);
+  const zeichnen = () => {
+    const b = glas.offsetWidth, h = glas.offsetHeight;
+    if (!b || !h || svg._g === `${b}x${h}`) return;
+    svg._g = `${b}x${h}`;
+    const c = RAHMEN_ECKE, o = RAHMEN_RAND, x0 = o + 0.5, y0 = o + 0.5, w = b - 1, hh = h - 1;
+    svg.setAttribute("width", b + 2 * o); svg.setAttribute("height", h + 2 * o);
+    svg.style.left = svg.style.top = `${FENSTER_PADDING - o}px`;
+    const d = `M${x0 + c} ${y0}H${x0 + w}V${y0 + hh - c}L${x0 + w - c} ${y0 + hh}H${x0}V${y0 + c}Z`;
+    svg.style.setProperty("--len", Math.round(2 * (w + hh) - 4 * c + 2 * c * Math.SQRT2));
+    svg.innerHTML = `<path class="r-glow" d="${d}"/><path class="r-kante" d="${d}"/>`
+      + `<path class="r-reflex" d="M${o + c + 6} ${y0}H${o + Math.min(b * 0.42, 200)}" style="--len:300"/>`
+      + `<path class="r-tick" d="M${o + b - 30} ${o - 3}H${o + b + 3}V${o + 27}" style="--len:70"/>`
+      + `<path class="r-tick" d="M${o - 3} ${o + h - 26}V${o + h + 3}H${o + 30}" style="--len:70"/>`;
+  };
+  zeichnen();
+  new ResizeObserver(zeichnen).observe(glas);
+}
+
+// Seite fuer die leichte Neigung (3°): Fenster links vom Auge kippen nach rechts und umgekehrt. Web-Widgets nie
+// (die echte Browser-Ansicht darueber kann nicht mitkippen).
+function holoSeite(fenster, m) {
+  if (fenster.classList.contains("popup") || fenster.querySelector(".web-inhalt, .w.frei")) { delete fenster.dataset.seite; return; }
+  const mitte = m.x + m.w / 2;
+  if (mitte < 0.42) fenster.dataset.seite = "l";
+  else if (mitte > 0.58) fenster.dataset.seite = "r";
+  else delete fenster.dataset.seite;
+}
+
+// Boot: Rahmen zeichnet sich, Glas klappt aus einer Linie auf, Scanline wischt runter, Inhalt blendet ein, Titel entschluesselt
 function holoBoot(fenster, verzoegerung = 0) {
+  holoRahmen(fenster);
   if (HOLO_RUHIG) return;
   fenster.querySelectorAll(":scope > .hl").forEach((e) => e.remove());
-  for (const seite of ["o", "r", "u", "l", "scan"]) fenster.append(el("i", `hl hl-${seite}`));
+  fenster.append(el("i", "hl hl-scan"));
   fenster.style.setProperty("--v", `${verzoegerung}ms`);
   fenster.style.setProperty("--hoehe", `${fenster.clientHeight}px`);
   fenster.classList.remove("holo-aus");
+  fenster.classList.remove("holo-boot"); void fenster.offsetWidth;
   fenster.classList.add("holo-boot");
   const titel = fenster.querySelector(".w-titel");
-  if (titel) setTimeout(() => holoTitel(titel, titel.dataset.text || titel.textContent), verzoegerung + 380);
-  setTimeout(() => {
+  if (titel) setTimeout(() => holoTitel(titel, titel.dataset.text || titel.textContent), verzoegerung + 420);
+  clearTimeout(fenster._bootEnde);
+  fenster._bootEnde = setTimeout(() => {
     fenster.classList.remove("holo-boot");
     fenster.querySelectorAll(":scope > .hl").forEach((e) => e.remove());
-  }, verzoegerung + 1300);
+  }, verzoegerung + 1500);
 }
 
-// Schliessen: rueckwaerts - Inhalt faellt auf eine Linie zusammen, Rahmen zieht sich ein. -> Promise
+// Schliessen: rueckwaerts - Inhalt weg, Glas faellt auf eine Linie zusammen, Rahmen zieht sich ein. -> Promise
 function holoAus(fenster) {
   if (HOLO_RUHIG) return Promise.resolve();
   fenster.querySelectorAll(":scope > .hl").forEach((e) => e.remove());
-  for (const seite of ["o", "r", "u", "l"]) fenster.append(el("i", `hl hl-${seite}`));
   fenster.classList.remove("holo-boot");
   fenster.classList.add("holo-aus");
-  return new Promise((fertig) => setTimeout(fertig, 480));
+  return new Promise((fertig) => setTimeout(fertig, 620));
 }
 
 // Freies Ziehen am Griff + Groesse an der Ecke. flaeche = Arbeitsflaeche, m = Modell mit x/y/w/h (Anteile).
@@ -148,6 +188,7 @@ function holoLage(fenster, m) {
   const s = fenster.style;
   s.left = `${(m.x * 100).toFixed(3)}%`; s.top = `${(m.y * 100).toFixed(3)}%`;
   s.width = `${(m.w * 100).toFixed(3)}%`; s.height = `${(m.h * 100).toFixed(3)}%`;
+  holoSeite(fenster, m);
 }
 
 // Rechteck-Hilfen (Anteile)
