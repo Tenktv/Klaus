@@ -54,6 +54,7 @@ DESIGN_WOERTER = [
 # Widgets im Desktop-Panel per Sprache steuern (Typen wie in web/dashboard.html TYPEN)
 WIDGET_WOERTER = [
     (r"kalender|termine", "kalender", "Kalender"),
+    (r"depot\w*", "depot", "Papier-Depot"),
     (r"sicherheit\w*|defender", "sicherheit", "Sicherheit"),
     (r"uhr|zeit", "uhr", "Uhr"),
     (r"schnellstart|kacheln", "schnellstart", "Schnellstart"),
@@ -92,6 +93,11 @@ WIEDER_AN = re.compile(r"\b(wieder (an|da|zuh(ö|oe)ren|reden|aktiv)|aufwachen|w
 
 PLAN_THEMA = re.compile(r"(?P<was>.+?)\s+planen\b|einen plan (?:f(?:ü|ue)r|zu[mr]?)\s+(?P<was2>.+)$", re.I)  # Plan-Board (planer.py)
 WIDGET_NEU = re.compile(r"\b(?:erstell|mach|bau|leg)\w*\s+(?:mir\s+)?(?:ein(?:e|en)?\s+)?(?:neues\s+)?widget\s+(?:f(?:ü|ue)r|mit|zu|zum|zur|namens)?\s*(?P<was>.+)$", re.I)
+DEPOT_FRAGE = re.compile(r"\b(mein|das|im)\s+(papier-?)?depot\b|papierdepot", re.I)
+PAPIER_ORDER = re.compile(r"\b(?P<aktion>kauf|verkauf)\w*\s+(?:mir\s+)?(?:f(?:ü|ue)r\s+(?P<betrag>\d+)\s*(?:euro|€)\s+)?"
+                          r"(?:(?P<stueck>\d+)\s+(?:st(?:ü|ue)ck\s+)?)?(?P<was>.+?)\s+(?:im|ins)\s+papier", re.I)
+MARKT_ANALYSE = re.compile(r"\b(?:analysier\w*|wie steht|chart (?:von|f(?:ü|ue)r)|technische analyse (?:von|f(?:ü|ue)r))\s+"
+                           r"(?:es\s+(?:um|mit)\s+)?(?:die\s+|der\s+|den\s+)?(?:aktie\s+(?:von\s+)?)?(?P<was>[\w .&^=-]+?)(?:\s+aktie)?\s*\??$", re.I)
 KALENDER_FRAGE = re.compile(r"(was steht|was hab ich|was habe ich|welche termine|termine)\s+.*?(?P<wann>heute|morgen|(?:ü|ue)bermorgen|"
                             r"montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|\d{1,2}\.\d{1,2}\.?)", re.I)
 SICHERHEIT = re.compile(r"\bscan\w*\s+(?:den|meinen|mein|das)?\s*(?:pc|computer|rechner|laptop|system)|viren\w*|"
@@ -321,6 +327,44 @@ class Assistent:
             return ergebnis
 
         return self._mit_freigabe("loeschen", f"„{name}“ in den Papierkorb verschieben", ausfuehren, an=os.path.dirname(pfad))
+
+    # ---------------------------------------------------------------- Markt-Analyse + Papier-Depot (markt.py, Phase I)
+    def markt_analyse(self, name: str) -> str:
+        import markt
+
+        self.zeige("denken", f"Analysiere {name} …")
+        self.log(f"markt/analyse {name[:40]}")
+        try:
+            d = markt.analyse(name)
+        except Exception as e:
+            return f"Die Analyse ging nicht: {str(e)[:100]}"
+        self.holo("oeffne", f"markt-{d['symbol']}", art="markt", titel=f"MARKT · {d['name'].upper()[:30]}", daten=d)
+        return d["text"]
+
+    def papier_order(self, aktion: str, name: str, betrag_eur: float | None = None, stueck: float | None = None) -> str:
+        """Nur Spielgeld (data/depot.json). Echte Orders kann Klaus nicht."""
+        import markt
+
+        try:
+            text = markt.papier(aktion, name, betrag_eur, stueck)
+        except Exception as e:
+            return f"Die Papier-Order ging nicht: {str(e)[:100]}"
+        self.log(f"depot/{aktion} {name[:30]} (spielgeld)")
+        self.b.panel.emit(json.dumps({"aktion": "neu_laden", "typ": "depot"}))
+        return text
+
+    def depot_text(self) -> str:
+        import markt
+
+        d = markt.depot()
+        self.b.panel.emit(json.dumps({"aktion": "neu_laden", "typ": "depot"}))
+        teile = [f"Dein Papier-Depot steht bei {d['wert']:.0f} Euro, {'plus' if d['gv_proz'] >= 0 else 'minus'} "
+                 f"{abs(d['gv_proz']):.1f} Prozent seit dem Start.".replace(".", ",", 1)]
+        if d["positionen"]:
+            beste = max(d["positionen"], key=lambda p: p["gv_proz"])
+            teile.append(f"{len(d['positionen'])} Positionen, am besten läuft {beste['symbol']} mit {beste['gv_proz']:+.1f} Prozent.")
+        teile.append("Alles Spielgeld.")
+        return " ".join(teile)
 
     # ---------------------------------------------------------------- Apple Kalender (kalender.py)
     def kalender_text(self, wann: str = "heute") -> str:
@@ -996,6 +1040,19 @@ class Assistent:
         if STUMM.search(befehl):
             self.sage("Okay, ich bin still. Sag Klaus, wieder an, wenn du mich brauchst.")
             self.setze_stumm(True)
+            return
+        m = PAPIER_ORDER.search(befehl)
+        if m:
+            self.sage(self.papier_order("kaufen" if m.group("aktion").lower() == "kauf" else "verkaufen", m.group("was"),
+                                        float(m.group("betrag")) if m.group("betrag") else None,
+                                        float(m.group("stueck")) if m.group("stueck") else None), zustand="aktion")
+            return
+        if DEPOT_FRAGE.search(befehl):
+            self.sage(self.depot_text(), zustand="aktion")
+            return
+        m = MARKT_ANALYSE.search(befehl)
+        if m and not re.search(r"\b(lage|sicherheit|wetter)\b", m.group("was"), re.I):
+            self.sage(self.markt_analyse(m.group("was")), zustand="aktion")
             return
         m = KALENDER_FRAGE.search(befehl)
         if m:

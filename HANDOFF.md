@@ -151,8 +151,12 @@ Erledigt: **A** Design · **B** Leistung · **C** Freigabe-Gate · **D** Lageber
   Mitsprechen nur mit KI-Hinweis (AI Act) und Zustimmung aller.
 
 ### Phase I — Markt-Analyse & Trading
-- Zuerst nur lesend: Watchlist, Stimmung je Ticker, Indikatoren, Markt-Briefing (Daten: Yahoo, schon vorhanden),
-  Papier-Depot.
+- **Lesender Teil fertig (05.10.2026):** `src/markt.py` (Yahoo Chart/Suche, RSI 14, SMA 20/50, EMA, MACD,
+  Nachrichten-Stimmung über Google News + 1 Gemini-Textaufruf) und das **Papier-Depot** (`data/depot.json`,
+  10.000 € Spielgeld, max. 25 % je Order). Panel: Holo-Fenster `markt` (`web/markt.js`, Kurs- + RSI-Chart,
+  geht auf Bildschirm 2) und das Widget „Papier-Depot“. Sprache: „analysier Nvidia“, „wie steht der Dax“,
+  „kauf für 1000 Euro Nvidia im Papierdepot“, „wie läuft mein Depot“. Gemini-Werkzeuge: `markt_analyse`,
+  `papier_order`, `depot_status`. Echte Orders gibt es **nicht**.
 - **Liquid geprüft (05.10.2026):** LiquidX AI, Inc. (Delaware), gegründet 2025. **Keine Lizenz/Regulierung**
   gefunden. Nicht-verwahrend; Gelder liegen auf Hyperliquid/Lighter (Krypto-Perps) bzw. Ostium/Arbitrum
   (Aktien/FX/Rohstoffe als Perps) → Risiko dieser DeFi-Plattformen. Bis 40x (Krypto) / 50x (FX, Indizes) Hebel,

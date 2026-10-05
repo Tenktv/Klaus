@@ -393,6 +393,12 @@ def gedaechtnis() -> dict:
     return {"liste": list(reversed(gehirn.lade_gedaechtnis()))}
 
 
+def depot() -> dict:
+    import markt
+
+    return markt.depot()
+
+
 def kalender() -> dict:
     import kalender as k
 
@@ -408,6 +414,7 @@ def sicherheit() -> dict:
 
 
 QUELLEN = {
+    "depot": depot,
     "kalender": kalender,
     "sicherheit": sicherheit,
     "wetter": wetter, "nachrichten": nachrichten, "aktien": aktien, "projekte": projekte,
