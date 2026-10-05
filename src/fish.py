@@ -171,7 +171,9 @@ def _env_setzen(name: str, wert: str) -> None:
     """Einen Wert in der .env setzen (UTF-8 ohne BOM, Dateirechte bleiben, andere Zeilen unveraendert)."""
     datei = BASE_DIR / ".env"
     zeilen = datei.read_text(encoding="utf-8").splitlines() if datei.exists() else []
-    neu = [z for z in zeilen if not z.startswith(f"{name}=")] + [f"{name}={wert}"]
+    neu = [f"{name}={wert}" if z.startswith(f"{name}=") else z for z in zeilen]   # an Ort und Stelle ersetzen
+    if f"{name}={wert}" not in neu:
+        neu.append(f"{name}={wert}")
     with open(datei, "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(neu) + "\n")
 
