@@ -21,14 +21,17 @@ schreibt Briefe mit einem persönlichen Website-Entwurf.
 | **Wissen** | Recherche mit kostenloser Websuche + Gemini; Gedächtnis in einem Obsidian-Vault; „zeig dein Gedächtnis als Graph“; Code-Projekte als Graph (graphify) |
 | **Leads** | Betriebe ohne Website über OpenStreetMap finden, Website-Check, Konkurrenz-Check, Briefe (DIN 5008, QR-Code zum Entwurf), Hochladen und Drucken nur mit Freigabe |
 | **Sicherheit** | „scan den PC“ (Windows Defender), Wächter für neue Autostarts, Admin-Konten, offene Ports und unsignierte Programme |
-| **Zwei Monitore** | Große Ansichten (Lagebericht, Globus, Graph, Plan) wandern auf den zweiten Bildschirm, wenn er frei ist. |
+| **Börse** | „analysier Nvidia“: Kurs-Chart mit SMA 20/50, RSI, MACD und Nachrichtenlage. **Papier-Depot** mit 10.000 € Spielgeld („kauf für 1000 Euro Nvidia im Papierdepot“). Keine echten Orders, keine Anlageberatung. |
+| **Termine & Meetings** | Apple-Kalender (iCloud): „Was steht morgen an?“, Termine eintragen mit Freigabe. **Meeting-Protokoll** („starte ein Protokoll“): nur mit Freigabe und laut angesagt; lokal mitgeschrieben, Ton wird nie gespeichert, am Ende Zusammenfassung + Aufgaben im Vault. |
+| **Zwei Monitore** | Große Ansichten (Lagebericht, Globus, Graph, Plan, Markt) wandern auf den zweiten Bildschirm, wenn er frei ist. |
 
 Klaus fragt **Claude nur**, wenn man es ausdrücklich sagt („frag Claude …“). Standard ist Gemini mit kostenloser Recherche.
 
 ## Sicherheit: das Freigabe-Gate
 
 Alles mit Wirkung nach außen läuft nur mit einem **Einmal-Token**. Dazu gehören Hochladen, Drucken, Löschen,
-Verschieben, Programme installieren, Bluetooth aus, Fenster schließen und Admin-Befehle. Das Token entsteht
+Verschieben, Programme installieren, Bluetooth aus, Fenster schließen, Termine eintragen, Gespräche aufzeichnen
+und Admin-Befehle. Das Token entsteht
 ausschließlich durch einen Klick auf „Freigeben“ im Panel oder wenn **du** „Freigeben“ sagst. Gezählt wird
 dabei die Mitschrift deines Mikrofons, nie eine Entscheidung der KI. Die ausführenden Funktionen prüfen das
 Token selbst (`src/freigabe.py`).
@@ -75,6 +78,8 @@ src/
   rechte.py           Fenster, Dateien, winget, Lautstärke, Bluetooth, Bildschirmfoto, Zwischenablage
   sicherheit.py       Defender, Firewall, Wächter mit Basislinie
   lage.py             Lagebericht-Daten     graphen.py  Gedächtnis-/Code-Graph     planer.py  Pläne
+  markt.py            Markt-Analyse + Papier-Depot   kalender.py  Apple-Kalender   protokoll.py  Meeting-Protokoll
+  fish.py             Fish-Audio-Stimme (optional)
   osm_leads.py        Lead-Suche (OpenStreetMap)   konkurrenz.py  Konkurrenz-Check   briefe.py  Briefe   hochladen.py
   daten.py            Wetter, Nachrichten, Kurse, System, Projekte, Layout
   voice.py, stimme.py, llm.py   Whisper, Stimmen, Ollama

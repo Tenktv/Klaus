@@ -120,6 +120,11 @@ WERKZEUGE = [
     {"name": "zwischenablage", "description": "Zwischenablage lesen (nur wenn er es will) oder Text hineinschreiben.",
      "parameters": {"type": "OBJECT", "properties": {"aktion": {"type": "STRING", "description": "lesen oder schreiben"},
                                                      "text": {"type": "STRING"}}, "required": ["aktion"]}},
+    {"name": "protokoll_starten", "description": "Startet das Meeting-Protokoll (lokale Mitschrift + Zusammenfassung in den Vault). "
+     "NUR wenn Nikola ausdruecklich ein Protokoll/eine Mitschrift will. Braucht seine Freigabe (Zustimmung aller Anwesenden).",
+     "parameters": {"type": "OBJECT", "properties": {"titel": {"type": "STRING", "description": "Thema/Kunde der Besprechung"}}}},
+    {"name": "protokoll_beenden", "description": "Beendet das laufende Meeting-Protokoll und fasst zusammen.",
+     "parameters": {"type": "OBJECT", "properties": {}}},
     {"name": "markt_analyse", "description": "Technische Analyse + Nachrichtenlage zu einer Aktie/einem Index/Krypto (Chart im Panel). "
      "Nur Analyse, keine Anlageberatung.", "parameters": {"type": "OBJECT", "properties": {
          "name": {"type": "STRING", "description": "Name oder Kuerzel, z. B. 'Nvidia', 'SAP', 'Dax', 'Bitcoin'"}}, "required": ["name"]}},
@@ -386,6 +391,10 @@ class GeminiGespraech:
             if name in ("fenster_steuern", "fenster_liste", "datei_kopieren", "datei_verschieben", "programm_suchen",
                         "programm_aktion", "lautstaerke", "bluetooth", "bildschirmfoto", "zwischenablage"):
                 return self._rechte(name, args)
+            if name == "protokoll_starten":
+                return self.a.protokoll_starten(args.get("titel", ""))
+            if name == "protokoll_beenden":
+                return self.a.protokoll_beenden()
             if name == "markt_analyse":
                 return self.a.markt_analyse(args.get("name", ""))
             if name == "papier_order":

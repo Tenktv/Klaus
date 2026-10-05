@@ -61,7 +61,7 @@ function holoLokal(b) {
   // Denken als Graph im Reaktor: Pipeline-Schritte werden Knoten, Log-Zeilen (Werkzeuge) Blaetter
   if (window.klausCore && b.daten) {
     (b.daten.schritte || []).forEach((s, i) => klausCore.gedanke(`s${i}`, s.name, s.status || "pending"));
-    if (b.daten.zeile) klausCore.gedankeBlatt(b.daten.zeile);
+    if (b.daten.zeile && b.id === "log") klausCore.gedankeBlatt(b.daten.zeile);   // nur Werkzeug-Log, keine Mitschrift
   }
   const p = holoPopups[b.id] || (b.art ? popupOeffnen(b) : null);  // Update fuer ein geschlossenes Fenster ohne Art: ignorieren
   if (!p) return;

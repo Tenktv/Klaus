@@ -147,8 +147,16 @@ Erledigt: **A** Design · **B** Leistung · **C** Freigabe-Gate · **D** Lageber
   (Freigabe-Art „kalender“, warnt bei Überschneidung), `zeit_frei`; Kalender-Widget (7 Tage); Termine im
   „Seit du weg warst“-Briefing; Erinnerung 15 min vorher (still, wenn stumm). Auswertung offline getestet
   (Zeitzone, ganztägig, Dauer) - **gegen echtes iCloud noch nicht**, Zugang fehlt.
-- Meetings: zuerst Klaus als **Protokollant** (faster-whisper, Zusammenfassung + Aufgaben in den Vault).
-  Mitsprechen nur mit KI-Hinweis (AI Act) und Zustimmung aller.
+- **Protokollant fertig (05.10.2026):** `src/protokoll.py` + Holo-Fenster `web/protokoll.js`. „Klaus, starte ein
+  Protokoll für Kunde Maier“ → Freigabe-Art **„aufnahme“** (Nikola bestätigt die Zustimmung aller, § 201 StGB) →
+  Klaus sagt die Aufnahme laut an (steht damit auch in der Mitschrift). Mikrofon → 25-s-Happen (Schnitt an leiser
+  Stelle) → faster-whisper (dasselbe Modell wie `voice.Ohr`, Titel als Namens-Hinweis). **Ton wird nie
+  gespeichert**, die Notiz `Vault/Meetings/<Datum Uhrzeit> <Titel>.md` wird laufend geschrieben (absturzsicher).
+  „Klaus, Protokoll beenden“ → 1 Gemini-Textaufruf: Zusammenfassung, Entscheidungen, Aufgaben (`- [ ]`).
+  Höchstens 3 h. Gemini-Werkzeuge `protokoll_starten` / `protokoll_beenden`. Mit TTS-Audio getestet, **mit
+  echtem Gespräch noch nicht**. Offen: Online-Meetings (Teams/Zoom) bräuchten System-Ton (WASAPI-Loopback,
+  z. B. `pyaudiowpatch`) – bisher nur Mikrofon. Wer im Meeting „Klaus“ sagt, weckt ihn auf.
+- Mitsprechen im Meeting nur mit KI-Hinweis (AI Act) und Zustimmung aller – noch nicht gebaut.
 
 ### Phase I — Markt-Analyse & Trading
 - **Lesender Teil fertig (05.10.2026):** `src/markt.py` (Yahoo Chart/Suche, RSI 14, SMA 20/50, EMA, MACD,

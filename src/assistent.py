@@ -94,6 +94,11 @@ WIEDER_AN = re.compile(r"\b(wieder (an|da|zuh(ö|oe)ren|reden|aktiv)|aufwachen|w
 PLAN_THEMA = re.compile(r"(?P<was>.+?)\s+planen\b|einen plan (?:f(?:ü|ue)r|zu[mr]?)\s+(?P<was2>.+)$", re.I)  # Plan-Board (planer.py)
 WIDGET_NEU = re.compile(r"\b(?:erstell|mach|bau|leg)\w*\s+(?:mir\s+)?(?:ein(?:e|en)?\s+)?(?:neues\s+)?widget\s+(?:f(?:ü|ue)r|mit|zu|zum|zur|namens)?\s*(?P<was>.+)$", re.I)
 DEPOT_FRAGE = re.compile(r"\b(mein|das|im)\s+(papier-?)?depot\b|papierdepot", re.I)
+PROTOKOLL_START = re.compile(r"\b(?:protokoll|mitschrift)\s+(?:starten|anfangen|beginnen)\b|"
+                             r"\b(?:start\w*|beginn\w*|mach\w*|f(?:ü|ue)hr\w*|schreib\w*)\s+(?:(?:ein|das|eine|die)\s+)?(?:meeting-?|besprechungs-?)?"
+                             r"(?:protokoll|mitschrift)\b(?:\s+(?:f(?:ü|ue)r|zu[mr]?|von|mit)\s+(?P<titel>.+))?", re.I)
+PROTOKOLL_ENDE = re.compile(r"\b(?:protokoll|mitschrift|aufnahme)\s+(?:beenden|stoppen|aus|fertig|ende)\b|"
+                            r"\b(?:beende|stopp\w*)\s+(?:das\s+|die\s+)?(?:protokoll|mitschrift|aufnahme)\b", re.I)
 PAPIER_ORDER = re.compile(r"\b(?P<aktion>kauf|verkauf)\w*\s+(?:mir\s+)?(?:f(?:ü|ue)r\s+(?P<betrag>\d+)\s*(?:euro|€)\s+)?"
                           r"(?:(?P<stueck>\d+)\s+(?:st(?:ü|ue)ck\s+)?)?(?P<was>.+?)\s+(?:im|ins)\s+papier", re.I)
 MARKT_ANALYSE = re.compile(r"\b(?:analysier\w*|wie steht|chart (?:von|f(?:ü|ue)r)|technische analyse (?:von|f(?:ü|ue)r))\s+"
@@ -167,6 +172,7 @@ class Assistent:
         self.laeuft = True
         self.pausiert = False
         self.ohr: voice.Ohr | None = None
+        self.protokoll = None   # laufendes Meeting-Protokoll (protokoll.Protokoll)
         self.sprech_sperre = threading.Lock()
         self.eingaben: queue.Queue[str] = queue.Queue()  # getippt / Knoepfe
         self.verlauf: list[dict] = []
@@ -327,6 +333,54 @@ class Assistent:
             return ergebnis
 
         return self._mit_freigabe("loeschen", f"„{name}“ in den Papierkorb verschieben", ausfuehren, an=os.path.dirname(pfad))
+
+    # ---------------------------------------------------------------- Meeting-Protokoll (protokoll.py, Phase H)
+    def protokoll_starten(self, titel: str = "") -> str:
+        """Nur mit Freigabe (du bestaetigst die Zustimmung aller) - danach sagt Klaus die Aufnahme laut an."""
+        if self.protokoll and self.protokoll.laeuft:
+            return "Ich schreibe schon mit. Sag „Klaus, Protokoll beenden“, wenn ihr fertig seid."
+        titel = re.sub(r"^(der|die|das|dem|den)\s+", "", (titel or "").strip(" .?!"), flags=re.I) or "Besprechung"
+        return self._mit_freigabe("aufnahme", f"Gespräch „{titel}“ mitschreiben – alle Anwesenden sind einverstanden",
+                                  lambda token: self._protokoll_los(token, titel), an="Mikrofon, nur lokal")
+
+    def _protokoll_los(self, token: str, titel: str) -> str:
+        import protokoll
+
+        if not self.ohr:
+            raise RuntimeError("die Spracherkennung ist noch nicht geladen")
+        p = protokoll.Protokoll(titel, self.ohr.model, self.ohr.geraet,
+                                zeile=lambda t, text: self.holo("update", "protokoll", daten={"zeile": text, "t": t}))
+        p.starten(token)
+        self.protokoll = p
+        self.holo("oeffne", "protokoll", art="protokoll", titel=f"PROTOKOLL · {titel.upper()[:30]}",
+                  daten={"start": time.time() * 1000, "datei": p.datei.name})
+        self.log(f"protokoll/start {titel[:40]} · audio bleibt im speicher")
+
+        def waechter() -> None:   # Hoechstdauer erreicht -> von selbst beenden
+            while p.laeuft:
+                time.sleep(5)
+            if self.protokoll is p:
+                self.sage(self.protokoll_beenden(), zustand="aktion")
+        threading.Thread(target=waechter, daemon=True).start()
+        return ("Hinweis an alle: Ab jetzt schreibe ich dieses Gespräch für ein Protokoll mit. Der Ton bleibt auf diesem Rechner "
+                "und wird nicht gespeichert, nur der Text. Wer nicht einverstanden ist, sagt es bitte jetzt. "
+                "Zum Schluss: Klaus, Protokoll beenden.")
+
+    def protokoll_beenden(self) -> str:
+        p, self.protokoll = self.protokoll, None
+        if not p:
+            return "Es läuft gerade kein Protokoll."
+        self.holo("update", "protokoll", daten={"status": "FASSE ZUSAMMEN"})
+
+        def los() -> None:
+            e = p.stoppen()
+            self.holo("update", "protokoll", daten={"fertig": True, **e})
+            self.log(f"protokoll/fertig {e['minuten']} min · {len(e['aufgaben'])} aufgaben")
+            n = len(e["aufgaben"])
+            self.sage(f"Das Protokoll ist fertig: {e['minuten']} Minuten, {n} Aufgabe{'' if n == 1 else 'n'}. "
+                      f"Es liegt im Gedächtnis unter Meetings. {e['zusammenfassung'][:400]}", zustand="aktion")
+        threading.Thread(target=los, daemon=True).start()
+        return "Aufnahme beendet. Ich fasse kurz zusammen."
 
     # ---------------------------------------------------------------- Markt-Analyse + Papier-Depot (markt.py, Phase I)
     def markt_analyse(self, name: str) -> str:
@@ -1040,6 +1094,13 @@ class Assistent:
         if STUMM.search(befehl):
             self.sage("Okay, ich bin still. Sag Klaus, wieder an, wenn du mich brauchst.")
             self.setze_stumm(True)
+            return
+        if PROTOKOLL_ENDE.search(befehl):
+            self.sage(self.protokoll_beenden(), zustand="aktion")
+            return
+        m = PROTOKOLL_START.search(befehl)
+        if m:
+            self.sage(self.protokoll_starten(m.group("titel") or ""), zustand="aktion")
             return
         m = PAPIER_ORDER.search(befehl)
         if m:
