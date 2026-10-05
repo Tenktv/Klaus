@@ -1,169 +1,100 @@
-# Klaus – Lead-Recherche & Erstkontakt für Klesro Web
+# K.L.A.U.S.
 
-Klaus ist der Arbeitsname für dein Automatisierungsprojekt: lokale Firmen im
-Raum Göppingen finden, die noch keine Website haben, und den Erstkontakt
-vorbereiten. Dieses Verzeichnis ist das Grundgerüst dafür – kein fertiges
-Produkt, sondern ein Startpunkt, den du (oder Claude Code auf deinem Rechner)
-weiterbaust.
+Sprachgesteuerter Desktop-Assistent für Windows. Klaus ersetzt den Windows-Desktop durch ein Holo-Panel im
+„Stark Holo-Tech“-Stil, hört auf seinen Namen und erledigt Dinge am PC. Dazu gehören Apps öffnen, recherchieren,
+Pläne bauen, Weltnachrichten auf einem Globus zeigen und den PC auf Sicherheitsprobleme prüfen. Außerdem
+betreibt er die Kundengewinnung von Klesro Web: Er findet Betriebe ohne Website, prüft die Konkurrenz und
+schreibt Briefe mit einem persönlichen Website-Entwurf.
 
-## Was schon drin ist
+> Status: persönliches Projekt, läuft täglich auf einem Windows-11-PC. Eine verkaufbare Version ist geplant
+> (siehe [HANDOFF.md](HANDOFF.md), Phase K).
 
-- `src/search_leads.py` – durchsucht die Google Places API nach mehreren
-  Branchen/Orten, filtert Treffer ohne Website heraus und schreibt sie in
-  `data/leads.csv`.
-- `src/generate_outreach.py` – liest `data/leads.csv` und erzeugt für jede
-  Firma einen personalisierten E-Mail-Entwurf in `data/outreach/`.
-- `.env.example` – zeigt, welche Zugangsdaten du brauchst.
+## Was Klaus kann
 
-## Voraussetzungen
+| Bereich | Beispiele (einfach sprechen: „Klaus, …“) |
+|---|---|
+| **Gespräch** | Gemini Live mit eigener Stimme, man kann ihm ins Wort fallen. Ohne Schlüssel läuft eine lokale Kette (Whisper → Ollama → Stimme). |
+| **PC steuern** | „öffne Steam“, „Fenster nach links“, „Lautstärke 30“, „Bluetooth aus“, „mach ein Bildschirmfoto“, „installier 7-Zip“ |
+| **Panel** | Widgets frei verschieben und skalieren, eigene Widgets auf Zuruf („erstell ein Widget für meine Einkaufsliste“), 6 Farbpaletten („Design rot“) |
+| **Pläne** | „lass uns die Website für die Bäckerei planen“: Ein Plan-Board aus Boxen (Schritte, Zeitplan, Budget, Risiken …) baut sich auf und lässt sich als Widgets anheften. |
+| **Weltlage** | „Lagebericht“: Welt (3D-Globus mit Animation je Art der Meldung) → Deutschland → Region → Märkte → Kennzahlen. „Was ist in der Welt los?“ zeigt die Meldungen auf dem Globus. |
+| **Wissen** | Recherche mit kostenloser Websuche + Gemini; Gedächtnis in einem Obsidian-Vault; „zeig dein Gedächtnis als Graph“; Code-Projekte als Graph (graphify) |
+| **Leads** | Betriebe ohne Website über OpenStreetMap finden, Website-Check, Konkurrenz-Check, Briefe (DIN 5008, QR-Code zum Entwurf), Hochladen und Drucken nur mit Freigabe |
+| **Sicherheit** | „scan den PC“ (Windows Defender), Wächter für neue Autostarts, Admin-Konten, offene Ports und unsignierte Programme |
+| **Zwei Monitore** | Große Ansichten (Lagebericht, Globus, Graph, Plan) wandern auf den zweiten Bildschirm, wenn er frei ist. |
 
-1. Python 3.10 oder neuer.
-2. Ein Google-Places-API-Key (Google Cloud Console → "Places API" aktivieren,
-   Abrechnung einrichten – der kostenlose Umfang reicht für lokale Suchen
-   locker aus) **oder** ein OpenWeb-Ninja-Key als Alternative.
-3. `pip install -r requirements.txt`
+Klaus fragt **Claude nur**, wenn man es ausdrücklich sagt („frag Claude …“). Standard ist Gemini mit kostenloser Recherche.
 
-## Einrichtung
+## Sicherheit: das Freigabe-Gate
 
-```bash
-cp .env.example .env
-# .env öffnen und deinen API-Key eintragen
-pip install -r requirements.txt
+Alles mit Wirkung nach außen läuft nur mit einem **Einmal-Token**. Dazu gehören Hochladen, Drucken, Löschen,
+Verschieben, Programme installieren, Bluetooth aus, Fenster schließen und Admin-Befehle. Das Token entsteht
+ausschließlich durch einen Klick auf „Freigeben“ im Panel oder wenn **du** „Freigeben“ sagst. Gezählt wird
+dabei die Mitschrift deines Mikrofons, nie eine Entscheidung der KI. Die ausführenden Funktionen prüfen das
+Token selbst (`src/freigabe.py`).
+
+Klaus läuft nie dauerhaft als Admin. Einzelne, fest hinterlegte Befehle (Defender, Firewall) startet
+`src/admin.py` per UAC. Webinhalte gelten für die KI als Daten, nicht als Anweisungen. Schlüssel werden im Log
+geschwärzt. Jede Aktion am PC landet im Vault unter `Aktionen/<Datum>.md`.
+
+## Installation
+
+Voraussetzungen: Windows 10/11, Python 3.11, optional eine NVIDIA-Grafikkarte (Spracherkennung auf der GPU),
+optional [Ollama](https://ollama.com) als lokales Rückfall-Modell.
+
+```bat
+git clone https://github.com/Tenktv/Klaus.git
+cd Klaus
+py -3.11 -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+copy .env.example .env      &rem dann .env ausfüllen (mindestens GEMINI_API_KEY)
 ```
 
-## Benutzung
+Starten (ohne Konsolenfenster, ersetzt den Desktop):
 
-```bash
-# 1. Leads suchen (Ergebnis: data/leads.csv)
-python src/search_leads.py
-
-# 2. Briefe mit Website-Entwurf erzeugen (Ergebnis: data/briefe/<firma>/brief.pdf)
-.venv/Scripts/python src/briefe.py
+```bat
+.venv\Scripts\pythonw.exe src\klaus_app.py
 ```
 
-Die generierten E-Mails sind bewusst einfach gehalten (Platzhalter-Vorlage,
-keine KI-Anbindung nötig). Sobald das läuft, ist der nächste sinnvolle
-Ausbauschritt laut Architekturplan:
+Klaus startet danach automatisch mit Windows (abschaltbar im Tray-Menü). Tastenkürzel: **Strg+Alt+K** schaltet
+stumm, **Strg+Shift+M** schaltet das Mikrofon aus, **Strg+Alt+D** öffnet das Debug-Panel.
 
-1. Gmail-Anbindung, damit die Entwürfe direkt als Gmail-Draft landen statt
-   als Textdatei.
-2. Einen Scheduled Task, der `search_leads.py` wöchentlich automatisch
-   laufen lässt.
-3. Telefonie (Twilio/Vapi), wenn E-Mail allein nicht reicht.
+Piper-Stimmen (nur Rückfall ohne Gemini/edge-tts) sind nicht im Repo, weil sie zu groß sind. `Klaus.bat` lädt
+bei Bedarf `de_DE-thorsten-high` nach `data/stimmen/`.
 
-Details und Hintergrund stehen im Dokument "Klaus-Architektur für Klesro Web".
+## Aufbau
 
-## Branchen & Orte anpassen
-
-Beide Listen stehen oben in `src/search_leads.py` (`BRANCHEN` und `ORTE`) –
-einfach ergänzen oder kürzen.
-
-## Lokale KI (Ollama)
-
-Klaus nutzt ein lokales Modell über Ollama (Standard: `gemma2:9b`, änderbar mit
-`OLLAMA_MODEL` in `.env`). Keine Cloud-Kosten.
-
-```bash
-# Leads bewerten lassen + KI-Mails schreiben
-python src/generate_outreach.py --ai
-python src/generate_outreach.py --ai --leads data/leads_sample.csv   # Testdaten
+```
+src/
+  klaus_app.py        App: Panel, Bildschirm 2, Tray, Hotkeys, Autostart, Anwesenheit/Briefing
+  assistent.py        Sprach-Schleife, Absichten, alle Abläufe (Leads, Briefe, Lagebericht, Pläne, Sicherheit …)
+  gemini_live.py      Gemini-Live-Gespräch mit ~40 Werkzeugen
+  gehirn.py           Persona, Gedächtnis (Obsidian-Vault), Claude nur auf Zuruf
+  recherche.py        Websuche (Tavily -> ddgs, kostenlos) + Zusammenfassung (Gemini -> Ollama)
+  freigabe.py         Freigabe-Gate (Einmal-Tokens)      admin.py   einzelne Admin-Befehle per UAC
+  rechte.py           Fenster, Dateien, winget, Lautstärke, Bluetooth, Bildschirmfoto, Zwischenablage
+  sicherheit.py       Defender, Firewall, Wächter mit Basislinie
+  lage.py             Lagebericht-Daten     graphen.py  Gedächtnis-/Code-Graph     planer.py  Pläne
+  osm_leads.py        Lead-Suche (OpenStreetMap)   konkurrenz.py  Konkurrenz-Check   briefe.py  Briefe   hochladen.py
+  daten.py            Wetter, Nachrichten, Kurse, System, Projekte, Layout
+  voice.py, stimme.py, llm.py   Whisper, Stimmen, Ollama
+  web/                Panel (dashboard.html) + Module: klaus.js (Reaktor), core.js (Zustände, Denk-Graph),
+                      holo.js (Fenster), popups.js (Pop-ups, Bildschirm 2), lage.js, globus.js, graph.js, plan.js
+designs/              Design-Mockups (gewählt: hud_v1_stark)
 ```
 
-## Sprachmodus: mit Klaus planen, Claude baut
+Daten, die nur lokal bleiben (siehe `.gitignore`): `.env`, `data/leads.csv`, `data/briefe/`, `data/plaene/`,
+Layout und Einstellungen, Logs, Browser-Profil und Sprachmodelle.
 
-```bash
-# einmalig: eigene Umgebung für Klaus
-python -m venv .venv
-.venv/Scripts/python -m pip install -r requirements.txt faster-whisper sounddevice pyttsx3
+## Rechtliches für die Kundengewinnung
 
-.venv/Scripts/python src/voice.py              # Mikrofon + Stimme
-.venv/Scripts/python src/voice.py --text       # tippen statt sprechen
-.venv/Scripts/python src/voice.py --dry-run    # Claude nicht starten, nur Auftrag speichern
-```
+Werbe-E-Mails und automatische KI-Anrufe an Firmen brauchen in Deutschland eine Einwilligung (UWG §7).
+Klaus nutzt deshalb **Briefe**. `src/generate_outreach.py` (Mail-Entwürfe) ist nur für bestehende Kontakte
+gedacht. Eine KI am Telefon muss sich als KI zu erkennen geben (EU AI Act).
 
-Einfach sprechen: Klaus erkennt selbst, wann du anfängst und aufhörst
-(Pause ~1,2 s). Mit `--ptt` stattdessen per Enter-Taste. Nennst du eine Firma aus der
-Leadliste, lädt Klaus deren Daten automatisch. Sprachbefehle:
+## Lizenzen von Fremdbestandteilen
 
-- **"an Claude geben"** / "bau das" – Klaus fasst den Plan als Auftrag zusammen,
-  zeigt ihn an und fragt nach. Bei "ja" baut Claude Code das Projekt in
-  `data/projekte/<datum>-<firma>/` (Auftrag in `AUFTRAG.md`).
-- **"neu anfangen"** – Gespräch zurücksetzen
-- **"beenden"** – Schluss
-
-Spracherkennung (Whisper `medium`) läuft auf der Grafikkarte, die Stimme ist
-Piper "Thorsten" (lokal, `data/stimmen/`). Fällt etwas aus, nimmt Klaus CPU bzw.
-die Windows-Stimme.
-
-Optionen in `.env`: `KLAUS_SCHWELLE` (Sprech-Empfindlichkeit, 0 = automatisch),
-`KLAUS_PAUSE` (Sekunden Stille bis Satzende), `KLAUS_STIMME` (Piper-Stimme),
-`WHISPER_MODEL` (tiny/base/small/medium), `KLAUS_MIC`
-(Teil des Mikrofonnamens, z.B. `USB`), `CLAUDE_PERMISSION_MODE` (Standard
-`acceptEdits`: Claude darf im Projektordner Dateien anlegen/ändern).
-
-## Klaus im Hintergrund (Desktop-Icon „Klaus“)
-
-```bash
-.venv/Scripts/pythonw.exe src/klaus_app.py      # ohne Konsolenfenster
-```
-
-Klaus sitzt als Symbol unten rechts in der Taskleiste und hört auf seinen Namen.
-Dann erscheint ein animierter Orb in der Bildschirmmitte (Farbe je nach Zustand).
-
-- „Klaus, öffne Spotify“ – Apps aus dem Startmenü, Webseiten (YouTube, Gmail …),
-  Ordner (Downloads, Projekte …), Windows-Werkzeuge (Rechner, Einstellungen …)
-- „Klaus, such nach …“ – Google-Suche
-- „Klaus, Website für die Schreinerei Maier“ – Planungsgespräch ohne Weckwort;
-  „an Claude geben“ → Auftrag öffnet sich zur Kontrolle → „ja“ → Claude baut im
-  Hintergrund, Klaus meldet sich, wenn es fertig ist, und öffnet das Ergebnis
-- „Klaus, wie spät ist es?“ – kurze Antwort der lokalen KI
-- „Klaus“ allein – „Ja?“, dann den Befehl sagen
-
-Taskleisten-Menü: Zuhören pausieren, Mit Windows starten, Stimme wählen,
-Projekte-Ordner, Log (`data/klaus.log`), Beenden. Die Konsolen-Version gibt es
-weiterhin über `Klaus.bat`.
-
-## Gespräch: Gemini Live + Claude-Gehirn
-
-Mit `GEMINI_API_KEY` in `.env` führt **Gemini Live** (automatisch das neueste reguläre
-Live-Modell, Okt. 2026: `gemini-3.8-live`, erster Ton nach ~0,7 s) das Gespräch: zuhören,
-verstehen, sprechen, unterbrechbar. Die Verbindung steht nur nach dem lokal erkannten
-„Klaus“ und wird nach 20 s Stille geschlossen. Gemini handelt über Werkzeuge
-(`src/gemini_live.py`: oeffne, widget, design, merken, was_verpasst, frage_claude,
-projekt_bauen …). Code/Recherche gehen an **Claude** (`src/gehirn.py`, `claude -p` mit
-Sitzung). Ohne Gemini-Schlüssel oder bei Ausfall: lokale Kette (Whisper → Ollama/Claude → Stimme).
-
-## Gedächtnis
-
-„Klaus, merk dir …“ / „was weißt du über mich?“ / „vergiss …“ → `data/gedaechtnis.json`,
-fließt in jeden System-Prompt ein. Widget „Gedächtnis“ im Panel (Rechtsklick = löschen).
-
-## Seit du weg warst
-
-Klaus sichert alle 5 Minuten Zeit + Kurse (`data/zuletzt.json`). Nach ≥ 15 Minuten ohne
-Maus/Tastatur/Gespräch – oder beim Start am Morgen – zeigt er im Klaus-Widget, was
-passiert ist: wichtigste Nachrichten (Google News, Tagesschau, heise), Kursbewegungen
-(`KLAUS_MARKT_BRIEFING`: Indizes, Tech, Krypto, Gold, Öl) und fertige Claude-Projekte.
-„Klaus, was hab ich verpasst?“ liest es vor.
-
-## Leistung
-
-Liegt ein Vollbild-Fenster (Spiel, maximierte App) über dem Panel, pausieren alle
-Panel-Animationen. Mit Gemini reicht `WHISPER_MODEL=small` fürs Weckwort.
-
-## Briefe statt Werbe-Mails (Neukunden legal ansprechen)
-
-Werbe-Mails an Firmen brauchen in Deutschland eine ausdrückliche Einwilligung (UWG § 7),
-automatische KI-Anrufe ebenfalls. Briefe per Post sind erlaubt. `generate_outreach.py`
-(Mail-Entwürfe) deshalb nicht mehr für Erstkontakte verwenden.
-
-```bash
-.venv/Scripts/python src/briefe.py                       # alle Leads, Standardtext
-.venv/Scripts/python src/briefe.py --ki claude --nur 5   # Text individuell von Claude
-```
-
-Pro Firma: `data/briefe/<firma>/brief.pdf` (DIN 5008, Fensterkuvert), `entwurf.html` + `.png`
-(Website-Entwurf nur für diese Firma, `noindex`). Den Ordner `data/briefe/_hochladen/` auf den
-Webspace kopieren → der QR-Code im Brief öffnet `<KLESRO_WEBSITE>/entwurf/<firma>/`.
-Absender in `.env`: `KLESRO_ADRESSE`, `KLESRO_TELEFON`, `KLESRO_WEBSITE` (fehlt etwas, steht
-ein roter Platzhalter im Brief). Per Stimme: „Klaus, mach Briefe für die neuen Leads“.
+- Schriften Chakra Petch, Barlow Semi Condensed, JetBrains Mono, Orbitron, Rajdhani: SIL Open Font License 1.1
+- Weltkarten-Raster (`src/web/vendor/weltkarte.js`): erzeugt aus [world.geo.json](https://github.com/johan/world.geo.json)
+- Vor einem Verkauf zu ersetzen: edge-tts (inoffizieller Endpunkt), Piper-Stimmen (teils GPL), Marvel-Bezüge
+  (Details in [HANDOFF.md](HANDOFF.md))

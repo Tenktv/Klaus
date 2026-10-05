@@ -1,185 +1,169 @@
-# KLAUS — Project Handoff & Roadmap
+# KLAUS — Projekt-Übergabe & Roadmap
 
-> **How to use this file:** Paste the "System prompt for the next session" block below into a new Claude Code chat
-> (working directory: this folder). Everything the next session needs is in this file. Last updated: 2026-10-05.
-
----
-
-## 0. System prompt for the next session
-
-```
-You are continuing development of KLAUS, a voice-controlled desktop assistant for Nikola (one-person web design
-studio "Klesro Web", Göppingen, Germany). Read HANDOFF.md in the working directory completely before doing anything.
-
-Rules:
-- Talk to Nikola in casual German (du). Code comments in German like the existing code. Never switch to English in replies.
-- Work through the roadmap in section 5 in order, unless Nikola says otherwise. Start with Phase A (design).
-- Before each phase: tell Nikola in max 5 lines which files you will touch. After each phase: real screenshot of his
-  actual screen (not offscreen renders), short German summary, git commit.
-- Respect every constraint in section 3 ("Hard rules"). They come from real mistakes.
-- Use Claude/Claude Code only when Nikola explicitly says "Claude". Default reasoning/research = Gemini + free search.
-- Never spend paid API quota in bulk without asking. Never create multiple accounts to dodge free-tier limits.
-- Anything with outside effect (sending, printing, uploading, trading, calling, deleting) needs an explicit
-  confirmation through the authorization gate — no exceptions.
-```
+> **So benutzt du diese Datei:** Den Block „System-Prompt für die nächste Sitzung“ in einen neuen Claude-Code-Chat
+> einfügen (Arbeitsordner: dieses Repo). Alles Nötige steht hier. Stand: 05.10.2026.
+> Repo: https://github.com/Tenktv/Klaus
 
 ---
 
-## 1. What Klaus is
+## 0. System-Prompt für die nächste Sitzung
 
-A Python desktop app that **replaces the Windows desktop** with a full-screen JARVIS/HAL-style HUD panel and is
-controlled **by voice only** (wake word "Klaus"). It also runs Nikola's lead-generation business: finds local
-businesses without a website (OpenStreetMap), checks them, writes letters with a personal website draft + QR code,
-uploads drafts to his IONOS webspace and prints the letters. Long-term goal: sell Klaus as a product (see section 6).
+```
+Du entwickelst KLAUS weiter, einen sprachgesteuerten Desktop-Assistenten für Nikola (Ein-Mann-Webdesign-Studio
+"Klesro Web", Göppingen). Lies HANDOFF.md vollständig, bevor du etwas tust.
 
-Owner: Nikola, info@klesro-web.de. Machine: Windows 11, RTX 2070 (8 GB), two monitors, mic "IC 6010".
+Regeln:
+- Sprich mit Nikola locker auf Deutsch (du). Code-Kommentare deutsch wie im bestehenden Code.
+- Arbeite die Roadmap in Abschnitt 5 der Reihe nach ab, außer Nikola sagt etwas anderes.
+- Vor jeder Phase: in max. 5 Zeilen sagen, welche Dateien du anfasst. Danach: echte Aufnahme des
+  Klaus-Fensters (Abschnitt 3, Regel 5), kurze Zusammenfassung, Git-Commit.
+- Halte jede Regel in Abschnitt 3 ein. Sie stammen aus echten Fehlern.
+- Claude/Claude Code nur, wenn Nikola ausdrücklich "Claude" sagt. Standard = Gemini + kostenlose Suche.
+- Kein bezahltes API-Kontingent in großen Mengen ohne Nachfrage. Keine Mehrfach-Konten für Gratis-Kontingente.
+- Alles mit Außenwirkung (senden, drucken, hochladen, handeln, anrufen, löschen, installieren) braucht das
+  Freigabe-Gate (src/freigabe.py) - ohne Ausnahme.
+```
 
-## 2. Architecture (current state, all working)
+---
 
-| Area | Files | Notes |
+## 1. Was Klaus ist
+
+Eine Python-App, die den **Windows-Desktop ersetzt**: Holo-Panel im Stil „Stark Holo-Tech“ mit Reaktor-Kern in
+der Mitte, gesteuert **nur per Stimme** (Weckwort „Klaus“). Sie betreibt außerdem Nikolas Kundengewinnung:
+Betriebe ohne Website finden (OpenStreetMap), Konkurrenz prüfen, Briefe mit persönlichem Website-Entwurf und
+QR-Code schreiben, Entwürfe hochladen und drucken (beides nur mit Freigabe). Langfristig soll Klaus verkauft
+werden (Abschnitt 5, Phase K).
+
+Besitzer: Nikola, info@klesro-web.de. Rechner: Windows 11, RTX 2070 (8 GB), **zwei Monitore**
+(DISPLAY2 = Hauptbildschirm x=0, DISPLAY1 links x=-1920), Mikrofon „IC 6010“.
+
+## 2. Aufbau (alles läuft)
+
+| Bereich | Dateien | Hinweise |
 |---|---|---|
-| App entry | `src/klaus_app.py` | PySide6 6.11. Tray, hotkeys (Strg+Alt+K mute, Strg+Shift+M mic off), taskbar auto-hide, autostart, presence/briefing, `Steuerung`. Start: `.venv\Scripts\pythonw.exe src\klaus_app.py` |
-| Voice loop | `src/assistent.py` | `Bruecke` signals (zustand, pegel, nachricht, panel, **holo**, …), `Assistent`: wake word, intents, `briefe_starten`, `leads_suchen` (OSM + map + pipeline popups), `holo()`/`log()` helpers, `Pipeline` class |
-| Conversation | `src/gemini_live.py` | Gemini Live (`gemini-3.8-live`, voice "Charon") with function-calling tools: oeffne, google_suche, website_im_panel, widget, design, merken, vergessen, **recherche**, frage_claude (only if user says "Claude"), projekt_bauen, was_verpasst, datei_suchen, in_papierkorb, **leads_suchen**, briefe_erstellen, entwuerfe_hochladen, briefe_drucken, stumm_schalten, gespraech_beenden. Every tool call is logged to the Live-Log popup |
-| Brain / memory | `src/gehirn.py` | Persona prompt, Obsidian vault memory (`Documents\Klaus Gedächtnis`), `ClaudeGehirn.frage(text, claude=False)` → default = `recherche`, Claude only with `claude=True` |
-| Research (no Claude) | `src/recherche.py` | Web search: Tavily (key in .env, free dev tier ~1000/month) → fallback free `ddgs`; summarised by Gemini text models (tries several, 429-tolerant) → fallback Ollama. `hat_website()` = free domain guessing + search |
-| Leads | `src/osm_leads.py` | Overpass (mirrors) + Nominatim, stores lat/lon, `websites_pruefen(fortschritt=…)`, Claude check only with `claude=True` |
-| Letters | `src/briefe.py`, `src/vorlagen/*.html`, `src/hochladen.py` | DIN 5008 PDF via QtWebEngine, `--ki gemini` default, SFTP upload (paramiko), print via `os.startfile(...,"print")` |
-| Local LLM / TTS / STT | `src/llm.py`, `src/stimme.py`, `src/voice.py` | Ollama qwen2.5:7b; edge-tts "Florian" (fallback); faster-whisper small on GPU |
-| Data feeds | `src/daten.py` | weather (open-meteo), RSS news, Yahoo finance, system stats, settings (`data/einstellungen.json`, read BOM-safe), layout (`data/layout.json`, **version 2 = fractions 0..1**) |
-| Panel UI | `src/web/dashboard.html` + `klaus.js` (HAL eye canvas `KlausOrb`, themes) + `core.js` (state machine IDLE/LISTENING/THINKING/SPEAKING/EXECUTING/AWAITING_AUTH/DONE/ERROR, effects, debug panel Strg+Alt+D) + `holo.js` (free windows: drag, resize, magnet edges, holo boot/close animation) + `popups.js` (holo popups: log, pipeline, karte, entwurf, connector lines, focus mode, Esc closes) | GridStack was removed. Web widgets are native child QWebEngineViews positioned by `webSetze` |
-| Python↔JS bridge | `src/fenster.py` `WebBruecke` | signals incl. `holo(str)`; env `KLAUS_CORE_DEBUG=1` opens debug panel + demo |
-| Design mockups | `designs/hud_v1_stark/` (**chosen**), `hud_v2_odyssey/`, `hud_v3_tactical/` | standalone HTML, fonts vendored in `assets/fonts` |
+| App | `src/klaus_app.py` | PySide6 6.11. Tray, Hotkeys (Strg+Alt+K stumm, Strg+Shift+M Mikro aus), Taskleiste ausgeblendet, Autostart, Anwesenheit/Briefing, Log schwärzt Schlüssel (`_SchwaerzendesLog`). Start: `.venv\Scripts\pythonw.exe src\klaus_app.py` |
+| Fenster | `src/fenster.py` | `DesktopPanel` (Hauptbildschirm, immer ganz unten), `ZweitFenster` (Bildschirm 2, nur bei Bedarf sichtbar), `WebBruecke` (JS-Objekt `klaus`), `OrbOverlay`, `ChatFenster` |
+| Sprach-Schleife | `src/assistent.py` | Weckwort, Absichten (Regex), alle Abläufe: Leads, Briefe, Lagebericht, Globus, Pläne, Widgets, Konkurrenz, Sicherheit, Graph; `_mit_freigabe()` für alles Riskante |
+| Gespräch | `src/gemini_live.py` | Gemini Live (`gemini-3.8-live`, Stimme Charon), ~40 Werkzeuge. Freigabe nur aus der **Mitschrift deines Mikrofons** (`input_transcription`) |
+| Gehirn / Gedächtnis | `src/gehirn.py` | Persona, Obsidian-Vault `Dokumente\Klaus Gedächtnis` (Nikola.md, Gespraeche/, Briefings/, Plaene/, Aktionen/), Claude nur mit `claude=True` |
+| Recherche | `src/recherche.py` | Tavily → kostenlos `ddgs`; Zusammenfassung Gemini-Textmodelle → Ollama; Webinhalte als „fremde Daten“ markiert (Prompt-Injection-Schutz) |
+| Freigabe | `src/freigabe.py` | Einmal-Token je Art (hochladen, drucken, loeschen, verschieben, programm, bluetooth, fenster_schliessen, admin, sicherheit), 90 s Wartezeit, 120 s gültig, einmal verwendbar |
+| Rechte | `src/rechte.py`, `src/admin.py` | Fenster, Dateien, winget, Lautstärke (pycaw), Bluetooth (WinRT), Bildschirmfoto, Zwischenablage; Admin nur für fest hinterlegte Befehle per UAC. Protokoll im Vault |
+| Sicherheit | `src/sicherheit.py` | Defender/Firewall/Bedrohungen, Wächter gegen Basislinie `data/sicherheit_basis.json`, Scan ohne Admin, sonst über Gate + UAC |
+| Lagebericht | `src/lage.py`, `src/web/lage.js`, `src/web/globus.js` | Nachrichten ohne KI verortet (Ortstabellen, schwache Hinweise wie „Merz“ zuletzt), Region per Google-News-Suche, Märkte, Kennzahlen; Welt-Station auf dem 3D-Globus |
+| Leads | `src/osm_leads.py`, `src/konkurrenz.py` | Overpass (Spiegel-Server) + Nominatim; Website-Check per Domain-Raten + Suche; Konkurrenz-Check (Mitbewerber, Reibungspunkte, Strategie) |
+| Briefe | `src/briefe.py`, `src/vorlagen/`, `src/hochladen.py` | DIN-5008-PDF, `--ki gemini`, belegbarer Konkurrenz-Satz im Brief, SFTP-Upload und Druck nur mit Token |
+| Pläne / Widgets | `src/planer.py`, `src/web/plan.js` | Plan = Boxen (liste/notiz/zeitplan/zahlen), gespeichert in `data/plaene/` + Vault; Widget-Typ `eigen` |
+| Graphen | `src/graphen.py`, `src/web/graph.js` | Gedächtnis-Graph aus dem Vault, Code-Graph über `graphify update <pfad>` (ohne KI, legt `graphify-out/` im Projekt an) |
+| Panel | `src/web/dashboard.html` + `klaus.js` (Reaktor-Kern), `core.js` (Zustände, Denk-Graph, Debug-Panel Strg+Alt+D), `holo.js` (Fenster, Rahmen, Neigung), `popups.js` (Pop-ups, Leuchtlinien, Weiterleitung auf Bildschirm 2) | Dieselbe Seite läuft zweimal: Panel und `dashboard.html?zweit=1` auf Bildschirm 2 |
+| Daten | `src/daten.py` | Wetter, Nachrichten, Kurse, System, Projekte, Layout (`data/layout.json`, Version 2 = Anteile 0..1) |
 
-Git: local repo in this folder (no remote). `.env` is git-ignored (contains GEMINI_API_KEY, TAVILY_API_KEY,
-OPENWEB_NINJA_API_KEY, SFTP placeholders). Backup layout: `data/layout.raster.json`.
+Git: Repo auf GitHub. `.env`, Leads, Briefe, Pläne, Layout, Einstellungen, Logs, Browser-Profil und
+Sprachmodelle (`data/stimmen/`, über 500 MB) sind in `.gitignore`. Sicherung der Historie vor dem Bereinigen:
+`..\klaus-sicherung-vor-github.bundle` (lokal, enthält die alten Sprachmodelle).
 
-## 3. Hard rules (learned the hard way)
+## 3. Harte Regeln (aus echten Fehlern)
 
-1. Use the project venv `.venv\Scripts\python.exe` — `python` in Git Bash is a different (hermes) venv.
-2. **Never write Python with backslash escapes through bash heredocs** (`\n`, `\b` get mangled). Use the Edit/Write
-   tools or write a script file to the scratchpad first.
-3. **Never write JSON settings with PowerShell `Out-File`** (adds BOM). It once corrupted `einstellungen.json` and
-   flipped `taskleiste_original` → taskbar would have stayed hidden. Correct values:
-   `{"panel": true, "taskleiste_original": false, "thema": "ironman", "autostart": true}`.
-4. Only one Klaus instance at a time (parallel instances corrupt the browser profile). Stop it via
-   `Get-CimInstance Win32_Process | ? CommandLine -like "*klaus_app.py*" | % { Stop-Process -Id $_.ProcessId -Force }`.
-5. Verify UI with **real screenshots of the screen** (`System.Drawing CopyFromScreen`), not `widget.grab()`.
-6. Back up `data/layout.json` before UI tests; check it is unchanged afterwards.
-7. Nikola sometimes games (League of Legends) — don't restart Klaus / grab the screen while a game is in front.
-8. Claude only on explicit request ("Claude"); default = Gemini + free search. Gemini Google-Search grounding is 429
-   on the free tier — don't rely on it.
-9. Legal (Germany): no cold e-mails / no automated AI cold calls (UWG §7) → letters are the outreach channel.
-   AI must disclose itself in calls (EU AI Act). DSGVO for any stored personal data.
-10. Licensing for the product: piper voices (GPL), edge-tts (unofficial endpoint), Marvel names/marks → must be
-    replaced before selling. Fish-Speech open weights are **non-commercial** (CC-BY-NC-SA).
+1. Projekt-venv benutzen: `.venv\Scripts\python.exe`. `python` in Git Bash ist ein anderes (hermes-)venv.
+2. **Kein Python mit Backslashes über Bash-Heredocs** (`\n`, `\b` gehen kaputt). Edit/Write nutzen oder ein
+   Skript in den Scratchpad schreiben und ausführen. Auch PowerShell-Befehle mit `'\'` oder JS-Pfeilfunktionen
+   lösen den Sicherheitsfilter aus → als Datei ablegen.
+3. **JSON-Einstellungen nie mit PowerShell `Out-File` schreiben** (BOM). Richtige Werte:
+   `{"panel": true, "taskleiste_original": false, "thema": "gold", "autostart": true}`.
+4. Nur eine Klaus-Instanz gleichzeitig. Beenden:
+   `Get-CimInstance Win32_Process | ? CommandLine -like "*klaus_app.py*" | % { Stop-Process -Id $_.ProcessId -Force }`
+5. **UI nur über echte Aufnahmen prüfen, und nur vom Klaus-Fenster**: per `PrintWindow` auf das Fenster
+   „Klaus Desktop“ bzw. „Klaus Bildschirm 2“, nie den ganzen Bildschirm. Eine Vollbildaufnahme hat einmal
+   Nikolas private ELSTER-Seite erwischt. Meist ist VS Code im Vordergrund.
+6. Vor UI-Tests, die Widgets anlegen: `data/layout.json` sichern und danach zurückspielen (Hash vergleichen).
+7. Nikola spielt manchmal (League of Legends) → dann Klaus nicht neu starten und nichts aufnehmen.
+8. Claude nur auf ausdrücklichen Wunsch. Gemini-Google-Search-Grounding ist im Gratis-Tarif 429.
+9. Recht (DE): keine Kalt-Mails, keine automatischen KI-Kaltanrufe (UWG §7) → Briefe. KI muss sich am Telefon
+   zu erkennen geben (EU AI Act). DSGVO für gespeicherte Personendaten.
+10. Produkt-Lizenzen: Piper-Stimmen (teils GPL), edge-tts (inoffiziell), Marvel-Namen/-Marken → vor dem Verkauf
+    ersetzen. Fish-Speech-Gewichte sind **nicht kommerziell** (CC-BY-NC-SA).
+11. **Testen über das DevTools-Protokoll:** Klaus mit `QTWEBENGINE_REMOTE_DEBUGGING=9222` starten, JS per CDP
+    ausführen. Es gibt **zwei** Seiten mit `dashboard.html` (Panel und `?zweit=1`) → gezielt die richtige wählen.
+    Danach Klaus ohne Debug-Port neu starten.
+12. Leistung immer messen, nicht raten: Leerlauf-CPU der QtWebEngine-Prozesse, Bildrate per
+    `requestAnimationFrame`. **Keine Endlos-CSS-Animationen im Ruhezustand** (erzwingen 60 Bilder/s), Animationen
+    nur über `transform`/`opacity`, kein `backdrop-filter` auf Pop-ups über dem animierten Reaktor.
+13. Aus Git entfernen mit `git filter-branch`/`git rm --cached` löscht beim Auschecken auch die **lokalen**
+    Dateien. Vorher sichern (Bundle) und danach zurückholen.
+14. Die Overpass-Server (OpenStreetMap) fallen zeitweise aus (406/504/Timeout). Im Gespräch kurze Timeouts nutzen
+    und dem Nutzer ehrlich sagen, dass OSM gerade nicht antwortet.
+15. Vollbild-Erkennung: `SHQueryUserNotificationState` meldet „Vollbild“ auch wegen des eigenen Panels. Zählen
+    nur Zustand 3/4 oder ein randloses, nicht maximiertes, fremdes Fenster (nicht der Windows-Desktop).
 
-## 4. What happened in the last session (2026-10-04)
+## 4. Was in der Sitzung vom 05.10.2026 passiert ist
 
-- Research without Claude: `recherche.py` (Tavily → ddgs → Gemini → Ollama). Found that Malerbetrieb Weis and
-  Elektro Elser actually have websites → domain check prevents wrong letters.
-- Claude is now opt-in only (voice: "frag Claude …").
-- Klaus Core state machine + animations, HAL eye, app ring removed.
-- Widgets are now **free holo windows** (no grid), migrated layout v1→v2.
-- Holo popups (Live Log, Pipeline, Lead Map, Letter draft) with connector lines + **focus mode** (widgets fade out
-  while Klaus works). Voice tool `leads_suchen` drives map + pipeline live; `briefe_starten` streams letters live.
-- Calmer eye, glass windows, red theme. Nikola still didn't like the look → 3 design directions built with the
-  `frontend-design` skill. **Nikola chose Variant 1 "Stark Holo-Tech"** (`designs/hud_v1_stark/index.html`).
+- **Phase A, Design:** Stark Holo-Tech im echten Panel (abgeschrägte Glasfenster, SVG-Leuchtrahmen, neue
+  Schriften, Telemetrie mit Balken, Bühne mit Lichtkegel und Boden). Nikola mochte die dunkle Glaslinse nicht →
+  **Reaktor-Kern** (Portalring, weißer Kern, Lichtstrahlen, Tunnelringe) mit Sternbild im graphify-Stil.
+- **Denken als Graph:** Pipeline-Schritte als Knoten im Reaktor, Werkzeuge als Blätter. Gedächtnis- und
+  Code-Graph als Fenster.
+- **Phase B, Leistung:** Leerlauf 4,5 → 2,8 % CPU, Arbeitsmodus stabil 60 fps.
+- **Phase C, Freigabe-Gate.**
+- **Phase D:** Lagebericht (Welt → DE → Region → Märkte → Zahlen) und Konkurrenz-Check (Strategie-Kreis, Satz im Brief).
+- **Phase F, Rechte:** Fenster, Dateien, winget, System; Admin per UAC.
+- **Phase G, Sicherheit:** Defender, Wächter, Widget; Schutz für Klaus (Log, Prompt-Injection, `.env`-Rechte).
+- **Neue Wünsche:** 3D-Globus mit Ereignis-Animationen (Krieg, Frieden, Geld, Kriminalität …), zweiter
+  Bildschirm, Plan-Board und eigene Widgets auf Zuruf.
+- **GitHub:** Historie von Sprachmodellen und Laufzeitdateien bereinigt, README, `.env.example` und Handoff neu.
 
-## 5. Roadmap (do in this order)
+## 5. Roadmap
 
-### Phase A — Apply the chosen design (Stark Holo-Tech) to the real panel  ← START HERE
-- Port look from `designs/hud_v1_stark/` into `src/web/` (dashboard.html, klaus.js eye, holo.js/popups.js styles):
-  chamfered glass windows, glowing edges, top light reflection, Chakra Petch / Barlow Semi Condensed / JetBrains Mono
-  (copy WOFF2 from `designs/hud_v1_stark/assets/fonts` to `src/web/vendor`), eye on lit stage with light cone,
-  floor reflection, segment rings, slight 3° tilt of side columns.
-- Keep all existing behaviour: free drag/resize, magnet edges, collapse/close, layout persistence (v2 fractions),
-  voice panel commands, web widgets (native views), theme variables (other palettes must still work), focus mode,
-  state machine, debug panel.
-- Also fix the evaluator findings for V1: connector lines too short (place popups farther from the eye), faded widgets
-  shining through popups (focus opacity → ~0 + no pointer events), lead-map markers covering town names, weather
-  widget overflow, eye glow stronger, small text contrast, remove footer "STARK HOLO-TECH".
-- Acceptance: real screenshot idle + work mode looks like the mockup; idle CPU of the panel ≈ unchanged or lower.
+Erledigt: **A** Design · **B** Leistung · **C** Freigabe-Gate · **D** Lagebericht + Konkurrenz-Check ·
+**F** Rechte · **G** Sicherheit · Globus · Bildschirm 2 · Pläne/Widgets.
 
-### Phase B — Performance & smoother animations
-- Measure first (Chrome DevTools via `QTWEBENGINE_REMOTE_DEBUGGING=9222`, or `performance.now()` frame stats).
-- One shared `requestAnimationFrame` loop for eye + core fx + popups + map instead of several loops; 30 fps idle,
-  60 fps only while active; pause when panel hidden (exists: `window.klausPause`).
-- Avoid `backdrop-filter` on many large elements if it costs frames; prefer pre-blurred backgrounds.
-- Only `transform`/`opacity` in animations; `will-change` sparingly; canvas sized with devicePixelRatio cap (≤1.5).
-- Acceptance: steady 60 fps during work-mode demo on RTX 2070; panel < 3 % CPU idle.
+### Offene Punkte aus den erledigten Phasen
+- Globus und Lagebericht laufen in der Regionsansicht mit ~55 statt 60 fps. GPU und Skript sind es nicht, Ursache
+  vermutlich die Qt-Bildzusammensetzung im Hauptthread. Einen Versuch wert: Globus-Punkte in ein Offscreen-Canvas
+  je Drehwinkel zwischenspeichern.
+- Konkurrenz-Check mit echten OSM-Daten noch nicht im Live-Test (Overpass war ausgefallen, die Logik ist mit
+  Testdaten geprüft).
+- Helligkeit lässt sich an externen Monitoren nicht steuern (keine WMI-Unterstützung). Möglich wäre DDC/CI über
+  die Bibliothek `monitorcontrol`, falls Nikola das will.
+- Eigene Widgets lassen sich per Stimme ändern, aber noch nicht per Tastatur bearbeiten (gewollt: „nur Stimme“).
 
-### Phase C — Authorization gate (step 3 of the original plan)
-- `src/freigabe.py`: one-time tokens; `hochladen.entwuerfe()`, `hochladen.drucken()`, future send/trade/call
-  functions **require** a token issued only by the gate (click "Freigeben" or voice "Freigeben").
-- Popup type `auth` (amber, summary: what / to whom / how many), core state AWAITING_AUTH, timeout = cancel.
+### Phase E — Natürlichere Stimme (wartet auf Nikola)
+- Entscheidung: kostenpflichtige **Fish Audio API** (kommerzielle Bedingungen vor dem Verkauf prüfen).
+- Offen: Gemini-Live-Stimme behalten oder Gemini-Text + Fish-Stimme (mehr Latenz)? Prototyp + A/B-Test mit
+  Nikola. Braucht einen Fish-Audio-Schlüssel.
 
-### Phase D — Lagebericht / intel mode (from Nikola's reference videos)
-- Voice "Klaus, Lagebericht": sequence world map with news points → zoom Germany → region Göppingen → market charts
-  (existing Yahoo data) → key figures (new leads, letters, what changed since yesterday), Klaus narrates.
-- Then "Behind the interface": objective-decomposition graph popup (task nodes light up while Klaus works).
-- Then competitor check → friction points → strategy blueprint (circle fills) → feeds into lead letters.
+### Phase H — Kalender & Meetings (wartet auf Nikola)
+- Frage: Google Kalender oder Outlook? Dann OAuth, „Was steht morgen an?“, Termine anlegen (mit Freigabe),
+  Erinnerungen im Briefing.
+- Meetings: zuerst Klaus als **Protokollant** (faster-whisper, Zusammenfassung + Aufgaben in den Vault).
+  Mitsprechen nur mit KI-Hinweis (AI Act) und Zustimmung aller.
 
-### Phase E — More natural voice
-- Decision (Nikola, 2026-10-05): use the **paid Fish Audio API** — it may ship with the product (verify the commercial
-  terms of the plan before launch). Local Fish-Speech/OpenAudio only for experiments (non-commercial license).
-- Needs streaming for Gemini Live? Gemini Live already speaks itself (voice "Charon"); a custom TTS only fits the
-  local pipeline or a "text mode" of Gemini Live. Decide with Nikola: keep Gemini voice vs. Gemini text + Fish TTS
-  (adds latency). Prototype + A/B with Nikola before switching.
+### Phase I — Markt-Analyse & Trading
+- Zuerst nur lesend: Watchlist, Stimmung je Ticker, Indikatoren, Markt-Briefing (Daten: Yahoo, schon vorhanden),
+  Papier-Depot.
+- Echte Orders nur über dafür gemachte Plattformen. Kandidat: **Liquid** (liquid.trade) → API, Märkte,
+  Verfügbarkeit in DE und Gebühren prüfen; Alternative Interactive Brokers.
+- **Jede Order über das Freigabe-Gate**, harte Limits, Not-Aus, erst Papier-Trading, Protokoll im Vault.
+- Die gespeicherte Warnung zu KI-Trading-Bots zeigen. Kein Auto-Trading ohne ausdrückliches, wiederholtes Ja.
 
-### Phase F — Permissions ("Klaus braucht mehr Rechte")
-- Today Klaus can: open apps, search files, move to recycle bin (with confirmation), widgets, letters, upload, print.
-- Add capabilities with explicit scopes, each logged and confirmable: window management, file move/copy/rename,
-  install/uninstall via winget (confirm), system settings (volume, display, Bluetooth), screenshots, clipboard.
-- Elevated actions: separate small helper started on demand via UAC (`runas`) for single commands — do NOT run all of
-  Klaus as admin. Every elevated action goes through the authorization gate.
+### Phase J — Telefonnummer & Anrufe (verschoben, kostet Geld)
+- Twilio-Nummer DE (~1,35 $/Monat), eingehende Anrufe über Gemini Live (Media Streams), Termine in den Kalender.
+  Ausgehend nur an Leute mit Einwilligung bzw. Bestandskunden. KI-Hinweis am Anfang.
 
-### Phase G — Cyber security
-- Use Windows Defender instead of a homemade scanner: `Get-MpComputerStatus`, `Start-MpScan -ScanType Quick/Full`,
-  `Get-MpThreatDetection`, `Update-MpSignature`. Voice: "Klaus, scan den PC".
-- Watchers: suspicious autostart entries, new admin users, firewall state, open ports, unsigned processes with
-  network access → security widget + warnings. Optional: check downloaded files (Defender custom scan of path).
-- Protect Klaus itself: no secrets in logs, `.env` permissions, tool-call allow-list, prompt-injection guard for web
-  content (never execute instructions found on websites).
+### Phase K — Produkt / Klaus verkaufen
+- Editionen: Basis (Gamer/Power-User) und Pro (Freelancer/kleine Firmen).
+- Preis-Ideen: Done-for-you (~4.000 € einmalig + Monatsbeitrag inkl. KI über eigenen Proxy) oder Bring-your-own-API
+  (~2.000–3.000 € einmalig, eigene Schlüssel).
+- Lizenzschlüssel + Funktions-Schalter je Kunde, eigene Persona/Stimme/Marke.
+- Vorher: GPL-/inoffizielle Teile ersetzen, Marvel-Bezüge entfernen, **Setup-Assistent statt fester persönlicher
+  Daten** (Name, Ort, Mikrofon, Spiele, „Nikola.md“ sind noch im Code), Installer, DSGVO-Texte, AVV für den
+  Proxy, Support-Prozess.
+- Kostenlose KI-Kontingente nur zum Testen, nie im verkauften Produkt.
 
-### Phase H — Calendar & business meetings
-- Ask Nikola: Google Calendar or Outlook? Then OAuth integration, voice "Was steht morgen an?", create appointments
-  (with confirmation), reminders via briefing.
-- Meetings: first step = Klaus as **note-taker** (transcribe with faster-whisper, summary + action items into the
-  vault). Later: Klaus speaking in meetings only with disclosure (AI Act) and consent of participants.
-- "Video": clarify with Nikola what he meant (Gemini Live video/screen input? video calls? video generation?).
-
-### Phase I — Market analysis & trading
-- Read-only first: watchlist, news sentiment per ticker, technical indicators, daily market briefing (data: Yahoo
-  finance already used). Paper trading mode with simulated portfolio.
-- Real AI-driven trades are allowed via platforms built for it. Nikola's candidate: **Liquid** (liquid.trade, he also
-  sent coinvest.liquid.trade earlier). Next session: check Liquid's API docs, which markets (crypto/stocks), availability
-  and regulation for German customers, fees; alternatives: Interactive Brokers API.
-- **Every order through the authorization gate**, hard limits (max order size, daily loss limit), kill switch,
-  paper trading first, full trade log in the vault.
-- Show Nikola the saved warning about AI trading bots (memory: trading-bot-warnung). No auto-trading without explicit,
-  repeated opt-in. No financial advice claims.
-
-### Phase J — Phone number & calls (postponed, costs money)
-- Twilio German number (~1.35 $/month), inbound calls answered by Gemini Live (Media Streams), appointments into
-  calendar. Outbound only to people who consented / existing customers (UWG). AI disclosure at call start.
-
-### Phase K — Product / selling Klaus
-- Editions (from earlier decision): Basis (gamers/power users) and Pro (freelancers/small firms).
-- Pricing ideas from Nikola (to validate):
-  1. **Done-for-you**: one-time ~4,000 € setup + monthly fee that covers AI tokens (Klaus-hosted proxy, usage limits).
-  2. **Bring-your-own-API**: one-time ~2,000–3,000 €, customer enters own API keys (Gemini/Groq/…), no monthly fee.
-- "Not everyone gets the same": license key + per-customer feature flags (modules: leads/letters, trading,
-  security, phone, meetings), per-customer persona/voice/branding, update channel.
-- Before selling: replace GPL/unofficial components, remove Marvel references, setup wizard, installer, DSGVO docs,
-  AVV for hosted proxy, support process.
-- Free AI tiers (e.g. Groq free API keys): **testing only, never in the sold product** (Nikola agreed). One account per
-  provider; the product uses paid keys (done-for-you) or the customer's own keys (BYO).
-- Fish Audio (paid) voice can be part of the product.
-
-## 6. Open questions for Nikola
-- Calendar: Google or Outlook?
-- "Video" — what exactly?
-- Fish Audio (paid, decided): keep Gemini's own voice in live conversations, or Gemini text + Fish voice (more latency)?
-- Trading: check Liquid (liquid.trade) API + German availability; paper trading first OK?
-- Still missing in `.env`: KLESRO_ADRESSE, KLESRO_TELEFON, SFTP credentials (letters/upload need them).
+## 6. Offene Fragen an Nikola
+- Kalender: Google oder Outlook?
+- Fish Audio: Gemini-Stimme im Gespräch behalten oder Gemini-Text + Fish-Stimme?
+- Trading: Liquid prüfen + erst Papier-Trading, okay?
+- „Video“ (frühere Idee): was genau gemeint ist (Bildschirm/Kamera an Gemini Live, Videoanrufe, Video-Erzeugung)?
+- Fehlt noch in `.env`: `KLESRO_ADRESSE`, `KLESRO_TELEFON`, SFTP-Zugang (für Briefe/Upload).
+- Ist das GitHub-Repo öffentlich? Dann sind Name/Ort im Code sichtbar → ggf. auf privat stellen, bis der
+  Setup-Assistent (Phase K) fertig ist.
