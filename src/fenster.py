@@ -245,6 +245,16 @@ class WebBruecke(QObject):
             print(f"[Klaus] Papierkorb: {self.assistent.loeschen_starten(pfad)}")
             threading.Timer(95, lambda: self.lade("projekte", "")).start()
 
+    @Slot(str, str)
+    def sicherheit(self, aktion: str, wert: str) -> None:
+        """Sicherheits-Widget: scan (wert schnell/voll) oder bestaetigen (Basislinie uebernehmen)."""
+        if not self.assistent:
+            return
+        if aktion == "scan":
+            threading.Thread(target=lambda: print(f"[Klaus] Sicherheit: {self.assistent.sicherheit_scan(wert or 'schnell')}"), daemon=True).start()
+        elif aktion == "bestaetigen":
+            threading.Thread(target=self.assistent.sicherheit_bestaetigen, daemon=True).start()
+
     @Slot()
     def lagebericht(self) -> None:
         """Lagebericht aus dem Panel (Debug-Knopf): ohne Ton, Stationen im festen Takt."""

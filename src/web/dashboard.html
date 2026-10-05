@@ -395,6 +395,22 @@
   .st-punkt.neg::before { content: "✕"; color: var(--rot); }
   .st-punkt.pos::before { content: "→"; color: var(--gruen); }
 
+  /* Sicherheits-Widget */
+  .si-lampen { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+  .si-lampe { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; font-size: 13px; color: var(--text-dim); }
+  .si-lampe i { width: 7px; height: 7px; transform: rotate(45deg); background: var(--gruen); box-shadow: 0 0 8px var(--gruen); }
+  .si-lampe.warn i { background: var(--rot); box-shadow: 0 0 8px var(--rot); }
+  .si-lampe b { font-family: var(--display); font-size: 12px; font-weight: 500; color: var(--text); letter-spacing: .08em; }
+  .si-lampe.warn b { color: var(--rot); }
+  .si-zahlen { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin: 12px 0 8px; padding-top: 8px; border-top: 1px solid var(--haar);
+    font-size: 11px; letter-spacing: .14em; color: var(--leise); text-transform: uppercase; }
+  .si-zahlen b { font-family: var(--display); color: var(--text); font-weight: 500; }
+  .si-warnungen { display: flex; flex-direction: column; gap: 4px; }
+  .si-warnung { position: relative; padding: 4px 0 4px 16px; font-size: 13px; line-height: 1.3; color: var(--text); }
+  .si-warnung::before { content: "!"; position: absolute; left: 2px; top: 4px; font-family: var(--display); font-weight: 700; color: var(--rot); }
+  .si-warnung.hinweis::before { content: "i"; color: var(--bernstein); }
+  .si-warnungen .chip { align-self: flex-start; margin-top: 6px; }
+
   /* Freigabe-Fenster: Bernstein, Knoepfe, Countdown */
   .fenster.popup.auth { --win-c: var(--amber); }
   .fenster.popup.auth .w-titel { color: var(--amber); }
@@ -1145,6 +1161,40 @@ const TYPEN = {
           c.inhalt.append(z);
         }
         if (!c.inhalt.children.length) c.inhalt.append(el("div", "leer", "NOCH NICHTS GEMERKT · SAG „KLAUS, MERK DIR …“"));
+      });
+    },
+  },
+
+  sicherheit: {
+    titel: "Sicherheit", info: "Defender, Firewall und Wächter (Autostart, Admins, Ports)", w: 3, h: 7, minW: 2, minH: 4,
+    bauen(c) {
+      const scan = el("button", "w-knopf", "⟳");
+      scan.title = "Schnellscan mit dem Defender (oder sag: „Klaus, scan den PC“)";
+      scan.onclick = () => klaus.sicherheit("scan", "schnell");
+      c.extra.append(scan);
+      c.abo("sicherheit", "", 900, (d) => {
+        if (d.fehler) { c.inhalt.innerHTML = '<div class="leer">SICHERHEITSDATEN NICHT LESBAR</div>'; return; }
+        const def = d.defender || {}, fw = d.firewall || [];
+        const lampe = (ok, name, wert) => `<div class="si-lampe ${ok ? "ok" : "warn"}"><i></i><span>${name}</span><b>${wert}</b></div>`;
+        const alter = def.signatur_alter_h;
+        c.inhalt.innerHTML = `<div class="si-lampen">
+            ${lampe(def.an && def.echtzeit, "Echtzeitschutz", def.an && def.echtzeit ? "AN" : "AUS")}
+            ${lampe(alter >= 0 && alter <= 72, "Virendefinitionen", alter >= 0 ? (alter < 48 ? `${alter} H` : `${Math.round(alter / 24)} T`) : "?")}
+            ${lampe(fw.length && fw.every((p) => p.an), "Firewall", fw.filter((p) => p.an).length + "/" + fw.length)}
+            ${lampe((def.vollscan_tage ?? 99) <= 30, "Vollscan", def.vollscan_tage != null ? `VOR ${def.vollscan_tage} T` : "?")}
+          </div><div class="si-zahlen">${Object.entries(d.zaehler || {}).map(([k, v]) => `<span>${{ autostart: "Autostart", admins: "Admins", ports: "Ports", unsigniert: "Unsigniert" }[k]} <b>${v}</b></span>`).join("")}</div>
+          <div class="si-warnungen"></div>`;
+        const box = c.inhalt.querySelector(".si-warnungen");
+        const warn = d.warnungen || [];
+        for (const w of warn) box.append(el("div", "si-warnung " + (w.art === "hinweis" ? "hinweis" : ""), w.text));
+        if (!warn.length) box.append(el("div", "leer", "KEINE WARNUNGEN · ALLES WIE BEI DER BASISLINIE"));
+        else if (warn.some((w) => w.art !== "hinweis")) {
+          const ok = el("button", "chip", "Änderungen sind von mir");
+          ok.title = "Aktuellen Stand als normal übernehmen (mit Freigabe)";
+          ok.onclick = () => klaus.sicherheit("bestaetigen", "");
+          box.append(ok);
+          hervorheben(c.id);
+        }
       });
     },
   },

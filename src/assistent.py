@@ -88,6 +88,8 @@ STUMM = re.compile(r"\b(sei (mal |bitte |jetzt )?(still|ruhig|leise)|stumm|ruhe|
 WIEDER_AN = re.compile(r"\b(wieder (an|da|zuh(ö|oe)ren|reden|aktiv)|aufwachen|wach (wieder )?auf|"
                        r"du (kannst|darfst) wieder|stumm aus|nicht mehr stumm)\b", re.I)
 
+SICHERHEIT = re.compile(r"\bscan\w*\s+(?:den|meinen|mein|das)?\s*(?:pc|computer|rechner|laptop|system)|viren\w*|"
+                        r"sicherheit\w*|defender|virenscan|malware", re.I)
 KONKURRENZ = re.compile(r"konkurren\w*|mitbewerber\w*|wettbewerb\w*", re.I)
 KONKURRENZ_FIRMA = re.compile(r"(?:f(ü|ue)r|von|bei|zu)\s+(?:de[rnm]|die|das)?\s*(?P<firma>.+?)\s*$", re.I)
 LAGE = re.compile(r"(?<!in der )\blage(bericht|bild|besprechung)?\b|\bintel\b|situation report", re.I)  # nicht "in der Lage sein"
@@ -312,6 +314,60 @@ class Assistent:
             return ergebnis
 
         return self._mit_freigabe("loeschen", f"„{name}“ in den Papierkorb verschieben", ausfuehren, an=os.path.dirname(pfad))
+
+    # ---------------------------------------------------------------- Sicherheit (Phase G)
+    def sicherheit_status(self) -> str:
+        import sicherheit
+
+        l = sicherheit.lage()
+        self.b.panel.emit(json.dumps({"aktion": "neu_laden", "typ": "sicherheit"}))
+        d = l["defender"]
+        teile = [f"Defender ist {'aktiv' if d.get('an') and d.get('echtzeit') else 'NICHT aktiv'}",
+                 f"Virendefinitionen {d.get('signatur_alter_h', '?')} Stunden alt",
+                 "Firewall " + ("überall an" if all(p.get("an") for p in l["firewall"]) else "teilweise AUS")]
+        echte = [w for w in l["warnungen"] if w["art"] != "hinweis"]
+        teile.append(f"{len(echte)} Warnung{'en' if len(echte) != 1 else ''}" + (": " + echte[0]["text"] if echte else ""))
+        return ". ".join(teile) + "."
+
+    def sicherheit_scan(self, art: str = "schnell") -> str:
+        """Schnellscan erst ohne Adminrechte; braucht er sie (oder Vollscan), ueber Gate + UAC (admin.py)."""
+        import sicherheit
+
+        def fertig(text: str) -> None:
+            self.log(f"sicherheit/scan {text[:80]}")
+            self.b.panel.emit(json.dumps({"aktion": "neu_laden", "typ": "sicherheit"}))
+            self.sage(text, zustand="aktion")
+            self.verschwinde(nach=1.0)
+
+        if art == "voll":
+            return self._mit_freigabe("admin", "Defender-Vollscan mit Adminrechten (dauert lange)", lambda t: sicherheit.scan("voll", t),
+                                      an="Windows Defender")
+
+        def los() -> None:
+            self.log("sicherheit/scan defender schnellscan")
+            try:
+                fertig(sicherheit.scan("schnell"))
+            except PermissionError:
+                self.sage(self._mit_freigabe("admin", "Defender-Schnellscan mit Adminrechten", lambda t: sicherheit.scan("schnell", t),
+                                             an="Windows Defender"))
+            except Exception as e:
+                fertig(f"Der Scan ging nicht: {str(e)[:100]}")
+
+        threading.Thread(target=los, daemon=True).start()
+        return "Ich starte einen Schnellscan mit dem Defender. Das dauert ein paar Minuten."
+
+    def sicherheit_bestaetigen(self) -> str:
+        """Aktuellen Stand als normal uebernehmen - blendet Warnungen aus, deshalb nur mit Freigabe."""
+        import rechte
+        import sicherheit
+
+        def ausfuehren(token: str) -> str:
+            text = sicherheit.bestaetigen(token)
+            rechte.protokoll("Sicherheits-Basislinie bestätigt")
+            self.b.panel.emit(json.dumps({"aktion": "neu_laden", "typ": "sicherheit"}))
+            return text
+
+        return self._mit_freigabe("sicherheit", "Aktuellen PC-Stand als sicher übernehmen (Warnungen verschwinden)", ausfuehren)
 
     def konkurrenz_check(self, firma: str = "") -> str:
         """Konkurrenz -> Reibungspunkte -> Strategie fuer einen Lead (OpenStreetMap, kostenlos). Kreis fuellt sich im Panel."""
@@ -741,6 +797,14 @@ class Assistent:
         if STUMM.search(befehl):
             self.sage("Okay, ich bin still. Sag Klaus, wieder an, wenn du mich brauchst.")
             self.setze_stumm(True)
+            return
+        if SICHERHEIT.search(befehl):
+            if re.search(r"best(ä|ae)tig|ist okay|passt so|basislinie", befehl, re.I):
+                self.sage(self.sicherheit_bestaetigen(), zustand="aktion")
+            elif re.search(r"\bscan|pr(ü|ue)f", befehl, re.I):
+                self.sage(self.sicherheit_scan("voll" if re.search(r"voll|komplett|gr(ü|ue)ndlich", befehl, re.I) else "schnell"), zustand="aktion")
+            else:
+                self.sage(self.sicherheit_status(), zustand="aktion")
             return
         if KONKURRENZ.search(befehl):
             m = KONKURRENZ_FIRMA.search(befehl)

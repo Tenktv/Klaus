@@ -383,7 +383,14 @@ def gedaechtnis() -> dict:
     return {"liste": list(reversed(gehirn.lade_gedaechtnis()))}
 
 
+def sicherheit() -> dict:
+    import sicherheit as s
+
+    return s.lage()
+
+
 QUELLEN = {
+    "sicherheit": sicherheit,
     "wetter": wetter, "nachrichten": nachrichten, "aktien": aktien, "projekte": projekte,
     "favoriten": favoriten, "apps": alle_apps, "leads": leads, "system": system, "gedaechtnis": gedaechtnis,
 }

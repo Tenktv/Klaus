@@ -18,6 +18,7 @@ Optionen:
 
 import ctypes
 import json
+import re
 import time
 import traceback
 from ctypes import wintypes
@@ -30,10 +31,38 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 LOG_PATH = BASE_DIR / "data" / "klaus.log"
 
-# Ohne Konsole (pythonw) gibt es kein stdout -> alles ins Log
+class _SchwaerzendesLog:
+    """Schreibt ins Log, aber nie Schluessel/Passwoerter: Werte aus .env (*KEY, *PASS, *TOKEN, *SECRET) und typische Muster."""
+
+    MUSTER = re.compile(r"AIza[0-9A-Za-z_\-]{30,}|AQ\.[0-9A-Za-z_\-]{20,}|tvly-[0-9A-Za-z_\-]{20,}|sk-[0-9A-Za-z_\-]{20,}|ghp_[0-9A-Za-z]{30,}")
+
+    def __init__(self, datei) -> None:
+        self.datei = datei
+        self.geheim = []
+        try:
+            for zeile in (BASE_DIR / ".env").read_text(encoding="utf-8").splitlines():
+                name, _, wert = zeile.partition("=")
+                if re.search(r"(KEY|PASS|TOKEN|SECRET)", name.upper()) and len(wert.strip()) >= 6:
+                    self.geheim.append(wert.strip().strip('"'))
+        except OSError:
+            pass
+
+    def write(self, text: str) -> int:
+        for g in self.geheim:
+            text = text.replace(g, "***")
+        return self.datei.write(self.MUSTER.sub("***", text))
+
+    def flush(self) -> None:
+        self.datei.flush()
+
+    def __getattr__(self, name):
+        return getattr(self.datei, name)
+
+
+# Ohne Konsole (pythonw) gibt es kein stdout -> alles ins Log (geschwaerzt)
 if sys.stdout is None or sys.stderr is None:
     LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _log = open(LOG_PATH, "a", encoding="utf-8", buffering=1)
+    _log = _SchwaerzendesLog(open(LOG_PATH, "a", encoding="utf-8", buffering=1))
     sys.stdout = sys.stderr = _log
 
 from PySide6.QtCore import QAbstractNativeEventFilter, QLockFile, QObject, Qt, QTimer, Signal, Slot

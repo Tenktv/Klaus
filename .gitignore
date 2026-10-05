@@ -9,3 +9,5 @@ data/briefe/
 data/*.bak
 *.log
 data/klaus.lock
+data/sicherheit_basis.json
+data/lage_stand.json
