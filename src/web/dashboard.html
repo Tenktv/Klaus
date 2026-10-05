@@ -432,6 +432,40 @@
   .si-warnung.hinweis::before { content: "i"; color: var(--bernstein); }
   .si-warnungen .chip { align-self: flex-start; margin-top: 6px; }
 
+  /* Plan-Board + eigene Widgets (plan.js) */
+  .p-plan { display: flex; flex-direction: column; gap: 14px; overflow: hidden !important; }
+  .plan-kopf { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+  .plan-titel { display: block; font-family: var(--display); font-size: 24px; font-weight: 600; letter-spacing: .06em; color: #fff;
+    text-shadow: 0 0 18px rgba(var(--rgb), .5); }
+  .plan-ziel { display: block; margin-top: 4px; font-size: 13.5px; letter-spacing: .06em; color: var(--text-dim); }
+  .plan-boxen { position: relative; flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px; align-content: start; padding: 2px; }
+  .plan-linien { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  .plan-linien path { fill: none; stroke: var(--eye); stroke-width: 1.2; opacity: 0; stroke-dasharray: 6 6; filter: drop-shadow(0 0 4px var(--eye));
+    animation: an-linie .6s ease forwards; }
+  @keyframes an-linie { to { opacity: .45; } }
+  .plan-box { position: relative; z-index: 1; padding: 12px 14px 14px; background: color-mix(in srgb, var(--bg) 88%, var(--cyan));
+    box-shadow: inset 0 0 0 1px rgba(var(--rgb), .35), 0 0 22px rgba(var(--rgb), .08);
+    clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+    animation: plan-box-rein .55s var(--ease) both; }
+  @keyframes plan-box-rein { from { opacity: 0; transform: translateY(10px) scale(.97); filter: brightness(2); } }
+  .plan-box-kopf { display: flex; align-items: center; gap: 10px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--haar);
+    font-family: var(--display); font-size: 12px; font-weight: 600; letter-spacing: .24em; text-transform: uppercase; color: #fff; }
+  .plan-box-kopf i { font-style: normal; color: var(--eye); font-size: 14px; }
+  .plan-box-kopf span { flex: 1; }
+  .plan-box-kopf small { color: var(--leise); font-size: 10px; }
+  .eigen { display: flex; flex-direction: column; gap: 4px; }
+  .eigen-punkt { display: flex; gap: 10px; align-items: flex-start; text-align: left; font-size: 14px; line-height: 1.35; color: var(--text); padding: 3px 0; }
+  .eigen-punkt i { width: 12px; height: 12px; margin-top: 3px; flex-shrink: 0; box-shadow: inset 0 0 0 1px var(--cyan-2); }
+  .eigen-punkt.erledigt span { color: var(--leise); text-decoration: line-through; }
+  .eigen-punkt.erledigt i { background: var(--gruen); box-shadow: 0 0 8px var(--gruen); }
+  .eigen-zeit { display: grid; grid-template-columns: minmax(64px, auto) 1fr; gap: 10px; padding: 4px 0; border-left: 1px solid var(--cyan-3); padding-left: 10px; }
+  .eigen-zeit b { font-family: var(--display); font-size: 11.5px; font-weight: 600; letter-spacing: .1em; color: var(--eye); }
+  .eigen-zeit span { font-size: 13.5px; color: var(--text); }
+  .eigen-zahl { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid rgba(var(--rgb), .08); font-size: 13.5px; color: var(--text-dim); }
+  .eigen-zahl b { font-family: var(--display); font-weight: 500; color: #fff; }
+  .eigen-absatz { font-size: 14px; line-height: 1.45; color: var(--text); }
+
   /* Freigabe-Fenster: Bernstein, Knoepfe, Countdown */
   .fenster.popup.auth { --win-c: var(--amber); }
   .fenster.popup.auth .w-titel { color: var(--amber); }
@@ -1561,6 +1595,17 @@ function panelBefehl(json) {
   if (a.aktion === "web") return webOeffnen(a.url);
   if (a.aktion === "standard") { aufbauen(STANDARD); speichern(); return; }
   if (a.aktion === "neu_laden") { klaus.lade(a.typ, ""); return; }
+  if (a.aktion === "eigen") {   // eigenes Widget (plan.js)
+    const neu = widgetNeu("eigen", a.einst || {});
+    if (!neu) return;
+    if (a.einst && a.einst.plan) {  // Boxen eines Plans als Raster (3 nebeneinander) statt alle auf einem Haufen
+      const n = modelle.filter((m) => m.typ === "eigen" && m.einst.plan === a.einst.plan).indexOf(neu);
+      gleiten(neu, { x: 0.265 + (n % 3) * 0.158, y: 0.15 + Math.floor(n / 3) * 0.36, w: 0.15, h: 0.34 });
+    }
+    hervorheben(neu.id);
+    return;
+  }
+  if (a.aktion === "eigen_aendern") { if (!eigenAendern(a)) klausHinweis("Ich finde kein eigenes Widget dazu."); return; }
   const m = modelle.find((x) => x.typ === a.typ);
   const lauf = m && laufend[m.id];
   const def = TYPEN[a.typ];
@@ -1846,5 +1891,6 @@ klausBereit.then((k) => {
   });
 });
 </script>
+<script src="plan.js"></script>
 </body>
 </html>

@@ -88,6 +88,8 @@ STUMM = re.compile(r"\b(sei (mal |bitte |jetzt )?(still|ruhig|leise)|stumm|ruhe|
 WIEDER_AN = re.compile(r"\b(wieder (an|da|zuh(ö|oe)ren|reden|aktiv)|aufwachen|wach (wieder )?auf|"
                        r"du (kannst|darfst) wieder|stumm aus|nicht mehr stumm)\b", re.I)
 
+PLAN_THEMA = re.compile(r"(?P<was>.+?)\s+planen\b|einen plan (?:f(?:ü|ue)r|zu[mr]?)\s+(?P<was2>.+)$", re.I)  # Plan-Board (planer.py)
+WIDGET_NEU = re.compile(r"\b(?:erstell|mach|bau|leg)\w*\s+(?:mir\s+)?(?:ein(?:e|en)?\s+)?(?:neues\s+)?widget\s+(?:f(?:ü|ue)r|mit|zu|zum|zur|namens)?\s*(?P<was>.+)$", re.I)
 SICHERHEIT = re.compile(r"\bscan\w*\s+(?:den|meinen|mein|das)?\s*(?:pc|computer|rechner|laptop|system)|viren\w*|"
                         r"sicherheit\w*|defender|virenscan|malware", re.I)
 KONKURRENZ = re.compile(r"konkurren\w*|mitbewerber\w*|wettbewerb\w*", re.I)
@@ -314,6 +316,69 @@ class Assistent:
             return ergebnis
 
         return self._mit_freigabe("loeschen", f"„{name}“ in den Papierkorb verschieben", ausfuehren, an=os.path.dirname(pfad))
+
+    # ---------------------------------------------------------------- Plaene + eigene Widgets (planer.py, web/plan.js)
+    def plan_zeigen(self, plan: dict) -> str:
+        """Plan-Board oeffnen (wenn moeglich auf Bildschirm 2) und speichern (data/plaene + Vault)."""
+        import planer
+
+        plan = planer.pruefen(plan)
+        name = planer.speichern(plan)
+        self.holo("oeffne", f"plan-{name}", art="plan", titel=f"PLAN · {plan['titel'].upper()[:40]}", daten=plan)
+        self.log(f"plan/{name} {len(plan['boxen'])} boxen")
+        return f"Der Plan „{plan['titel']}“ steht mit {len(plan['boxen'])} Boxen. Soll ich ihn als Widgets anheften?"
+
+    def plan_entwerfen(self, thema: str) -> str:
+        import planer
+
+        self.zeige("denken", f"Plane: {thema}")
+        self.log(f"plan/entwurf {thema[:60]}")
+        try:
+            return self.plan_zeigen(planer.entwerfen(thema))
+        except Exception as e:
+            return f"Den Plan konnte ich nicht entwerfen: {str(e)[:100]}"
+
+    def plan_oeffnen(self, titel: str = "") -> str:
+        import planer
+
+        plan = planer.laden(titel)
+        return self.plan_zeigen(plan) if plan else "Ich finde keinen gespeicherten Plan dazu."
+
+    def plan_anheften(self, titel: str = "") -> str:
+        import planer
+
+        plan = planer.laden(titel)
+        if not plan:
+            return "Ich finde keinen Plan zum Anheften."
+        for b in plan["boxen"]:
+            self.b.panel.emit(json.dumps({"aktion": "eigen", "einst": {**b, "plan": plan["titel"]}}, ensure_ascii=False))
+        return f"{len(plan['boxen'])} Widgets aus dem Plan „{plan['titel']}“ sind im Panel."
+
+    def widget_erstellen(self, titel: str, art: str = "liste", eintraege: list | None = None) -> str:
+        art = art if art in ("liste", "notiz", "zeitplan", "zahlen") else "liste"
+        self.b.panel.emit(json.dumps({"aktion": "eigen", "einst": {"titel": titel[:40] or "Widget", "art": art,
+                                                                   "eintraege": [str(e)[:200] for e in (eintraege or [])][:20]}},
+                                     ensure_ascii=False))
+        self.log(f"widget/neu {titel[:40]} ({art})")
+        return f"Das Widget „{titel}“ ist im Panel."
+
+    def widget_aendern(self, titel: str, aktion: str, text: str = "", eintraege: list | None = None) -> str:
+        self.b.panel.emit(json.dumps({"aktion": "eigen_aendern", "titel": titel, "unteraktion": aktion, "text": text,
+                                      "eintraege": eintraege or []}, ensure_ascii=False))
+        return f"Erledigt: {aktion} in „{titel or 'letztes Widget'}“."
+
+    def widget_entwerfen(self, wunsch: str) -> str:
+        """'Klaus, erstell ein Widget fuer meine Einkaufsliste' - Titel/Art/Inhalt von einem Textmodell (kostenlos)."""
+        import recherche
+
+        auftrag = (f"Der Nutzer will ein Widget: {wunsch}\nAntworte NUR mit JSON: {{\"titel\": \"kurz\", \"art\": \"liste|notiz|zeitplan|zahlen\", "
+                   f"\"eintraege\": [\"...\"]}}. Leere Liste, wenn er nichts Konkretes genannt hat. Nichts erfinden.")
+        try:
+            m = re.search(r"\{.*\}", recherche.gemini(auftrag, "Antworte nur mit gueltigem JSON."), re.S)
+            d = json.loads(m.group(0)) if m else {}
+        except Exception:
+            d = {}
+        return self.widget_erstellen(d.get("titel") or wunsch[:30], d.get("art") or "liste", d.get("eintraege") or [])
 
     # ---------------------------------------------------------------- Sicherheit (Phase G)
     def sicherheit_status(self) -> str:
@@ -855,6 +920,15 @@ class Assistent:
         if STUMM.search(befehl):
             self.sage("Okay, ich bin still. Sag Klaus, wieder an, wenn du mich brauchst.")
             self.setze_stumm(True)
+            return
+        m = WIDGET_NEU.search(befehl)
+        if m:
+            self.sage(self.widget_entwerfen(m.group("was")), zustand="aktion")
+            return
+        m = PLAN_THEMA.search(befehl)
+        if m:
+            thema = re.sub(r"^\W*(klaus\W+)?(lass uns|wir sollten|ich will|ich m(ö|oe)chte|hilf mir)\s+", "", m.group("was") or m.group("was2"), flags=re.I)
+            self.sage(self.plan_entwerfen(thema.strip(" ,.")), zustand="aktion")
             return
         if SICHERHEIT.search(befehl):
             if re.search(r"best(ä|ae)tig|ist okay|passt so|basislinie", befehl, re.I):

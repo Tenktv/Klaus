@@ -119,6 +119,24 @@ WERKZEUGE = [
     {"name": "zwischenablage", "description": "Zwischenablage lesen (nur wenn er es will) oder Text hineinschreiben.",
      "parameters": {"type": "OBJECT", "properties": {"aktion": {"type": "STRING", "description": "lesen oder schreiben"},
                                                      "text": {"type": "STRING"}}, "required": ["aktion"]}},
+    {"name": "plan_zeigen", "description": "Wenn ihr etwas plant: baut ein Plan-Board aus Boxen (z. B. Ziele, Schritte, "
+     "Zeitplan, To-dos, Budget, Risiken) mit dem, was ihr besprochen habt - auf Bildschirm 2, wenn vorhanden - und speichert es.",
+     "parameters": {"type": "OBJECT", "properties": {"titel": {"type": "STRING"}, "ziel": {"type": "STRING"},
+         "boxen": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {"titel": {"type": "STRING"},
+         "art": {"type": "STRING", "description": "liste | notiz | zeitplan ('Zeitpunkt | Aufgabe') | zahlen ('Name: Wert')"},
+         "eintraege": {"type": "ARRAY", "items": {"type": "STRING"}}}, "required": ["titel", "art", "eintraege"]}}}, "required": ["titel", "boxen"]}},
+    {"name": "plan_anheften", "description": "Macht aus einem gespeicherten Plan eigene Widgets im Panel (eine je Box).",
+     "parameters": {"type": "OBJECT", "properties": {"titel": {"type": "STRING", "description": "Plan-Titel (leer = neuester)"}}}},
+    {"name": "plan_oeffnen", "description": "Oeffnet einen gespeicherten Plan wieder.",
+     "parameters": {"type": "OBJECT", "properties": {"titel": {"type": "STRING"}}}},
+    {"name": "widget_erstellen", "description": "Erstellt ein eigenes Widget im Panel, wenn er es will (Checkliste, Notiz, Zeitplan, Kennzahlen).",
+     "parameters": {"type": "OBJECT", "properties": {"titel": {"type": "STRING"},
+         "art": {"type": "STRING", "description": "liste | notiz | zeitplan | zahlen"},
+         "eintraege": {"type": "ARRAY", "items": {"type": "STRING"}}}, "required": ["titel", "art"]}},
+    {"name": "widget_aendern", "description": "Aendert ein eigenes Widget: hinzufuegen, abhaken, entfernen (Eintrag mit Text) oder ersetzen (eintraege).",
+     "parameters": {"type": "OBJECT", "properties": {"titel": {"type": "STRING", "description": "Widget-Titel (leer = zuletzt erstellt)"},
+         "aktion": {"type": "STRING"}, "text": {"type": "STRING"}, "eintraege": {"type": "ARRAY", "items": {"type": "STRING"}}},
+         "required": ["aktion"]}},
     {"name": "globus_zeigen", "description": "Zeigt einen 3D-Globus im Panel, der sich nacheinander zu den Orten dreht - mit "
      "Animation je nach Art (krieg, frieden, geld, dieb, katastrophe, politik, tech, gesundheit, sport). Rufe das IMMER auf, "
      "BEVOR du ueber Nachrichten oder Ereignisse an bestimmten Orten der Welt sprichst; erzaehle dann in derselben Reihenfolge.",
@@ -339,6 +357,18 @@ class GeminiGespraech:
             if name in ("fenster_steuern", "fenster_liste", "datei_kopieren", "datei_verschieben", "programm_suchen",
                         "programm_aktion", "lautstaerke", "bluetooth", "bildschirmfoto", "zwischenablage"):
                 return self._rechte(name, args)
+            if name == "plan_zeigen":
+                return self.a.plan_zeigen({"titel": args.get("titel", "Plan"), "ziel": args.get("ziel", ""),
+                                           "boxen": [dict(b) for b in (args.get("boxen") or [])]})
+            if name == "plan_anheften":
+                return self.a.plan_anheften(args.get("titel", ""))
+            if name == "plan_oeffnen":
+                return self.a.plan_oeffnen(args.get("titel", ""))
+            if name == "widget_erstellen":
+                return self.a.widget_erstellen(args.get("titel", ""), args.get("art", "liste"), list(args.get("eintraege") or []))
+            if name == "widget_aendern":
+                return self.a.widget_aendern(args.get("titel", ""), args.get("aktion", ""), args.get("text", ""),
+                                             list(args.get("eintraege") or []))
             if name == "globus_zeigen":
                 return self.a.globus_zeigen(list(args.get("meldungen") or []))
             if name == "sicherheit_status":

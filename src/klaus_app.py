@@ -326,6 +326,7 @@ def main() -> None:
     zweit_bruecke = WebBruecke(assistent, zeige_chat)
     zweit = ZweitFenster(zweit_bruecke)
     panel_bruecke.zweit_fenster, panel_bruecke.zweit_bruecke = zweit, zweit_bruecke
+    zweit_bruecke.panel_ziel = panel_bruecke  # "Als Widgets anheften" auf Bildschirm 2 -> Widgets im Panel
     steuerung = Steuerung(chat, panel, orb)
     bruecke.nachricht.connect(steuerung.nachricht)
     bruecke.zustand.connect(steuerung.zustand)

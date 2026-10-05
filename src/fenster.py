@@ -257,6 +257,16 @@ class WebBruecke(QObject):
         self.zweit_bruecke.holo.emit(befehl)
         return True
 
+    @Slot(str)
+    def planAnheften(self, plan_json: str) -> None:
+        """Plan-Board: jede Box als eigenes Widget ins Panel (vom zweiten Bildschirm aus ueber die Panel-Bruecke)."""
+        ziel = getattr(self, "panel_ziel", self)
+        plan = json.loads(plan_json)
+        for box in plan.get("boxen", []):
+            ziel.panelBefehl.emit(json.dumps({"aktion": "eigen", "einst": {"titel": box["titel"], "art": box["art"],
+                                                                            "eintraege": box["eintraege"], "plan": plan.get("titel", "")}},
+                                             ensure_ascii=False))
+
     @Slot()
     def zweitLeer(self) -> None:
         """Zweiter Bildschirm: letztes Fenster zu -> Buehne ausblenden."""
