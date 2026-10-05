@@ -133,10 +133,14 @@ function popupLinie(flaeche) {
 
 // Linien nachfuehren (Fenster koennen gezogen werden) + abgelaufene Pop-ups schliessen. Laeuft nur, solange welche offen sind.
 let popupZaehler = 0;
-function popupSchleife() {
+let popupLinienZeit = 0;
+function popupSchleife(jetzt = performance.now()) {
   const offen = Object.entries(holoPopups);
   if (!offen.length) { popupSchleifeLaeuft = false; return; }
   if (window.klausPause) { setTimeout(() => requestAnimationFrame(popupSchleife), 500); return; }
+  const zieht = offen.some(([, p]) => p.item.classList.contains("zieht"));
+  if (!zieht && jetzt - popupLinienZeit < 120) { requestAnimationFrame(popupSchleife); return; }
+  popupLinienZeit = jetzt;
   const flaeche = document.getElementById("raster"), F = flaeche.getBoundingClientRect(), k = holoKern(flaeche);
   for (const [id, p] of offen) {
     const r = p.item.getBoundingClientRect();
@@ -279,9 +283,12 @@ const POPUP_ARTEN = {
       const dx = (lon - d.mitte[1]) * 111.32 * Math.cos((d.mitte[0] * Math.PI) / 180), dy = (lat - d.mitte[0]) * 110.57;
       return [w / 2 + dx * pxProKm, h / 2 - dy * pxProKm, pxProKm];
     };
+    let letztesBild = 0;
     const zeichne = (jetzt) => {
       if (!box.isConnected) return;  // Fenster zu -> Schleife endet
       if (window.klausPause) { setTimeout(() => requestAnimationFrame(zeichne), 500); return; }
+      if (jetzt - letztesBild < 32) { requestAnimationFrame(zeichne); return; }  // ~30 Bilder/s reichen fuer Radar + Puls
+      letztesBild = jetzt;
       if (jetzt - rgbZeit > 2000) { rgb = getComputedStyle(document.documentElement).getPropertyValue("--rgb").trim() || rgb; rgbZeit = jetzt; }
       const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
       if (w && h) {
@@ -291,8 +298,10 @@ const POPUP_ARTEN = {
         const f = (a) => `rgba(${rgb},${a})`, t = jetzt / 1000;
         // Raster
         ctx.strokeStyle = f(0.07); ctx.lineWidth = 1;
-        for (let x = (w / 2) % 24; x < w; x += 24) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
-        for (let y = (h / 2) % 24; y < h; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+        ctx.beginPath();
+        for (let x = (w / 2) % 24; x < w; x += 24) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+        for (let y = (h / 2) % 24; y < h; y += 24) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+        ctx.stroke();
         const [mx, my, pxKm] = proj(d.mitte[0], d.mitte[1], w, h);
         // Entfernungsringe
         ctx.font = "10px 'JetBrains Mono', Consolas, monospace"; ctx.textAlign = "left"; ctx.textBaseline = "middle";

@@ -122,6 +122,7 @@ class KlausCore {
   anwenden(alt) {
     const name = this.z.name, def = CORE_ZUSTAENDE[name];
     this.buehne.dataset.core = name;
+    document.body.dataset.core = name;   // CSS: Endlos-Animationen nur, wenn Klaus nicht ruht
     document.body.dataset.eye = { EXECUTING: "ok", DONE: "ok", AWAITING_AUTH: "auth", ERROR: "fehler" }[name] || "basis";
     document.body.classList.toggle("core-auth", name === "AWAITING_AUTH");
     this.orb.setZustand(def.orb);

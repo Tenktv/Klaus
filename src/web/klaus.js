@@ -103,7 +103,9 @@ class KlausOrb {
     const tempo = { aus: 1, start: 1.4, hoeren: 1.6, denken: 7, sprechen: 2, aktion: 3.2, freigabe: 0.6, fertig: 2, fehler: 0.4 }[this.zustand] ?? 1;
     if (!this.ruhig) { this.drehA += dt * 0.10 * tempo; this.drehB -= dt * 0.16 * tempo; this.drehC += dt * 0.42 * tempo; }
     this.zeichne(jetzt);
-    requestAnimationFrame((z) => this.tick(z));
+    // Ruhe: per Timer warten statt jedes Bild abzufragen - sonst muss der Browser dauernd 60 Bilder/s erzeugen
+    if (aktiv) requestAnimationFrame((z) => this.tick(z));
+    else setTimeout(() => requestAnimationFrame((z) => this.tick(z)), 55);
   }
 
   // Statische Teile (weiss, dezent) einmal pro Pixelgroesse vorzeichnen: Skala, Tunnel-Ringe, Lichtstrahlen.
