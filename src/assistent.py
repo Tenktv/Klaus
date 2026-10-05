@@ -93,6 +93,9 @@ VERPASST = re.compile(r"was (hab|habe) ich verpasst|was ist (so |denn )?passiert
 # Gedaechtnis per Sprache
 MERKEN = re.compile(r"^\W*(?:bitte\s+)?(?:merk|merke|notier|speicher)\w*\s+(?:dir\b)?\s*(?:bitte\s+)?[,:]?\s*(?:dass\s+)?(?P<was>.+)$", re.I)
 VERGISS = re.compile(r"^\W*(?:bitte\s+)?vergiss\s+(?:bitte\s+)?[,:]?\s*(?:dass\s+|das mit\s+|alles (?:über|zu)\s+)?(?P<was>(?!es\W*$).+)$", re.I)
+# "zeig dein Gedaechtnis als Graph", "zeig Projekt Klaus als Netz", "Graph von meinem Projekt …"
+GRAPH = re.compile(r"\b(graph\w*|netz\w*|wissensnetz)\b", re.I)
+GRAPH_PROJEKT = re.compile(r"projekt\w*\s+(?:von\s+)?(?P<name>.+?)(?:\s+als\s+.*)?$", re.I)
 WISSEN = re.compile(r"was (wei(ß|ss)t|hast) du (alles |eigentlich |so )?((ü|ue)ber mich|von mir)|was hast du dir (alles )?gemerkt", re.I)
 NACHFRAGE_SEK = 8  # so lange hoert Klaus nach einer Antwort ohne Weckwort weiter
 VERLAUF_VERGESSEN_SEK = 180
@@ -249,6 +252,34 @@ class Assistent:
     def log(self, text: str) -> None:
         """Zeile im Live-Log-Fenster (klesro://...)."""
         self.b.holo.emit(json.dumps({"aktion": "log", "text": text}, ensure_ascii=False))
+
+    def graph_zeigen(self, was: str = "gedaechtnis", projekt: str = "") -> str:
+        """Wissensnetz im Panel (web/graph.js): Gedaechtnis-Vault oder Code-Projekt (graphify, ohne KI/Kosten)."""
+        import graphen
+
+        was = "projekt" if was.startswith("proj") or was == "code" else "gedaechtnis"
+
+        def los() -> None:
+            try:
+                if was == "gedaechtnis":
+                    self.log("graph/gedaechtnis vault lesen")
+                    d = graphen.gedaechtnis()
+                    titel = "GEDÄCHTNIS · WISSENSNETZ"
+                else:
+                    self.log(f"graph/projekt graphify update {projekt or '(zuletzt geoeffnet)'}")
+                    d = graphen.projekt(projekt)
+                    titel = f"CODE-GRAPH · {d.get('name', '').upper()[:30]}"
+                self.holo("oeffne", f"graph-{was}", art="graph", titel=titel, daten=d)
+                self.log(f"graph/fertig {len(d['knoten'])} knoten · {len(d['kanten'])} kanten · {len(d['gruppen'])} gruppen")
+            except Exception as e:
+                print(f"[Klaus] Graph: {e}")
+                self.log(f"graph/fehler {str(e)[:80]}")
+                self.sage(f"Den Graphen konnte ich nicht bauen: {str(e)[:120]}")
+
+        threading.Thread(target=los, daemon=True).start()
+        if was == "gedaechtnis":
+            return "Hier ist mein Gedächtnis als Netz."
+        return f"Ich baue den Code-Graphen{' für ' + projekt if projekt else ' für dein letztes Projekt'}, einen Moment."
 
     def leads_suchen(self, branchen: str, ort: str = "Göppingen", radius_km: float = 12) -> str:
         """OSM-Lead-Suche im Hintergrund - mit Lead-Karte und Pipeline im Panel. Meldet sich, wenn sie fertig ist."""
@@ -572,6 +603,15 @@ class Assistent:
             self.zeige("denken", "Ich schaue nach …")
             self.sage(self.briefing_text())
             self.letztes_briefing = ""  # einmal erzaehlt reicht; danach gibt's den aktuellen Stand
+            return
+
+        if GRAPH.search(befehl) and re.search(r"ged(ä|ae)chtnis|erinnerung|projekt|code", befehl, re.I):
+            if re.search(r"ged(ä|ae)chtnis|erinnerung", befehl, re.I):
+                self.sage(self.graph_zeigen("gedaechtnis"), zustand="aktion")
+            else:
+                m = GRAPH_PROJEKT.search(befehl)
+                name = re.sub(r"\b(als|graph\w*|netz\w*|zeigen|anzeigen)\b", "", m.group("name"), flags=re.I).strip(" .,") if m else ""
+                self.sage(self.graph_zeigen("projekt", name), zustand="aktion")
             return
 
         if self.gedaechtnis_befehl(befehl):

@@ -15,6 +15,8 @@ function fokusPruefen() {
   if (an === fokusAn) return;
   fokusAn = an;
   document.body.classList.toggle("fokus", an);
+  // letztes Pop-up zu: Gedanken im Reaktor kurz danach ausblenden
+  if (!an && window.klausCore) setTimeout(() => { if (!fokusAn) klausCore.gedankenLeeren(); }, 3000);
   webVerdecken(an);
 }
 addEventListener("keydown", (e) => { if (e.key === "Escape") Object.keys(holoPopups).forEach(popupZu); });
@@ -23,8 +25,13 @@ function holoBefehl(json) {
   let b;
   try { b = typeof json === "string" ? JSON.parse(json) : json; } catch { return; }
   if (b.aktion === "zu") return popupZu(b.id);
-  if (b.aktion === "alle_zu") return Object.keys(holoPopups).forEach(popupZu);
+  if (b.aktion === "alle_zu") { if (window.klausCore) klausCore.gedankenLeeren(); return Object.keys(holoPopups).forEach(popupZu); }
   if (b.aktion === "log") { b = { id: "log", art: "log", daten: { zeile: b.text } }; }
+  // Denken als Graph im Reaktor: Pipeline-Schritte werden Knoten, Log-Zeilen (Werkzeuge) Blaetter
+  if (window.klausCore && b.daten) {
+    (b.daten.schritte || []).forEach((s, i) => klausCore.gedanke(`s${i}`, s.name, s.status || "pending"));
+    if (b.daten.zeile) klausCore.gedankeBlatt(b.daten.zeile);
+  }
   const p = holoPopups[b.id] || (b.art ? popupOeffnen(b) : null);  // Update fuer ein geschlossenes Fenster ohne Art: ignorieren
   if (!p) return;
   if (b.titel && p.titelEl.dataset.text !== b.titel) { p.titelEl.dataset.text = b.titel; holoTitel(p.titelEl, b.titel); }

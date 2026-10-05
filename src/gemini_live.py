@@ -96,6 +96,11 @@ WERKZEUGE = [
      "NUR mit einem Pfad aus datei_suchen, und NUR nachdem du dem Nutzer Namen und Ort genannt und er ausdruecklich ja gesagt hat.",
      "parameters": {"type": "OBJECT", "properties": {"pfad": {"type": "STRING", "description": "Vollstaendiger Pfad aus datei_suchen"}},
                     "required": ["pfad"]}},
+    {"name": "graph_zeigen", "description": "Zeigt im Panel ein Wissensnetz als Graph: dein Gedaechtnis (Fakten, Gespraeche, "
+     "Briefings, Themen) oder ein Code-Projekt (Dateien, Funktionen und ihre Verbindungen, ueber graphify, kostenlos).",
+     "parameters": {"type": "OBJECT", "properties": {
+         "was": {"type": "STRING", "description": "'gedaechtnis' oder 'projekt'"},
+         "projekt": {"type": "STRING", "description": "Name des Projekts (leer = zuletzt in VS Code geoeffnet)"}}, "required": ["was"]}},
     {"name": "leads_suchen", "description": "Sucht ueber OpenStreetMap Betriebe ohne eigene Website (Leads) in einer Region, "
      "prueft ihre Website und speichert sie in der Lead-Liste. Laeuft im Hintergrund, Karte und Fortschritt erscheinen im Panel.",
      "parameters": {"type": "OBJECT", "properties": {
@@ -240,6 +245,8 @@ class GeminiGespraech:
                 b.zustand.emit("aktion")
                 b.panel.emit(json.dumps({"aktion": "neu_laden", "typ": "projekte"}))
                 return ergebnis
+            if name == "graph_zeigen":
+                return self.a.graph_zeigen(args.get("was", "gedaechtnis"), args.get("projekt", ""))
             if name == "leads_suchen":
                 return self.a.leads_suchen(args.get("branchen", ""), args.get("ort") or "Göppingen",
                                            float(args.get("radius_km") or 12))

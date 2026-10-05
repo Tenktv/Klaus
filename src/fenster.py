@@ -225,6 +225,12 @@ class WebBruecke(QObject):
     def vscode(self, pfad: str) -> None:
         subprocess.Popen(["cmd", "/c", "code", pfad], creationflags=subprocess.CREATE_NO_WINDOW)
 
+    @Slot(str, str)
+    def graph(self, was: str, wert: str) -> None:
+        """Graph-Fenster aus dem Panel heraus (Knopf im Gedaechtnis-/Projekte-Widget)."""
+        if self.assistent:
+            self.assistent.graph_zeigen(was, wert)
+
     @Slot(str)
     def vergissEintrag(self, eintrag_id: str) -> None:
         import gehirn
@@ -373,8 +379,8 @@ def _web_ansicht(ansicht: QWebEngineView, seite: str, bruecke: WebBruecke) -> No
     ansicht.page().setBackgroundColor(Qt.transparent)
     ansicht.setContextMenuPolicy(Qt.NoContextMenu)
     url = QUrl.fromLocalFile(str(WEB_DIR / seite))
-    if os.getenv("KLAUS_CORE_DEBUG") == "1":  # Debug-Panel fuer die Core-Zustaende gleich offen + Demo-Ablauf
-        url.setQuery("debug=1")
+    if os.getenv("KLAUS_CORE_DEBUG") in ("1", "graph"):  # Debug-Panel offen + Demo-Ablauf (graph = Gedaechtnis-Graph)
+        url.setQuery(f"debug={os.getenv('KLAUS_CORE_DEBUG')}")
     ansicht.load(url)
     ansicht._kanal, ansicht._bruecke = kanal, bruecke  # Referenzen halten, sonst raeumt Python sie weg
 

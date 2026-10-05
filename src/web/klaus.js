@@ -42,7 +42,7 @@ function wendeThemaAn(name) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", t.bg);
 }
 
-// Holo-Kern: nur Licht, kein Glas und kein Metall - heller Energiekern, gegenlaeufige Leuchtringe, feine Skala.
+// Reaktor-Kern: Portal aus Licht - Tunnel-Ringe mit Tiefe, Lichtstrahlen, gluehender Hauptring, weisser Kern.
 // Gezeichnet in 600er-Einheiten und auf die Canvas skaliert; die Skala ist statisch (Offscreen-Canvas).
 class KlausOrb {
   // platz < 1: Auge kleiner zeichnen (Rand fuer Effekte)
@@ -74,7 +74,7 @@ class KlausOrb {
   // Lage des Kerns in CSS-Pixeln der Canvas: Mitte, aeusserer Ring (gehaeuse) und innerer Ring (linse)
   geometrie() {
     const w = this.c.clientWidth, h = this.c.clientHeight, r = (Math.min(w, h) / 2) * this.platz;
-    return { mx: w / 2, my: h / 2, gehaeuse: r * 0.95, linse: r * 0.37 };
+    return { mx: w / 2, my: h / 2, gehaeuse: r * 0.95, linse: r * 0.5 };
   }
 
   rgba(a, hell = 0) {
@@ -106,27 +106,43 @@ class KlausOrb {
     requestAnimationFrame((z) => this.tick(z));
   }
 
-  // Statische Skala (weiss, dezent) einmal pro Pixelgroesse vorzeichnen; pro Bild nur gedreht eingeblendet
+  // Statische Teile (weiss, dezent) einmal pro Pixelgroesse vorzeichnen: Skala, Tunnel-Ringe, Lichtstrahlen.
+  // Pro Bild wird das nur gedreht eingeblendet und farbig ueberstrahlt.
   baueStatisch(px) {
     const c = document.createElement("canvas");
     c.width = c.height = px;
     const x = c.getContext("2d");
     x.scale(px / 600, px / 600);
     const cx = 300, cy = 300, voll = Math.PI * 2;
-    x.lineWidth = 1;
-    for (const [r, a] of [[284, 0.10], [226, 0.07], [128, 0.08]]) {
-      x.beginPath(); x.arc(cx, cy, r, 0, voll); x.strokeStyle = `rgba(255,255,255,${a})`; x.stroke();
+    // Tunnel: Ringe ruecken zur Mitte hin enger zusammen und werden heller (Tiefe)
+    for (let i = 0; i < 9; i++) {
+      const k = i / 9, r = 62 + 214 * Math.pow(1 - k, 1.5);
+      x.beginPath(); x.arc(cx, cy, r, 0, voll);
+      x.lineWidth = 1; x.strokeStyle = `rgba(255,255,255,${0.05 + k * 0.12})`; x.stroke();
     }
-    // Skala: 120 Striche, jeder 10. lang
+    // Lichtstrahlen in den Tunnel hinein
+    const strahl = x.createRadialGradient(cx, cy, 30, cx, cy, 250);
+    strahl.addColorStop(0, "rgba(255,255,255,.55)"); strahl.addColorStop(0.45, "rgba(255,255,255,.10)"); strahl.addColorStop(1, "rgba(255,255,255,0)");
+    x.strokeStyle = strahl;
+    for (const [n, b] of [[72, 0.8], [18, 2.2]]) {
+      x.beginPath();
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * voll + (b > 1 ? 0.09 : 0), innen = 34 + (i % 3) * 8;
+        x.moveTo(cx + Math.cos(a) * innen, cy + Math.sin(a) * innen);
+        x.lineTo(cx + Math.cos(a) * 250, cy + Math.sin(a) * 250);
+      }
+      x.lineWidth = b; x.stroke();
+    }
+    // Skala aussen: 120 Striche, jeder 10. lang
     for (const lang of [true, false]) {
       x.beginPath();
       for (let i = 0; i < 120; i++) {
         if ((i % 10 === 0) !== lang) continue;
         const a = (i / 120) * voll, l = lang ? 11 : 4;
-        x.moveTo(cx + Math.cos(a) * (268 - l), cy + Math.sin(a) * (268 - l));
-        x.lineTo(cx + Math.cos(a) * 268, cy + Math.sin(a) * 268);
+        x.moveTo(cx + Math.cos(a) * (284 - l), cy + Math.sin(a) * (284 - l));
+        x.lineTo(cx + Math.cos(a) * 284, cy + Math.sin(a) * 284);
       }
-      x.strokeStyle = lang ? "rgba(255,255,255,.38)" : "rgba(255,255,255,.14)";
+      x.lineWidth = 1; x.strokeStyle = lang ? "rgba(255,255,255,.4)" : "rgba(255,255,255,.15)";
       x.stroke();
     }
     this.statisch = { px, skala: c };
@@ -165,6 +181,15 @@ class KlausOrb {
     }
   }
 
+  // Ring als leuchtende Roehre: mehrere Striche von breit/schwach nach duenn/weiss
+  roehre(r, staerke, rgba) {
+    const ctx = this.ctx;
+    for (const [b, a, hell] of [[36, 0.08, 0], [16, 0.22, 0], [7, 0.75, 0.35], [2, 0.95, 0.85]]) {
+      ctx.beginPath(); ctx.arc(300, 300, r, 0, Math.PI * 2);
+      ctx.lineWidth = b * staerke; ctx.strokeStyle = rgba(a, hell); ctx.stroke();
+    }
+  }
+
   zeichne(jetzt) {
     const { c, ctx } = this;
     const dpr = Math.min(1.5, window.devicePixelRatio || 1);
@@ -181,7 +206,7 @@ class KlausOrb {
     const col = this.farbe;
     const rgba = (a, hell = 0) => `rgba(${(col[0] + (255 - col[0]) * hell) | 0},${(col[1] + (255 - col[1]) * hell) | 0},${(col[2] + (255 - col[2]) * hell) | 0},${Math.max(0, Math.min(1, a))})`;
 
-    // Energie des Kerns je Zustand
+    // Energie des Reaktors je Zustand
     let pu;
     if (z === "hoeren" || z === "start") pu = 0.9 + this.pegel * 0.6;
     else if (z === "sprechen") pu = 0.95 + this.pegel * 0.5;
@@ -192,7 +217,11 @@ class KlausOrb {
     else pu = 1 + 0.07 * Math.sin((t * Math.PI * 2) / 5);   // Atmen
 
     ctx.globalCompositeOperation = "lighter";
-    // Skala (statisch, langsam gedreht)
+    // Tiefes Leuchten im Tunnel
+    let g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 290);
+    g.addColorStop(0, rgba(0.35 * pu)); g.addColorStop(0.5, rgba(0.08)); g.addColorStop(1, rgba(0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, 290, 0, voll); ctx.fill();
+    // Tunnel, Strahlen, Skala (statisch, langsam gedreht)
     ctx.save(); ctx.translate(cx, cy); ctx.rotate(this.drehA * 0.3); ctx.translate(-cx, -cy);
     ctx.drawImage(this.statisch.skala, 0, 0, 600, 600);
     ctx.restore();
@@ -200,32 +229,37 @@ class KlausOrb {
     // Abtast-Kegel beim Denken/Ausfuehren
     if ((z === "denken" || z === "aktion") && ctx.createConicGradient) {
       const kegel = ctx.createConicGradient(this.drehC * 2, cx, cy);
-      kegel.addColorStop(0, rgba(0.22)); kegel.addColorStop(0.12, rgba(0)); kegel.addColorStop(1, rgba(0));
-      ctx.fillStyle = kegel; ctx.beginPath(); ctx.arc(cx, cy, 262, 0, voll); ctx.fill();
+      kegel.addColorStop(0, rgba(0.25)); kegel.addColorStop(0.12, rgba(0)); kegel.addColorStop(1, rgba(0));
+      ctx.fillStyle = kegel; ctx.beginPath(); ctx.arc(cx, cy, 270, 0, voll); ctx.fill();
     }
 
-    // Aeussere Ringe: zwei duenne Boegen, Segmentring, drei lange Lichtboegen
-    this.boegen(244, 2, 1.6, -this.drehA * 0.8, 1.4, rgba, 0.55);
-    this.segRing(204, 6, 36, 0.78, this.drehA, rgba(1), 0.22 + 0.14 * pu);
-    this.segRing(204, 1.2, 36, 0.78, this.drehA, rgba(1, 0.5), 0.55);
-    this.boegen(164, 3, 0.9, this.drehB, 3, rgba, 0.85);
-    this.segRing(110, 1.5, 60, 0.5, -this.drehB * 1.4, rgba(1, 0.3), 0.5);
+    // Aussenstruktur: Plattenring + duenne Kante, gegenlaeufige Tunnel-Segmente
+    this.segRing(244, 12, 24, 0.86, this.drehA, "rgba(255,255,255,1)", 0.07);
+    this.segRing(244, 1.2, 24, 0.86, this.drehA, rgba(1, 0.5), 0.5);
+    this.segRing(206, 4, 48, 0.6, -this.drehB, rgba(1, 0.2), 0.3 + 0.12 * pu);
+    this.segRing(96, 2, 36, 0.5, this.drehB * 1.6, rgba(1, 0.4), 0.45);
+    this.boegen(226, 3, 0.7, this.drehB * 0.7, 2, rgba, 0.75);
+    // Warnlichter auf dem Plattenring
+    ctx.fillStyle = `rgba(255,150,60,${0.55 + 0.25 * Math.sin(t * 2)})`;
+    for (let i = 0; i < 8; i++) {
+      const a = this.drehA + (i / 8) * voll + 0.12;
+      ctx.beginPath(); ctx.arc(cx + Math.cos(a) * 244, cy + Math.sin(a) * 244, 2.4, 0, voll); ctx.fill();
+    }
 
-    // Kern: weiches Leuchten, heller Mittelpunkt, Rand, Plasma-Boegen
-    const r = 150 * pu;
-    let g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    // Portal: dicker gluehender Hauptring + innerer Ring
+    this.roehre(150 * (0.97 + pu * 0.03), 0.8 + pu * 0.25, rgba);
+    this.roehre(122, 0.35, rgba);
+    this.boegen(150, 4, 0.5, -this.drehC * 1.5, 2.5, (a) => rgba(a, 0.9), 0.6);
+
+    // Weisser Kern
+    const r = 120 * pu;
+    g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
     g.addColorStop(0, "rgba(255,255,255,1)");
-    g.addColorStop(0.07, rgba(1, 0.75));
-    g.addColorStop(0.2, rgba(0.85, 0.15));
-    g.addColorStop(0.45, rgba(0.28));
+    g.addColorStop(0.14, "rgba(255,255,255,.9)");
+    g.addColorStop(0.32, rgba(0.75, 0.45));
+    g.addColorStop(0.65, rgba(0.18));
     g.addColorStop(1, rgba(0));
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r, 0, voll); ctx.fill();
-    ctx.lineWidth = 8; ctx.strokeStyle = rgba(0.12 * pu);
-    ctx.beginPath(); ctx.arc(cx, cy, 48 * pu, 0, voll); ctx.stroke();
-    ctx.lineWidth = 1.6; ctx.strokeStyle = rgba(0.85, 0.4);
-    ctx.beginPath(); ctx.arc(cx, cy, 48 * pu, 0, voll); ctx.stroke();
-    this.boegen(72 * (0.9 + pu * 0.1), 3, 1.1, this.drehC * 3, 2.4, (a) => rgba(a, 0.3), 0.8);
-    this.boegen(86, 4, 0.35, -this.drehC * 2, 1.2, rgba, 0.6);
 
     // Ring-Burst bei Ausfuehren/Fertig
     if (this.burst >= 0) {
@@ -233,8 +267,8 @@ class KlausOrb {
       if (p > 1) this.burst = -1;
       else {
         const e = 1 - Math.pow(1 - p, 3);
-        ctx.beginPath(); ctx.arc(cx, cy, 200 + e * 90, 0, voll); ctx.lineWidth = 6 * (1 - p) + 0.5; ctx.strokeStyle = rgba(1 - p); ctx.stroke();
-        ctx.beginPath(); ctx.arc(cx, cy, 200 + e * 56, 0, voll); ctx.lineWidth = 1; ctx.strokeStyle = `rgba(255,255,255,${(1 - p) * 0.8})`; ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx, cy, 150 + e * 140, 0, voll); ctx.lineWidth = 6 * (1 - p) + 0.5; ctx.strokeStyle = rgba(1 - p); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx, cy, 150 + e * 90, 0, voll); ctx.lineWidth = 1; ctx.strokeStyle = `rgba(255,255,255,${(1 - p) * 0.8})`; ctx.stroke();
       }
     }
     ctx.globalCompositeOperation = "source-over";

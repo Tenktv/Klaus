@@ -78,6 +78,24 @@ class KlausCore {
     this.letzte = performance.now();
     this.letzteWelle = 0;
     this.leer = true;
+    this.ruheBild = "";      // Groesse, fuer die das stille Sternbild zuletzt gezeichnet wurde
+    // Denken als Graph: Schritte (Knoten im Reaktor) und Werkzeug-Aufrufe (Blaetter weiter aussen)
+    this.gedanken = new Map();   // id -> { id, label, status, eltern, geboren, zuletzt, blatt }
+    // Stilles Sternbild um den Reaktor (graphify-Look): feste Punkte in Polarkoordinaten, Radius in Reaktor-Radien
+    this.sterne = [];
+    let saat = 7;
+    const zufall = () => ((saat = (saat * 9301 + 49297) % 233280) / 233280);
+    while (this.sterne.length < 46) {
+      const w = zufall() * Math.PI * 2, r = 1.04 + zufall() * 0.5;
+      if (Math.abs(Math.sin(w)) > 0.9 && Math.sin(w) < 0) continue;  // nicht in den Kopf (Zustandstext)
+      this.sterne.push({ w, r, g: 0.8 + zufall() * 1.6, f: zufall() < 0.25 ? 1 : zufall() < 0.4 ? 2 : 0 });
+    }
+    this.sternKanten = [];
+    this.sterne.forEach((a, i) => {
+      const nah = this.sterne.map((b, j) => [j, Math.hypot(Math.cos(a.w) * a.r - Math.cos(b.w) * b.r, Math.sin(a.w) * a.r - Math.sin(b.w) * b.r)])
+        .filter(([j]) => j !== i).sort((x, y) => x[1] - y[1]).slice(0, 2);
+      for (const [j, d] of nah) if (d < 0.42 && !this.sternKanten.some(([x, y]) => x === j && y === i)) this.sternKanten.push([i, j]);
+    });
     this.anwenden(null);
     requestAnimationFrame((t) => this.tick(t));
   }
@@ -151,6 +169,30 @@ class KlausCore {
       `<span class="${i < index ? "fertig" : i === index ? "an" : ""}">${p}</span>`).join('<i class="pfeil">→</i>');
   }
 
+  // ------------------------------------------------------------------ Denken als Graph
+  // Schritt anlegen/aendern: status pending|running|complete|warten|fehler|uebersprungen
+  gedanke(id, label, status = "pending") {
+    const g = this.gedanken.get(id);
+    if (g) { g.label = label || g.label; if (g.status !== status) { g.status = status; g.wechsel = performance.now(); } g.zuletzt = performance.now(); return; }
+    this.gedanken.set(id, { id, label, status, eltern: null, geboren: performance.now(), zuletzt: performance.now(), wechsel: performance.now() });
+  }
+
+  // Werkzeug-Aufruf als Blatt am laufenden Schritt (sonst direkt am Kern); haelt hoechstens 4 je Schritt
+  gedankeBlatt(text) {
+    const pfad = String(text || "").replace(/^klesro:\/\//, "").split(" ")[0].slice(0, 26);
+    if (!pfad) return;
+    const schritte = [...this.gedanken.values()].filter((g) => !g.blatt);
+    const eltern = (schritte.find((g) => g.status === "running") || schritte.at(-1) || null);
+    const id = `b${performance.now().toFixed(0)}${Math.random().toString(36).slice(2, 5)}`;
+    this.gedanken.set(id, { id, label: pfad, status: "complete", eltern: eltern ? eltern.id : null, blatt: true,
+                            geboren: performance.now(), zuletzt: performance.now(), wechsel: performance.now() });
+    const geschwister = [...this.gedanken.values()].filter((g) => g.blatt && g.eltern === (eltern ? eltern.id : null));
+    while (geschwister.length > 4) this.gedanken.delete(geschwister.shift().id);
+  }
+
+  // Alles ausblenden (langsam, ueber "zuletzt")
+  gedankenLeeren() { for (const g of this.gedanken.values()) g.weg = performance.now(); }
+
   burst() { for (let i = 0; i < 3; i++) this.wellen.push({ r: 0, leben: 1, verz: i * 0.14, breit: 3 - i * 0.7, burst: true }); }
 
   // ------------------------------------------------------------------ Animation
@@ -177,11 +219,17 @@ class KlausCore {
       this.orb.setPegel(this.pegel);
     }
 
+    // Blaetter verblassen nach 25 s, ausgeblendete Gedanken nach 1,2 s
+    for (const g of this.gedanken.values()) {
+      if ((g.weg && jetzt - g.weg > 1200) || (g.blatt && jetzt - g.geboren > 25000)) this.gedanken.delete(g.id);
+    }
     const aktiv = ["THINKING", "EXECUTING", "AWAITING_AUTH", "LISTENING", "DONE"].includes(name)
-      || this.teilchen.length || this.wellen.length;
+      || this.teilchen.length || this.wellen.length || this.gedanken.size;
     if (!aktiv || this.ruhig) {
-      if (!this.leer) { this.ctx.clearRect(0, 0, this.fx.width, this.fx.height); this.leer = true; }
-      setTimeout(() => requestAnimationFrame((t) => this.tick(t)), 120);  // nichts zu zeichnen -> kaum CPU
+      // Ruhe: das Sternbild einmal still zeichnen, dann nichts mehr (kaum CPU) - neu nur bei anderer Groesse
+      const groesse = `${this.fx.clientWidth}x${this.fx.clientHeight}`;
+      if (!this.leer || this.ruheBild !== groesse) { this.zeichne(0, jetzt, true); this.ruheBild = groesse; this.leer = true; }
+      setTimeout(() => requestAnimationFrame((t) => this.tick(t)), 120);
       return;
     }
     this.leer = false;
@@ -189,7 +237,7 @@ class KlausCore {
     requestAnimationFrame((t) => this.tick(t));
   }
 
-  zeichne(dt, jetzt) {
+  zeichne(dt, jetzt, still = false) {
     const c = this.fx, ctx = this.ctx, dpr = Math.min(1.5, window.devicePixelRatio || 1);
     const w = c.clientWidth, h = c.clientHeight;
     if (!w || !h) return;
@@ -204,6 +252,12 @@ class KlausCore {
     const kern = geo.linse, aussen = Math.min(geo.gehaeuse * 1.3, rand / 1.25), voll = Math.PI * 2, name = this.z.name;
     const farbe = (a, hell = 0) => this.orb.rgba(a, hell);
     ctx.globalCompositeOperation = "lighter";
+
+    if (still) {
+      this.zeichneNetz(ctx, mx, my, geo, w, h, jetzt, true);
+      ctx.globalCompositeOperation = "source-over";
+      return;
+    }
 
     // --- Denken: wenige feine Lichtstriche fliessen ins Auge
     if (name === "THINKING" && this.teilchen.length < 26 && Math.random() < dt * 24) {
@@ -268,7 +322,82 @@ class KlausCore {
       ctx.beginPath(); ctx.arc(mx, my, kern + welle.r, 0, voll); ctx.stroke();
     }
     this.wellen = this.wellen.filter((welle) => welle.leben > 0);
+    this.zeichneNetz(ctx, mx, my, geo, w, h, jetzt, still);
     ctx.globalCompositeOperation = "source-over";
+  }
+
+  // Sternbild um den Reaktor + Gedanken-Graph im Reaktor
+  zeichneNetz(ctx, mx, my, geo, w, h, jetzt, still) {
+    const R = geo.gehaeuse / 0.95, voll = Math.PI * 2, farbe = (a, hell = 0) => this.orb.rgba(a, hell);
+    const dreh = still ? 0 : this.t * 0.012;
+    const FARBEN = [(a) => farbe(a, 0.2), (a) => `rgba(255,255,255,${a})`, (a) => `rgba(255,190,90,${a})`];
+    // --- Sternbild
+    const pos = this.sterne.map((st) => [mx + Math.cos(st.w + dreh) * st.r * R, my + Math.sin(st.w + dreh) * st.r * R]);
+    ctx.lineWidth = 0.7;
+    ctx.strokeStyle = farbe(0.16, 0.3);
+    ctx.beginPath();
+    for (const [i, j] of this.sternKanten) { ctx.moveTo(pos[i][0], pos[i][1]); ctx.lineTo(pos[j][0], pos[j][1]); }
+    ctx.stroke();
+    this.sterne.forEach((st, i) => {
+      const funkeln = still ? 1 : 0.7 + 0.3 * Math.sin(this.t * 1.3 + i);
+      ctx.fillStyle = FARBEN[st.f](0.55 * funkeln);
+      ctx.beginPath(); ctx.arc(pos[i][0], pos[i][1], st.g, 0, voll); ctx.fill();
+    });
+    if (!this.gedanken.size) return;
+
+    // --- Gedanken: Schritte gleichmaessig im Reaktor (zwischen Portal und Aussenring), Blaetter weiter aussen
+    const FARBE = { running: null, complete: "60,245,155", warten: "255,174,43", fehler: "255,61,90" };
+    const schritte = [...this.gedanken.values()].filter((g) => !g.blatt);
+    const lage = new Map();
+    schritte.forEach((g, i) => {
+      const winkel = -Math.PI / 2 + ((i + 0.5) / Math.max(schritte.length, 1)) * voll + (still ? 0 : this.t * 0.02);
+      lage.set(g.id, [mx + Math.cos(winkel) * R * 0.68, my + Math.sin(winkel) * R * 0.68, winkel]);
+    });
+    const blaetterJe = new Map();
+    for (const g of this.gedanken.values()) if (g.blatt) { const k = g.eltern || "_"; blaetterJe.set(k, [...(blaetterJe.get(k) || []), g]); }
+    for (const [eltern, liste] of blaetterJe) {
+      const basis = eltern !== "_" && lage.get(eltern) ? lage.get(eltern)[2] : -Math.PI / 2;
+      liste.forEach((g, i) => {
+        const winkel = basis + (i - (liste.length - 1) / 2) * 0.16;
+        lage.set(g.id, [mx + Math.cos(winkel) * R * 0.9, my + Math.sin(winkel) * R * 0.9, winkel]);
+      });
+    }
+    ctx.font = "600 11px 'Barlow SC', 'Segoe UI', sans-serif";
+    ctx.textBaseline = "middle";
+    for (const g of this.gedanken.values()) {
+      const p = lage.get(g.id);
+      if (!p) continue;
+      const alter = jetzt - g.geboren, ein = Math.min(1, alter / 450), aus = g.weg ? Math.max(0, 1 - (jetzt - g.weg) / 1200) : 1;
+      const blattAus = g.blatt ? Math.min(1, Math.max(0, (25000 - alter) / 4000)) : 1;
+      const a = ein * aus * blattAus;
+      const rgb = FARBE[g.status];
+      const c = (al) => (rgb ? `rgba(${rgb},${al})` : farbe(al, 0.3));
+      // Verbindung: Schritt <- Portal-Ring, Blatt <- Schritt (waechst beim Entstehen)
+      const von = g.blatt && g.eltern && lage.get(g.eltern) ? lage.get(g.eltern)
+        : [mx + Math.cos(p[2]) * R * 0.5, my + Math.sin(p[2]) * R * 0.5];
+      const zx = von[0] + (p[0] - von[0]) * ein, zy = von[1] + (p[1] - von[1]) * ein;
+      ctx.strokeStyle = c(0.5 * a); ctx.lineWidth = g.blatt ? 0.8 : 1.3;
+      ctx.beginPath(); ctx.moveTo(von[0], von[1]); ctx.lineTo(zx, zy); ctx.stroke();
+      if (ein < 1) continue;
+      // Knoten: laufend pulsiert, Wechsel blitzt kurz auf
+      const puls = g.status === "running" && !still ? 0.5 + 0.5 * Math.sin(this.t * 6) : 0;
+      const blitz = Math.max(0, 1 - (jetzt - g.wechsel) / 600);
+      const r = (g.blatt ? 2.4 : 5) + puls * 2 + blitz * 4;
+      ctx.fillStyle = c(0.18 * a); ctx.beginPath(); ctx.arc(p[0], p[1], r * 2.6, 0, voll); ctx.fill();
+      ctx.fillStyle = g.status === "pending" ? "rgba(0,0,0,.6)" : c(0.95 * a);
+      ctx.strokeStyle = c(0.9 * a); ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, voll); ctx.fill(); ctx.stroke();
+      // Beschriftung nach aussen (rechte Haelfte links buendig, linke rechts buendig), mit dunkler Kontur
+      const rechts = Math.cos(p[2]) >= 0, text = (g.blatt ? g.label : g.label.toUpperCase()).slice(0, 28);
+      ctx.textAlign = rechts ? "left" : "right";
+      ctx.font = g.blatt ? "10px 'JetBrains Mono', Consolas, monospace" : "600 11px 'Barlow SC', 'Segoe UI', sans-serif";
+      const tx = p[0] + (rechts ? 1 : -1) * (r + 7);
+      ctx.globalCompositeOperation = "source-over";
+      ctx.lineWidth = 3; ctx.strokeStyle = `rgba(0,0,0,${0.75 * a})`; ctx.strokeText(text, tx, p[1]);
+      ctx.fillStyle = g.blatt ? `rgba(230,220,215,${0.75 * a})` : `rgba(255,255,255,${0.95 * a})`;
+      ctx.fillText(text, tx, p[1]);
+      ctx.globalCompositeOperation = "lighter";
+    }
   }
 }
 
@@ -284,6 +413,7 @@ function coreDebug(core) {
   const demoKnopf = knopf("▶ DEMO", () => (demo ? stop() : start()));
   knopf("▶ FENSTER", () => popupDemo());
   knopf("✕ FENSTER", () => holoBefehl({ aktion: "alle_zu" }));
+  knopf("◈ GRAPH", () => typeof klaus !== "undefined" && klaus.graph("gedaechtnis", ""));
   const ablauf = [["hoeren", 1800], ["denken", 3600], ["aktion", 1300], ["freigabe", 3200], ["aktion", 1200], ["sprechen", 1600], ["aus", 2500]];
   const start = () => {
     let i = 0;
@@ -306,5 +436,8 @@ function coreDebug(core) {
     box.classList.add("offen");
     start();
     setTimeout(popupDemo, 4500);  // nach der Boot-Sequenz
+  }
+  if (new URLSearchParams(location.search).get("debug") === "graph") {
+    setTimeout(() => typeof klaus !== "undefined" && klaus.graph("gedaechtnis", ""), 4500);
   }
 }
