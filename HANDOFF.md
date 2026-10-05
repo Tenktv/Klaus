@@ -121,8 +121,8 @@ OPENWEB_NINJA_API_KEY, SFTP placeholders). Backup layout: `data/layout.raster.js
 - Then competitor check → friction points → strategy blueprint (circle fills) → feeds into lead letters.
 
 ### Phase E — More natural voice
-- Evaluate **Fish Audio** (cloud TTS API, very natural German, voice cloning, paid per character) vs. local
-  **Fish-Speech / OpenAudio** on the RTX 2070 (non-commercial license → fine for Nikola, not for the product).
+- Decision (Nikola, 2026-10-05): use the **paid Fish Audio API** — it may ship with the product (verify the commercial
+  terms of the plan before launch). Local Fish-Speech/OpenAudio only for experiments (non-commercial license).
 - Needs streaming for Gemini Live? Gemini Live already speaks itself (voice "Charon"); a custom TTS only fits the
   local pipeline or a "text mode" of Gemini Live. Decide with Nikola: keep Gemini voice vs. Gemini text + Fish TTS
   (adds latency). Prototype + A/B with Nikola before switching.
@@ -152,8 +152,11 @@ OPENWEB_NINJA_API_KEY, SFTP placeholders). Backup layout: `data/layout.raster.js
 ### Phase I — Market analysis & trading
 - Read-only first: watchlist, news sentiment per ticker, technical indicators, daily market briefing (data: Yahoo
   finance already used). Paper trading mode with simulated portfolio.
-- Real trading only via an official broker API that supports German customers (check: Interactive Brokers API,
-  others), **every order through the authorization gate**, hard limits (max order size, daily loss limit), kill switch.
+- Real AI-driven trades are allowed via platforms built for it. Nikola's candidate: **Liquid** (liquid.trade, he also
+  sent coinvest.liquid.trade earlier). Next session: check Liquid's API docs, which markets (crypto/stocks), availability
+  and regulation for German customers, fees; alternatives: Interactive Brokers API.
+- **Every order through the authorization gate**, hard limits (max order size, daily loss limit), kill switch,
+  paper trading first, full trade log in the vault.
 - Show Nikola the saved warning about AI trading bots (memory: trading-bot-warnung). No auto-trading without explicit,
   repeated opt-in. No financial advice claims.
 
@@ -170,12 +173,13 @@ OPENWEB_NINJA_API_KEY, SFTP placeholders). Backup layout: `data/layout.raster.js
   security, phone, meetings), per-customer persona/voice/branding, update channel.
 - Before selling: replace GPL/unofficial components, remove Marvel references, setup wizard, installer, DSGVO docs,
   AVV for hosted proxy, support process.
-- Free AI tiers (e.g. Groq free API keys): fine for development/testing with ONE account each. Creating many accounts
-  to never hit limits breaks the providers' terms → not for the product; product needs paid keys or BYO keys.
+- Free AI tiers (e.g. Groq free API keys): **testing only, never in the sold product** (Nikola agreed). One account per
+  provider; the product uses paid keys (done-for-you) or the customer's own keys (BYO).
+- Fish Audio (paid) voice can be part of the product.
 
 ## 6. Open questions for Nikola
 - Calendar: Google or Outlook?
 - "Video" — what exactly?
-- Fish Audio: cloud (paid) or local (free, non-commercial)? Keep Gemini's own voice in live conversations?
-- Trading: which broker? Paper trading first OK?
+- Fish Audio (paid, decided): keep Gemini's own voice in live conversations, or Gemini text + Fish voice (more latency)?
+- Trading: check Liquid (liquid.trade) API + German availability; paper trading first OK?
 - Still missing in `.env`: KLESRO_ADRESSE, KLESRO_TELEFON, SFTP credentials (letters/upload need them).
