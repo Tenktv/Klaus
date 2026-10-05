@@ -19,6 +19,7 @@ import traceback
 from PySide6.QtCore import QObject, Signal
 
 import apps
+import daten
 import freigabe
 import gehirn
 import gemini_live
@@ -831,6 +832,8 @@ class Assistent:
         if aus == self.pausiert:
             return
         self.pausiert = aus  # Hauptschleife oeffnet das Mikro dann nicht mehr
+        merker = daten.BASE_DIR / "data" / "mikro_aus"
+        merker.touch() if aus else merker.unlink(missing_ok=True)   # bleibt auch nach einem Neustart aus
         if aus and self.gemini:
             self.gemini.ende = True
         print(f"[Klaus] Mikrofon: {'AUS' if aus else 'an'}")
@@ -914,7 +917,11 @@ class Assistent:
                         break
             self.zeige("start", "Lade Spracherkennung ...")
             self.ohr = voice.Ohr(freihand=True)
-            self.zeige("aktion", "Bereit – sag „Klaus“")
+            if (daten.BASE_DIR / "data" / "mikro_aus").exists():
+                self.setze_mikro_aus(True)
+                self.zeige("aktion", "Bereit – Mikrofon ist AUS")
+            else:
+                self.zeige("aktion", "Bereit – sag „Klaus“")
             self.b.nachricht.emit("info", "Klaus ist bereit. Sag „Klaus“ oder tippe hier.")
             self.verschwinde(nach=2.0)
         except Exception:

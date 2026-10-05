@@ -120,6 +120,10 @@ WERKZEUGE = [
     {"name": "zwischenablage", "description": "Zwischenablage lesen (nur wenn er es will) oder Text hineinschreiben.",
      "parameters": {"type": "OBJECT", "properties": {"aktion": {"type": "STRING", "description": "lesen oder schreiben"},
                                                      "text": {"type": "STRING"}}, "required": ["aktion"]}},
+    {"name": "mikrofon", "description": "Schaltet das Mikrofon am PC zuhause aus oder an. Aus = Klaus hoert dort gar nichts "
+     "mehr (auch kein 'Klaus'), z. B. wenn die Familie redet. Bleibt auch nach einem Neustart so.",
+     "parameters": {"type": "OBJECT", "properties": {"an": {"type": "BOOLEAN", "description": "true = an, false = aus"}},
+                    "required": ["an"]}},
     {"name": "protokoll_starten", "description": "Startet das Meeting-Protokoll (lokale Mitschrift + Zusammenfassung in den Vault). "
      "NUR wenn Nikola ausdruecklich ein Protokoll/eine Mitschrift will. Braucht seine Freigabe (Zustimmung aller Anwesenden).",
      "parameters": {"type": "OBJECT", "properties": {"titel": {"type": "STRING", "description": "Thema/Kunde der Besprechung"}}}},
@@ -391,6 +395,9 @@ class GeminiGespraech:
             if name in ("fenster_steuern", "fenster_liste", "datei_kopieren", "datei_verschieben", "programm_suchen",
                         "programm_aktion", "lautstaerke", "bluetooth", "bildschirmfoto", "zwischenablage"):
                 return self._rechte(name, args)
+            if name == "mikrofon":
+                self.a.setze_mikro_aus(not args.get("an"))
+                return "Mikrofon am PC ist jetzt " + ("an." if args.get("an") else "aus - Klaus hoert zuhause nichts mehr.")
             if name == "protokoll_starten":
                 return self.a.protokoll_starten(args.get("titel", ""))
             if name == "protokoll_beenden":

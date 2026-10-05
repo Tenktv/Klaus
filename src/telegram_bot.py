@@ -259,6 +259,11 @@ class TelegramKlaus:
                 self.senden(f"🎤 „{text}“")
             if not text or text.startswith("/start"):
                 return
+            if text.strip().lower() in ("/mikro_aus", "/mikro_an"):
+                an = text.strip().lower() == "/mikro_an"
+                self.a.setze_mikro_aus(not an)
+                self.senden("🎙 Mikrofon am PC ist an." if an else "🔇 Mikrofon am PC ist aus – Klaus hört zuhause nichts mehr.")
+                return
             # Freigaben per Telegram nur mit Knopf + PIN - "Freigeben" als Text zaehlt bewusst NICHT
             print(f"[Telegram] ← {text[:80]}")
             with self._sperre:   # eine Antwort nach der anderen
