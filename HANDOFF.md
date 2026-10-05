@@ -165,5 +165,5 @@ Erledigt: **A** Design · **B** Leistung · **C** Freigabe-Gate · **D** Lageber
 - Trading: Liquid prüfen + erst Papier-Trading, okay?
 - „Video“ (frühere Idee): was genau gemeint ist (Bildschirm/Kamera an Gemini Live, Videoanrufe, Video-Erzeugung)?
 - Fehlt noch in `.env`: `KLESRO_ADRESSE`, `KLESRO_TELEFON`, SFTP-Zugang (für Briefe/Upload).
-- Ist das GitHub-Repo öffentlich? Dann sind Name/Ort im Code sichtbar → ggf. auf privat stellen, bis der
-  Setup-Assistent (Phase K) fertig ist.
+- Das GitHub-Repo ist privat (ohne Anmeldung 404). So lassen, bis der Setup-Assistent (Phase K) die
+  persönlichen Daten (Name, Ort, Mikrofon, Spiele) aus dem Code geholt hat.
