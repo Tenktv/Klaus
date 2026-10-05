@@ -68,13 +68,28 @@ REGION = {
 }
 
 
-def _finde(titel: str) -> tuple[float, float, str] | None:
+def _finde(titel: str) -> tuple[float, float, str, str] | None:
+    """-> (lat, lon, ebene, Ortsname) fuer den ersten bekannten Ort in der Schlagzeile."""
     for ebene, tabelle in (("region", REGION), ("de", DEUTSCHLAND), ("welt", WELT), ("de", DEUTSCHLAND_SCHWACH)):
         for name in sorted(tabelle, key=len, reverse=True):
             if re.search(r"(?<![\wÄÖÜäöüß])" + re.escape(name), titel):
                 lat, lon = tabelle[name]
-                return lat, lon, ebene
+                return lat, lon, ebene, name.rstrip("-")
     return None
+
+
+def ort_koordinaten(ort: str) -> tuple[float, float] | None:
+    """Ortsname -> Koordinaten: erst die eigenen Tabellen, sonst die kostenlose Geocoding-API von open-meteo."""
+    for tabelle in (REGION, DEUTSCHLAND, WELT, DEUTSCHLAND_SCHWACH):
+        for name, (lat, lon) in tabelle.items():
+            if name.lower().rstrip("-") == ort.lower().strip():
+                return lat, lon
+    try:
+        r = requests.get("https://geocoding-api.open-meteo.com/v1/search", params={"name": ort, "count": 1, "language": "de"}, timeout=8)
+        treffer = (r.json().get("results") or [None])[0]
+        return (treffer["latitude"], treffer["longitude"]) if treffer else None
+    except Exception:
+        return None
 
 
 def _google_suche(begriff: str, anzahl: int = 8) -> list[dict]:
@@ -134,11 +149,12 @@ def lagebericht() -> dict:
         gesehen.add(titel)
         ort = _finde(titel)
         if ort:
-            punkte[ort[2]].append({"titel": titel, "lat": ort[0], "lon": ort[1], "quelle": quelle, "link": link, "alter": daten._alter(zeit)})
+            punkte[ort[2]].append({"titel": titel, "lat": ort[0], "lon": ort[1], "ort": ort[3], "quelle": quelle, "link": link,
+                                   "alter": daten._alter(zeit)})
     region_news = f_region.result()
     for n in region_news:
-        ort = _finde(n["titel"]) or (48.7035, 9.6524, "region")
-        punkte["region"].append({**n, "lat": ort[0], "lon": ort[1], "quelle": "google"})
+        ort = _finde(n["titel"]) or (48.7035, 9.6524, "region", daten.ORT_NAME or "Göppingen")
+        punkte["region"].append({**n, "lat": ort[0], "lon": ort[1], "ort": ort[3], "quelle": "google"})
     maerkte = [m for m in f_markt.result()["liste"] if not m.get("fehler")]
     zahlen = _zahlen()
     wetter = f_wetter.result()
@@ -152,6 +168,8 @@ def sprechtext(punkte: dict, maerkte: list, zahlen: dict, wetter: dict) -> dict:
     kurz = lambda t: t if len(t) < 110 else t[:107].rsplit(" ", 1)[0] + " …"
     welt = punkte["welt"][:2]
     t = {"welt": "Lagebericht. Weltweit: " + (" … ".join(kurz(p["titel"]) for p in welt) if welt else "nichts Auffälliges in den Schlagzeilen.")}
+    # Pro Meldung ein Satz - der Globus dreht sich dazu jeweils zum Ort
+    t["welt_einzeln"] = [f"{p['ort']}: {kurz(p['titel'])}" for p in punkte["welt"][:3]]
     de = punkte["de"][:2]
     t["de"] = "Deutschland: " + (" … ".join(kurz(p["titel"]) for p in de) if de else "keine großen Schlagzeilen.")
     reg = punkte["region"][:1]

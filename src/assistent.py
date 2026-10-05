@@ -417,6 +417,51 @@ class Assistent:
         threading.Thread(target=los, daemon=True).start()
         return f"Ich prüfe die Konkurrenz von {lead['name']}."
 
+    def globus_zeigen(self, meldungen: list[dict], sprechen: bool = False) -> str:
+        """Globus-Fenster: dreht sich nacheinander zu jeder Meldung (ort, titel, art optional - sonst erkennt globus.js sie).
+        sprechen=False: Gemini erzaehlt selbst, der Globus wechselt alle 6 s; sprechen=True: Klaus liest jede Meldung vor."""
+        import lage
+
+        punkte = []
+        for m in meldungen[:8]:
+            koord = lage.ort_koordinaten(str(m.get("ort", ""))) if m.get("ort") else None
+            if not koord and m.get("titel"):
+                f = lage._finde(m["titel"])
+                koord = f[:2] if f else None
+            if koord:
+                punkte.append({"lat": koord[0], "lon": koord[1], "ort": m.get("ort", ""), "titel": m.get("titel", ""),
+                               **({"art": m["art"]} if m.get("art") else {})})
+        if not punkte:
+            return "Für diese Meldungen kenne ich keine Orte auf der Karte."
+        self.holo("oeffne", "globus", art="globus", titel="GLOBUS · WELTLAGE", daten={"ereignisse": punkte})
+        self.log(f"globus/{len(punkte)} orte " + ", ".join(p["ort"] or "?" for p in punkte)[:80])
+
+        def ablauf() -> None:
+            for p in punkte:
+                self.holo("update", "globus", daten={"fokus": p})
+                if sprechen:
+                    time.sleep(1.4)
+                    self.sage(f"{p['ort']}: {p['titel']}" if p["ort"] else p["titel"], zustand="sprechen")
+                else:
+                    time.sleep(6)
+            self.holo("update", "globus", daten={"uebersicht": True})
+            if sprechen:
+                self.verschwinde(nach=1.0)
+
+        threading.Thread(target=ablauf, daemon=True).start()
+        return f"Globus zeigt {len(punkte)} Orte."
+
+    def weltnachrichten(self) -> str:
+        """'Klaus, was ist in der Welt los?' - die wichtigsten Weltmeldungen auf dem Globus, Klaus liest vor."""
+        import lage
+
+        d = lage.lagebericht()
+        welt = d["welt"][:5]
+        if not welt:
+            return "Gerade finde ich keine Weltmeldungen mit Ort."
+        self.globus_zeigen([{"ort": p.get("ort", ""), "titel": p["titel"]} for p in welt], sprechen=True)
+        return "Hier ist die Weltlage."
+
     def lagebericht_zeigen(self, sprechen: bool = True) -> str:
         """Lagebericht im Panel (web/lage.js): Welt -> Deutschland -> Region -> Maerkte -> Kennzahlen.
         sprechen=True: Klaus spricht jede Station selbst (lokal) und schaltet danach weiter - Bild und Ton bleiben synchron.
@@ -437,6 +482,19 @@ class Assistent:
             for st in stationen:
                 self.holo("update", "lage", daten={"station": st})
                 self.log(f"lage/{st} {len(d.get(st) or []) if isinstance(d.get(st), list) else ''}".strip())
+                if st == "welt" and d["text"].get("welt_einzeln"):
+                    # Globus: zu jeder Meldung drehen, Animation nach Art (Krieg, Frieden, Geld ...), dazu ein Satz
+                    if sprechen:
+                        time.sleep(1.2)
+                        self.sage("Lagebericht. Weltweit.", zustand="sprechen")
+                    for i, satz in enumerate(d["text"]["welt_einzeln"]):
+                        self.holo("update", "lage", daten={"fokus": i})
+                        if sprechen:
+                            time.sleep(1.4)  # Globus dreht sich erst hin
+                            self.sage(satz, zustand="sprechen")
+                        else:
+                            time.sleep(5)
+                    continue
                 if sprechen:
                     time.sleep(1.6)  # Kamera zoomt erst hin
                     self.sage(d["text"][st], zustand="sprechen")
@@ -809,6 +867,9 @@ class Assistent:
         if KONKURRENZ.search(befehl):
             m = KONKURRENZ_FIRMA.search(befehl)
             self.sage(self.konkurrenz_check(m.group("firma") if m else ""), zustand="aktion")
+            return
+        if re.search(r"(was ist|was geht|was passiert)\w*\s+(gerade\s+|heute\s+)?in der welt|weltnachrichten|weltlage|globus", befehl, re.I):
+            self.sage(self.weltnachrichten(), zustand="aktion")
             return
         if LAGE.search(befehl):
             self.lagebericht_zeigen(sprechen=True)

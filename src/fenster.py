@@ -245,6 +245,24 @@ class WebBruecke(QObject):
             print(f"[Klaus] Papierkorb: {self.assistent.loeschen_starten(pfad)}")
             threading.Timer(95, lambda: self.lade("projekte", "")).start()
 
+    @Slot(str, result=bool)
+    def zweit(self, befehl: str) -> bool:
+        """Panel -> zweiter Bildschirm: Holo-Befehl dorthin weiterreichen. False = nicht verfuegbar (lokal oeffnen)."""
+        ziel = getattr(self, "zweit_fenster", None)
+        if not ziel or not ziel.verfuegbar():
+            print(f"[Klaus] Bildschirm 2 nicht verfuegbar (Fenster: {bool(ziel)}, Bildschirm: {bool(_zweiter_bildschirm())})")
+            return False
+        if '"oeffne"' in befehl or '"art"' in befehl:
+            ziel.zeigen()
+        self.zweit_bruecke.holo.emit(befehl)
+        return True
+
+    @Slot()
+    def zweitLeer(self) -> None:
+        """Zweiter Bildschirm: letztes Fenster zu -> Buehne ausblenden."""
+        if isinstance(self.fenster, ZweitFenster):
+            self.fenster.hide()
+
     @Slot(str, str)
     def sicherheit(self, aktion: str, wert: str) -> None:
         """Sicherheits-Widget: scan (wert schnell/voll) oder bestaetigen (Basislinie uebernehmen)."""
@@ -394,7 +412,7 @@ class LogSeite(QWebEnginePage):
             print(f"[JS] {Path(quelle).name}:{zeile} {text}")
 
 
-def _web_ansicht(ansicht: QWebEngineView, seite: str, bruecke: WebBruecke) -> None:
+def _web_ansicht(ansicht: QWebEngineView, seite: str, bruecke: WebBruecke, abfrage: str = "") -> None:
     ansicht.setPage(LogSeite(ansicht))
     kanal = QWebChannel(ansicht.page())
     kanal.registerObject("klaus", bruecke)
@@ -402,7 +420,9 @@ def _web_ansicht(ansicht: QWebEngineView, seite: str, bruecke: WebBruecke) -> No
     ansicht.page().setBackgroundColor(Qt.transparent)
     ansicht.setContextMenuPolicy(Qt.NoContextMenu)
     url = QUrl.fromLocalFile(str(WEB_DIR / seite))
-    if os.getenv("KLAUS_CORE_DEBUG") in ("1", "graph"):  # Debug-Panel offen + Demo-Ablauf (graph = Gedaechtnis-Graph)
+    if abfrage:
+        url.setQuery(abfrage)
+    elif os.getenv("KLAUS_CORE_DEBUG") in ("1", "graph"):  # Debug-Panel offen + Demo-Ablauf (graph = Gedaechtnis-Graph)
         url.setQuery(f"debug={os.getenv('KLAUS_CORE_DEBUG')}")
     ansicht.load(url)
     ansicht._kanal, ansicht._bruecke = kanal, bruecke  # Referenzen halten, sonst raeumt Python sie weg
@@ -464,6 +484,66 @@ class DesktopPanel(QWidget):
                 pos.hwndInsertAfter = HWND_BOTTOM  # nie vor andere Fenster springen
                 pos.flags &= ~SWP_NOZORDER
         return super().nativeEvent(typ, nachricht)
+
+
+# ------------------------------------------------------------------ Zweiter Bildschirm
+def _zweiter_bildschirm():
+    """Der Bildschirm, der nicht der Hauptbildschirm ist (oder None)."""
+    haupt = QApplication.primaryScreen().name()   # Namen vergleichen: PySide liefert jedes Mal neue Objekte
+    return next((s for s in QApplication.screens() if s.name() != haupt), None)
+
+
+def _vollbild_auf(bildschirm) -> bool:
+    """Laeuft gerade ein echtes Vollbild-Programm (Spiel, Praesentation)? Dann nicht stoeren.
+    Windows-eigene Erkennung - ein nur maximiertes Fenster (z. B. VS Code bei versteckter Taskleiste) zaehlt nicht."""
+    try:
+        import win32api
+        import win32gui
+        import win32process
+
+        zustand = ctypes.c_int(0)
+        ctypes.windll.shell32.SHQueryUserNotificationState(ctypes.byref(zustand))
+        if zustand.value in (3, 4):  # Spiel im exklusiven Vollbild (D3D) oder Praesentationsmodus
+            return True
+        if zustand.value != 2:       # 2 = "Vollbild-App" - meldet Windows auch fuer unser eigenes Panel -> genauer hinsehen
+            return False
+        h = win32gui.GetForegroundWindow()
+        if not h or win32process.GetWindowThreadProcessId(h)[1] == os.getpid() or ctypes.windll.user32.IsZoomed(h):
+            return False             # Klaus selbst oder nur maximiert (z. B. VS Code) -> kein Vollbild
+        monitor = win32api.GetMonitorInfo(win32api.MonitorFromWindow(h, 2))["Monitor"]
+        return tuple(win32gui.GetWindowRect(h)) == tuple(monitor)  # randloses Vollbild (Spiel im Fenstermodus)
+    except Exception:
+        return False
+
+
+class ZweitFenster(QWidget):
+    """Holo-Buehne auf dem zweiten Bildschirm: erscheint nur, wenn Klaus Platz braucht (grosse Ansichten oder
+    Hauptbildschirm voll), liegt halbtransparent ueber den Programmen dort und verschwindet, wenn alles zu ist."""
+
+    def __init__(self, bruecke: WebBruecke) -> None:
+        super().__init__()
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setWindowTitle("Klaus Bildschirm 2")
+        self.ansicht = QWebEngineView(self)
+        _web_ansicht(self.ansicht, "dashboard.html", bruecke, abfrage="zweit=1")
+        bruecke.fenster = self
+
+    def verfuegbar(self) -> bool:
+        b = _zweiter_bildschirm()
+        return b is not None and not _vollbild_auf(b)
+
+    def zeigen(self) -> None:
+        b = _zweiter_bildschirm()
+        if not b:
+            return
+        self.setGeometry(b.geometry())
+        self.show()
+        self.raise_()
+
+    def resizeEvent(self, ereignis) -> None:
+        self.ansicht.setGeometry(self.rect())
+        super().resizeEvent(ereignis)
 
 
 # ------------------------------------------------------------------ Orb-Overlay

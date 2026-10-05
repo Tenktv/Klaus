@@ -11,9 +11,10 @@ const LAGE_STATIONEN = [["welt", "WELT"], ["de", "DEUTSCHLAND"], ["region", "REG
 POPUP_ARTEN.lage = function (box) {
   box.classList.add("p-lage");
   box.innerHTML = `<div class="lage-kopf">${LAGE_STATIONEN.map(([k, n], i) => `<span data-st="${k}"><i>0${i + 1}</i>${n}</span>`).join("")}</div>
-    <div class="lage-haupt"><div class="lage-buehne"><canvas></canvas><div class="lage-maerkte"></div><div class="lage-zahlen"></div>
+    <div class="lage-haupt"><div class="lage-buehne"><canvas class="lage-karte"></canvas><canvas class="lage-globus"></canvas><div class="lage-maerkte"></div><div class="lage-zahlen"></div>
       <div class="lage-ort"></div></div><aside class="lage-liste"></aside></div>`;
-  const cv = box.querySelector("canvas"), ctx = cv.getContext("2d");
+  const cv = box.querySelector(".lage-karte"), ctx = cv.getContext("2d");
+  let globus = null;   // Welt-Station: 3D-Globus statt flacher Karte (globus.js)
   const liste = box.querySelector(".lage-liste"), ortEl = box.querySelector(".lage-ort");
   const maerkteEl = box.querySelector(".lage-maerkte"), zahlenEl = box.querySelector(".lage-zahlen");
   let d = null, station = "", seit = performance.now(), laeuft = false;
@@ -46,6 +47,11 @@ POPUP_ARTEN.lage = function (box) {
     const karte = { welt: ANSICHT.welt, de: ANSICHT.de, region: regionAnsicht() }[station];
     if (karte) { start = [...kamera]; ziel = [...karte]; fahrt = 0; }
     box.classList.toggle("ohne-karte", station === "maerkte" || station === "zahlen");
+    box.classList.toggle("mit-globus", station === "welt" && typeof KlausGlobus !== "undefined");
+    if (station === "welt" && typeof KlausGlobus !== "undefined") {
+      if (!globus) globus = new KlausGlobus(box.querySelector(".lage-globus"));
+      globus.ereignisse(d.welt || []);
+    }
     maerkteEl.classList.toggle("an", station === "maerkte");
     zahlenEl.classList.toggle("an", station === "zahlen");
     ortEl.textContent = { welt: "GLOBAL · NACHRICHTENLAGE", de: "DEUTSCHLAND", region: `REGION ${String(d.ort).toUpperCase()}`, maerkte: "MÄRKTE · HEUTE", zahlen: "KLESRO WEB · KENNZAHLEN" }[station];
@@ -203,6 +209,11 @@ POPUP_ARTEN.lage = function (box) {
       if (neu.welt) { d = neu; maerkteBauen(); zahlenBauen(); station = ""; }
       if (!d) return;
       zeigeStation(neu.station || station || "welt");
+      // Erzaehlte Meldung: Globus dreht sich hin + Animation nach Art, Zeile in der Liste leuchtet
+      if (neu.fokus !== undefined && globus && d.welt && d.welt[neu.fokus]) {
+        globus.zeige(d.welt[neu.fokus]);
+        liste.querySelectorAll(".lage-zeile").forEach((z, i) => z.classList.toggle("an", i === neu.fokus));
+      }
       if (!laeuft) { laeuft = true; requestAnimationFrame(zeichnen); }
     },
   };

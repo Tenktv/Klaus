@@ -119,6 +119,14 @@ WERKZEUGE = [
     {"name": "zwischenablage", "description": "Zwischenablage lesen (nur wenn er es will) oder Text hineinschreiben.",
      "parameters": {"type": "OBJECT", "properties": {"aktion": {"type": "STRING", "description": "lesen oder schreiben"},
                                                      "text": {"type": "STRING"}}, "required": ["aktion"]}},
+    {"name": "globus_zeigen", "description": "Zeigt einen 3D-Globus im Panel, der sich nacheinander zu den Orten dreht - mit "
+     "Animation je nach Art (krieg, frieden, geld, dieb, katastrophe, politik, tech, gesundheit, sport). Rufe das IMMER auf, "
+     "BEVOR du ueber Nachrichten oder Ereignisse an bestimmten Orten der Welt sprichst; erzaehle dann in derselben Reihenfolge.",
+     "parameters": {"type": "OBJECT", "properties": {"meldungen": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {
+         "ort": {"type": "STRING", "description": "Land oder Stadt, z. B. 'Ukraine', 'Tokio'"},
+         "titel": {"type": "STRING", "description": "Kurze Schlagzeile"},
+         "art": {"type": "STRING", "description": "krieg|frieden|geld|dieb|katastrophe|politik|tech|gesundheit|sport|sonst"}},
+         "required": ["ort", "titel"]}}}, "required": ["meldungen"]}},
     {"name": "sicherheit_status", "description": "Sicherheitslage des PCs: Defender, Virendefinitionen, Firewall, Warnungen "
      "(neue Autostarts, Admin-Konten, offene Ports, unsignierte Programme mit Netzverbindung).",
      "parameters": {"type": "OBJECT", "properties": {}}},
@@ -331,6 +339,8 @@ class GeminiGespraech:
             if name in ("fenster_steuern", "fenster_liste", "datei_kopieren", "datei_verschieben", "programm_suchen",
                         "programm_aktion", "lautstaerke", "bluetooth", "bildschirmfoto", "zwischenablage"):
                 return self._rechte(name, args)
+            if name == "globus_zeigen":
+                return self.a.globus_zeigen(list(args.get("meldungen") or []))
             if name == "sicherheit_status":
                 return self.a.sicherheit_status()
             if name == "sicherheit_scan":

@@ -74,7 +74,7 @@ import daten
 import gehirn
 from assistent import Assistent, Bruecke
 from daten import lade_einstellungen, speichere_einstellung
-from fenster import (ChatFenster, DesktopPanel, OrbOverlay, WebBruecke, setze_thema, taskleiste_verstecken,
+from fenster import (ChatFenster, DesktopPanel, OrbOverlay, WebBruecke, ZweitFenster, setze_thema, taskleiste_verstecken,
                      taskleiste_versteckt)
 
 AUTOSTART_LNK = Path(os.environ["APPDATA"]) / r"Microsoft\Windows\Start Menu\Programs\Startup\Klaus.lnk"
@@ -322,10 +322,15 @@ def main() -> None:
     bruecke.text.connect(orb.setze_text)
     bruecke.pegel.connect(orb.setze_pegel)
     panel = DesktopPanel(panel_bruecke)
+    # Zweiter Bildschirm: eigene Seite, bekommt Holo-Befehle nur vom Panel weitergereicht (wenn Platz gebraucht wird)
+    zweit_bruecke = WebBruecke(assistent, zeige_chat)
+    zweit = ZweitFenster(zweit_bruecke)
+    panel_bruecke.zweit_fenster, panel_bruecke.zweit_bruecke = zweit, zweit_bruecke
     steuerung = Steuerung(chat, panel, orb)
     bruecke.nachricht.connect(steuerung.nachricht)
     bruecke.zustand.connect(steuerung.zustand)
     bruecke.thema.connect(steuerung.thema)
+    bruecke.thema.connect(zweit_bruecke.thema)
     bruecke.panel.connect(panel_bruecke.panelBefehl)
     bruecke.holo.connect(panel_bruecke.holo)
     steuerung.panel_bruecke = panel_bruecke

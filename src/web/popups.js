@@ -21,9 +21,40 @@ function fokusPruefen() {
 }
 addEventListener("keydown", (e) => { if (e.key === "Escape") Object.keys(holoPopups).forEach(popupZu); });
 
+// Zweiter Bildschirm: dieselbe Seite mit ?zweit=1 - zeigt nur Pop-ups, die das Panel dorthin weiterreicht
+const KLAUS_ZWEIT = new URLSearchParams(location.search).get("zweit") === "1";
+const ZWEIT_ARTEN = new Set(["lage", "globus", "graph", "plan"]);   // grosse Ansichten: wenn moeglich auf Bildschirm 2
+const zweitIds = new Set();      // diese Pop-ups leben auf Bildschirm 2
+const zweitWartet = new Map();   // id -> Befehle, die kamen, waehrend die Weiterleitung noch lief
+
 function holoBefehl(json) {
   let b;
   try { b = typeof json === "string" ? JSON.parse(json) : json; } catch { return; }
+  if (!KLAUS_ZWEIT && typeof klaus !== "undefined" && klaus.zweit && b.aktion !== "log") {
+    if (zweitWartet.has(b.id)) { zweitWartet.get(b.id).push(b); return; }
+    if (zweitIds.has(b.id)) {
+      klaus.zweit(JSON.stringify(b), () => {});
+      if (b.aktion === "zu") zweitIds.delete(b.id);
+      return;
+    }
+    if (b.aktion === "alle_zu") { for (const id of zweitIds) klaus.zweit(JSON.stringify({ aktion: "zu", id }), () => {}); zweitIds.clear(); }
+    // Grosse Ansicht oder Hauptbildschirm voll (ab 3 Pop-ups) -> Bildschirm 2 fragen; geht nicht -> hier oeffnen
+    const voll = Object.keys(holoPopups).length >= 3;
+    if (b.art && !holoPopups[b.id] && b.aktion !== "zu" && (ZWEIT_ARTEN.has(b.art) || voll)) {
+      zweitWartet.set(b.id, []);
+      klaus.zweit(JSON.stringify(b), (ok) => {
+        const rest = zweitWartet.get(b.id) || [];
+        zweitWartet.delete(b.id);
+        if (ok) { zweitIds.add(b.id); rest.forEach((x) => klaus.zweit(JSON.stringify(x), () => {})); }
+        else { holoLokal(b); rest.forEach(holoLokal); }
+      });
+      return;
+    }
+  }
+  holoLokal(b);
+}
+
+function holoLokal(b) {
   if (b.aktion === "zu") return popupZu(b.id);
   if (b.aktion === "alle_zu") { if (window.klausCore) klausCore.gedankenLeeren(); return Object.keys(holoPopups).forEach(popupZu); }
   if (b.aktion === "log") { b = { id: "log", art: "log", daten: { zeile: b.text } }; }
@@ -54,6 +85,11 @@ function popupPlatz(art, flaeche) {
   const [w, h] = POPUP_GROESSE[art] || [0.22, 0.3];
   const F = flaeche.getBoundingClientRect(), k = holoKern(flaeche);
   const kx = k.x / F.width, kr = k.r / F.width, luecke = 0.055;
+  if (KLAUS_ZWEIT) {
+    const gross = { lage: [0.88, 0.92], globus: [0.62, 0.92], graph: [0.8, 0.92], plan: [0.92, 0.9] }[art] || [Math.min(0.45, w * 1.4), Math.min(0.6, h * 1.4)];
+    const n = Object.keys(holoPopups).length;
+    return { x: Math.min(1 - gross[0], (1 - gross[0]) / 2 + n * 0.03), y: Math.min(1 - gross[1], 0.04 + n * 0.03), w: gross[0], h: gross[1] };
+  }
   if (art === "auth") return { x: (1 - w) / 2, y: 0.985 - h, w, h };
   if (art === "lage") return { x: (1 - w) / 2, y: 0.02, w, h };   // grosse Buehne mittig, ueber dem Reaktor
   const offen = Object.values(holoPopups).map((p) => p.m);
@@ -115,6 +151,9 @@ async function popupZu(id) {
   if (authId && typeof klaus !== "undefined") klaus.freigabe(authId, false);
   delete holoPopups[id];
   fokusPruefen();
+  if (KLAUS_ZWEIT && !Object.keys(holoPopups).length && typeof klaus !== "undefined") setTimeout(() => {
+    if (!Object.keys(holoPopups).length) klaus.zweitLeer();   // Bildschirm 2 wieder freigeben
+  }, 700);
   p.linie.classList.add("weg");
   await holoAus(p.item);
   p.item.remove();
