@@ -45,6 +45,14 @@ def eingerichtet() -> bool:
     return bool(APPLE_ID and PASSWORT)
 
 
+def _termine_moeglich(k) -> bool:
+    """iCloud liefert auch die Erinnerungen-Liste (nur VTODO) als Kalender - die kann keine Termine."""
+    try:
+        return "VEVENT" in k.get_supported_components()
+    except Exception:
+        return True
+
+
 def _kalender() -> list:
     """Alle (bzw. die ausgewaehlten) iCloud-Kalender, einmal geladen."""
     global _kalender_cache
@@ -58,7 +66,7 @@ def _kalender() -> list:
                 alle = caldav.DAVClient(url=URL, username=APPLE_ID, password=PASSWORT, timeout=20).principal().calendars()
             except Exception as e:
                 raise KalenderFehler(f"iCloud-Anmeldung fehlgeschlagen ({str(e)[:80]}). App-spezifisches Passwort prüfen.")
-            _kalender_cache = [k for k in alle if not NUR or (k.get_display_name() or "").lower() in NUR]
+            _kalender_cache = [k for k in alle if (not NUR or (k.get_display_name() or "").lower() in NUR) and _termine_moeglich(k)]
         return _kalender_cache
 
 

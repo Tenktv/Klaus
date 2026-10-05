@@ -1,4 +1,4 @@
-# KLAUS — Projekt-Übergabe & Roadmap
+﻿# KLAUS — Projekt-Übergabe & Roadmap
 
 > **So benutzt du diese Datei:** Den Block „System-Prompt für die nächste Sitzung“ in einen neuen Claude-Code-Chat
 > einfügen (Arbeitsordner: dieses Repo). Alles Nötige steht hier. Stand: 05.10.2026.
