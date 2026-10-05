@@ -240,10 +240,17 @@ class WebBruecke(QObject):
 
     @Slot(str)
     def papierkorb(self, pfad: str) -> None:
-        import dateien
+        """Loeschen aus dem Panel: laeuft wie per Stimme ueber das Freigabe-Gate."""
+        if self.assistent:
+            print(f"[Klaus] Papierkorb: {self.assistent.loeschen_starten(pfad)}")
+            threading.Timer(95, lambda: self.lade("projekte", "")).start()
 
-        print(f"[Klaus] Papierkorb: {dateien.in_papierkorb(pfad)}")
-        self.lade("projekte", "")
+    @Slot(str, bool)
+    def freigabe(self, anfrage_id: str, ok: bool) -> None:
+        """Klick auf Freigeben/Abbrechen im Freigabe-Fenster."""
+        import freigabe
+
+        freigabe.entscheide(anfrage_id, ok, "Klick im Panel")
 
     @Slot()
     def stummUmschalten(self) -> None:

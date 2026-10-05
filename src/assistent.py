@@ -19,6 +19,7 @@ import traceback
 from PySide6.QtCore import QObject, Signal
 
 import apps
+import freigabe
 import gehirn
 import gemini_live
 import llm
@@ -159,6 +160,7 @@ class Assistent:
         self.ist_stumm = False  # stumm: reagiert nur noch auf "Klaus, wieder an" (lokal erkannt, nichts geht raus)
         # Mit Gemini-Schluessel fuehrt Gemini Live das Gespraech; sonst die lokale Kette (Whisper -> Modell -> Stimme)
         self.gemini = gemini_live.GeminiGespraech(self) if gemini_live.bereit() else None
+        freigabe.melden = self._freigabe_melden
 
     # ---------------------------------------------------------------- von aussen
     def eingabe(self, text: str) -> None:
@@ -208,9 +210,15 @@ class Assistent:
             pipe.setze(1, "complete" if gezeigt else "fehler", f"{len(gezeigt)} Briefe")
             # Entwuerfe gleich online stellen, damit die QR-Codes funktionieren
             if hochladen.eingerichtet():
-                pipe.setze(2, "running")
-                online = hochladen.entwuerfe()
-                pipe.setze(2, "complete")
+                pipe.setze(2, "warten", "sag: Freigeben")
+                token = freigabe.anfragen("hochladen", f"{len(gezeigt)} Website-Entwürfe hochladen", an=hochladen.HOST, anzahl=len(gezeigt))
+                if token:
+                    pipe.setze(2, "running")
+                    online = hochladen.entwuerfe(token)
+                    pipe.setze(2, "complete")
+                else:
+                    online = "Die Entwürfe sind nicht hochgeladen (keine Freigabe)."
+                    pipe.setze(2, "uebersprungen", "nicht freigegeben")
             else:
                 online = "Die Entwürfe sind noch nicht online (Webspace-Zugang fehlt in der .env)."
                 pipe.setze(2, "uebersprungen", "Webspace-Zugang fehlt")
@@ -252,6 +260,55 @@ class Assistent:
     def log(self, text: str) -> None:
         """Zeile im Live-Log-Fenster (klesro://...)."""
         self.b.holo.emit(json.dumps({"aktion": "log", "text": text}, ensure_ascii=False))
+
+    # ---------------------------------------------------------------- Freigabe-Gate (siehe freigabe.py)
+    def _freigabe_melden(self, ereignis: str, a) -> None:
+        """Freigabe-Fenster im Panel auf/zu + Core-Zustand AWAITING_AUTH."""
+        if ereignis == "auf":
+            self.holo("oeffne", f"auth-{a.id}", art="auth", titel="AUTHORIZATION REQUIRED", dauer=freigabe.WARTEZEIT + 30,
+                      daten={"id": a.id, "art": a.art, "was": a.was, "an": a.an, "anzahl": a.anzahl, "sekunden": freigabe.WARTEZEIT})
+            self.log(f"auth/{a.art} wartet auf freigabe · {a.was}")
+            self.zeige("freigabe")
+        else:
+            self.holo("zu", f"auth-{a.id}")
+            self.log(f"auth/{a.art} {'freigegeben · ' + a.wie if a.ok else 'abgebrochen · ' + (a.wie or 'zeit abgelaufen')}")
+            self.zeige("aktion" if a.ok else "aus")
+
+    def _mit_freigabe(self, art: str, was: str, ausfuehren, an: str = "", anzahl: int = 1) -> str:
+        def fertig(text: str) -> None:
+            print(f"[Klaus] {art}: {text}")
+            self.sage(text, zustand="aktion")
+            self.verschwinde(nach=1.0)
+        freigabe.im_hintergrund(art, was, ausfuehren, fertig, an=an, anzahl=anzahl)
+        return f"Dafür brauche ich deine Freigabe: {was}. Sag „Freigeben“ oder klick im Panel – oder „Abbrechen“."
+
+    def hochladen_starten(self) -> str:
+        import hochladen
+
+        anzahl, grund = hochladen.vor_hochladen()
+        if grund:
+            return grund
+        return self._mit_freigabe("hochladen", f"{anzahl} Website-Entwürfe hochladen", hochladen.entwuerfe,
+                                  an=hochladen.HOST or "Webspace", anzahl=anzahl)
+
+    def drucken_starten(self) -> str:
+        import hochladen
+
+        pdfs = hochladen.zu_drucken()
+        if not pdfs:
+            return "Keine neuen Briefe zum Drucken."
+        return self._mit_freigabe("drucken", f"{len(pdfs)} Briefe drucken", hochladen.drucken, an="Standarddrucker", anzahl=len(pdfs))
+
+    def loeschen_starten(self, pfad: str) -> str:
+        import dateien
+
+        name = os.path.basename(pfad.rstrip("\\/")) or pfad
+        def ausfuehren(token: str) -> str:
+            ergebnis = dateien.in_papierkorb(pfad, token)
+            self.b.panel.emit(json.dumps({"aktion": "neu_laden", "typ": "projekte"}))
+            return ergebnis
+
+        return self._mit_freigabe("loeschen", f"„{name}“ in den Papierkorb verschieben", ausfuehren, an=os.path.dirname(pfad))
 
     def graph_zeigen(self, was: str = "gedaechtnis", projekt: str = "") -> str:
         """Wissensnetz im Panel (web/graph.js): Gedaechtnis-Vault oder Code-Projekt (graphify, ohne KI/Kosten)."""
@@ -459,6 +516,8 @@ class Assistent:
             abbruch=lambda: self.pausiert or not self.laeuft or not self.eingaben.empty()
         )
         if not gehoert:
+            return None
+        if freigabe.sprache(gehoert, "lokal"):
             return None
         befehl = self.weckwort(gehoert)
         if befehl is None:

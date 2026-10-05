@@ -320,6 +320,29 @@
   .p-treffer[data-status="ohne"] b::before { content: "◆ "; color: var(--gruen); font-size: 9px; }
   .p-treffer[data-status="website"] b { color: var(--leise); text-decoration: line-through; text-decoration-color: rgba(var(--rgb), .8); }
 
+  /* Freigabe-Fenster: Bernstein, Knoepfe, Countdown */
+  .fenster.popup.auth { --win-c: var(--amber); }
+  .fenster.popup.auth .w-titel { color: var(--amber); }
+  .p-auth { display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+  .auth-zeile { display: flex; align-items: center; gap: 16px; }
+  .auth-symbol { width: 46px; height: 46px; flex-shrink: 0; display: grid; place-items: center; color: var(--amber);
+    background: rgba(255, 174, 43, .1); box-shadow: inset 0 0 0 1px rgba(255, 174, 43, .6);
+    clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
+  .auth-symbol svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.5; }
+  .auth-was b { display: block; font-family: var(--display); font-size: 19px; font-weight: 600; color: #fff; letter-spacing: .04em; line-height: 1.2; }
+  .auth-was small { display: block; margin-top: 3px; font-size: 13px; color: var(--text-dim); overflow-wrap: anywhere; }
+  .auth-knoepfe { display: flex; gap: 10px; }
+  .auth-knoepfe .hud-knopf { flex: 1; justify-content: center; height: 38px; }
+  .auth-knoepfe .auth-ja { color: #1a0d00; background: var(--amber); }
+  .auth-knoepfe .auth-ja::before { display: none; }
+  .auth-knoepfe .auth-ja:hover { background: #ffc35e; color: #000; }
+  .auth-knoepfe button:disabled { opacity: .45; cursor: default; }
+  .auth-hinweis { text-align: center; font-size: 12.5px; letter-spacing: .14em; color: var(--leise); }
+  .auth-hinweis b { color: var(--amber); font-weight: 600; }
+  .auth-zeit { height: 2px; background: rgba(255, 174, 43, .15); }
+  .auth-zeit i { display: block; height: 100%; background: var(--amber); box-shadow: 0 0 8px var(--amber); transform-origin: 0 50%;
+    transition: transform 1s linear; }
+
   /* Graph-Fenster (graph.js): Netz links, Info/Gruppen rechts - wie graphify */
   .p-graph { display: grid; grid-template-columns: 1fr 210px; gap: 14px; overflow: hidden !important; padding-right: 14px; }
   .g-flaeche { position: relative; min-height: 0; background: radial-gradient(circle at 50% 50%, rgba(var(--rgb), .06), transparent 70%), rgba(0, 0, 0, .4);
@@ -801,12 +824,10 @@ const TYPEN = {
           const h = el("div", "haupt");
           h.append(el("div", "titel", p.name.replace(/^\d{4}-\d{2}-\d{2}-/, "")), el("div", "unter", p.fertig ? "KLAUS // FERTIG" : "KLAUS // NUR AUFTRAG"));
           const weg = el("span", "loeschen", "✕");
-          weg.title = "In den Papierkorb verschieben";
+          weg.title = "In den Papierkorb verschieben (mit Freigabe)";
           weg.onclick = (e) => {
             e.stopPropagation();
-            if (confirm(`„${p.name}“ in den Papierkorb verschieben?
-
-${p.pfad}`)) klaus.papierkorb(p.pfad);
+            klaus.papierkorb(p.pfad);  // fragt ueber das Freigabe-Fenster nach
           };
           z.append(h, weg);
           z.onclick = () => klaus.ordner(p.index || p.pfad);

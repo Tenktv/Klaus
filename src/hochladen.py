@@ -1,8 +1,10 @@
 """
 Klaus - Website-Entwuerfe auf den IONOS-Webspace hochladen (SFTP) und Briefe drucken
 
-    hochladen.entwuerfe()   data/briefe/_hochladen/entwurf/<firma>/index.html  ->  <Webspace>/entwurf/<firma>/
-    hochladen.drucken()     alle noch nicht gedruckten data/briefe/<firma>/brief.pdf an den Standarddrucker
+    hochladen.entwuerfe(token)   data/briefe/_hochladen/entwurf/<firma>/index.html  ->  <Webspace>/entwurf/<firma>/
+    hochladen.drucken(token)     alle noch nicht gedruckten data/briefe/<firma>/brief.pdf an den Standarddrucker
+
+Beides nur mit einem Token aus dem Freigabe-Gate (freigabe.anfragen) - ohne passiert nichts.
 
 .env: KLESRO_SFTP_HOST, KLESRO_SFTP_USER, KLESRO_SFTP_PASS, KLESRO_SFTP_ORDNER, KLESRO_WEBSITE
 """
@@ -14,6 +16,8 @@ from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
+
+import freigabe
 
 load_dotenv()
 
@@ -42,13 +46,21 @@ def _ordner_anlegen(sftp, pfad: str) -> None:
             sftp.mkdir(aktuell)
 
 
-def entwuerfe() -> str:
-    """Laedt alle Entwuerfe hoch und prueft einen davon im Browser-Weg. Gibt eine Meldung fuer Klaus zurueck."""
+def vor_hochladen() -> tuple[int, str | None]:
+    """Was waere hochzuladen? -> (Anzahl, Hinderungsgrund oder None). Vor der Freigabe-Anfrage pruefen."""
     if not eingerichtet():
-        return "Der Webspace-Zugang fehlt: KLESRO_SFTP_HOST, KLESRO_SFTP_USER und KLESRO_SFTP_PASS in die .env eintragen."
+        return 0, "Der Webspace-Zugang fehlt: KLESRO_SFTP_HOST, KLESRO_SFTP_USER und KLESRO_SFTP_PASS in die .env eintragen."
+    anzahl = len(list(QUELLE.glob("entwurf/*/index.html")))
+    return anzahl, None if anzahl else "Es gibt noch keine Entwürfe zum Hochladen. Erst Briefe erstellen."
+
+
+def entwuerfe(token: str | None) -> str:
+    """Laedt alle Entwuerfe hoch (nur mit Freigabe-Token) und prueft einen davon. Gibt eine Meldung fuer Klaus zurueck."""
+    anzahl, grund = vor_hochladen()
+    if grund:
+        return grund
+    freigabe.pruefe(token, "hochladen")
     dateien = sorted(QUELLE.glob("entwurf/*/index.html"))
-    if not dateien:
-        return "Es gibt noch keine Entwürfe zum Hochladen. Erst Briefe erstellen."
     import paramiko
 
     verbindung = paramiko.Transport((HOST, 22))
@@ -76,13 +88,17 @@ def entwuerfe() -> str:
     return f"{len(dateien)} Entwürfe sind online, die QR-Codes funktionieren."
 
 
-def drucken(nur_neue: bool = True) -> str:
-    """Schickt die Brief-PDFs an den Windows-Standarddrucker. Gedruckte bekommen eine Markierung."""
+def zu_drucken(nur_neue: bool = True) -> list[Path]:
     pdfs = sorted(BRIEFE.glob("*/brief.pdf"))
-    if nur_neue:
-        pdfs = [p for p in pdfs if not (p.parent / ".gedruckt").exists()]
+    return [p for p in pdfs if not (p.parent / ".gedruckt").exists()] if nur_neue else pdfs
+
+
+def drucken(token: str | None, nur_neue: bool = True) -> str:
+    """Schickt die Brief-PDFs an den Windows-Standarddrucker (nur mit Freigabe-Token). Gedruckte werden markiert."""
+    pdfs = zu_drucken(nur_neue)
     if not pdfs:
         return "Keine neuen Briefe zum Drucken."
+    freigabe.pruefe(token, "drucken")
     for pdf in pdfs:
         os.startfile(str(pdf), "print")  # Standard-PDF-Programm druckt auf den Standarddrucker
         (pdf.parent / ".gedruckt").write_text(time.strftime("%d.%m.%Y %H:%M"), encoding="utf-8")

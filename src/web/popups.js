@@ -3,9 +3,9 @@
 // Arten: log (Live-Log), pipeline (Phasen-Checkliste), karte (Lead-Karte), entwurf (Brief tippt sich live).
 
 const holoPopups = {};   // id -> { item, m, art, ansicht, linie, zuletzt, dauer, angefasst }
-const POPUP_GROESSE = { log: [0.27, 0.3], pipeline: [0.27, 0.38], karte: [0.33, 0.46], entwurf: [0.3, 0.44] };
+const POPUP_GROESSE = { log: [0.27, 0.3], pipeline: [0.27, 0.38], karte: [0.33, 0.46], entwurf: [0.3, 0.44], auth: [0.25, 0.24] };
 const POPUP_DAUER = { log: 25, pipeline: 90, karte: 120, entwurf: 120 };  // Sekunden ohne Neuigkeit -> schliesst sich
-const POPUP_TITEL = { log: "LIVE LOG", pipeline: "PIPELINE", karte: "LEAD MAP", entwurf: "BRIEF-ENTWURF" };
+const POPUP_TITEL = { log: "LIVE LOG", pipeline: "PIPELINE", karte: "LEAD MAP", entwurf: "BRIEF-ENTWURF", auth: "AUTHORIZATION REQUIRED" };
 let popupSchleifeLaeuft = false;
 let fokusAn = false;
 
@@ -54,6 +54,7 @@ function popupPlatz(art, flaeche) {
   const [w, h] = POPUP_GROESSE[art] || [0.22, 0.3];
   const F = flaeche.getBoundingClientRect(), k = holoKern(flaeche);
   const kx = k.x / F.width, kr = k.r / F.width, luecke = 0.055;
+  if (art === "auth") return { x: (1 - w) / 2, y: 0.985 - h, w, h };
   const offen = Object.values(holoPopups).map((p) => p.m);
   const links = Math.max(0.005, kx - kr - luecke - w), rechts = Math.min(0.995 - w, kx + kr + luecke);
   const oben = 0.02, unten = Math.max(oben, 0.98 - h);
@@ -70,7 +71,7 @@ function popupOeffnen(b) {
   if (!bauer) return null;
   const flaeche = document.getElementById("raster");
   const m = popupPlatz(art, flaeche);
-  const item = el("div", "fenster popup popup-" + art);
+  const item = el("div", "fenster popup popup-" + art + (art === "auth" ? " auth" : ""));
   holoLage(item, m);
   const w = el("div", "w"), innen = el("div", "w-innen"), kopf = el("div", "w-kopf");
   const titel = el("div", "w-titel", b.titel || POPUP_TITEL[art]);
@@ -107,6 +108,9 @@ function popupOeffnen(b) {
 async function popupZu(id) {
   const p = holoPopups[id];
   if (!p) return;
+  // Freigabe-Fenster weggeklickt (✕/Esc) = abgelehnt; hat Python schon entschieden, passiert nichts
+  const authId = p.art === "auth" && p.item.querySelector(".p-auth")?.dataset.id;
+  if (authId && typeof klaus !== "undefined") klaus.freigabe(authId, false);
   delete holoPopups[id];
   fokusPruefen();
   p.linie.classList.add("weg");
@@ -184,6 +188,42 @@ function holoTippen(ziel, text, proSchritt = 2, ms = 16, fertig) {
 }
 
 const POPUP_ARTEN = {
+  // Freigabe: was, an wen, wie viele - Knoepfe Freigeben/Abbrechen, Countdown. Entscheiden kann nur Python (Token).
+  auth(box) {
+    box.classList.add("p-auth");
+    box.innerHTML = `<div class="auth-zeile"><div class="auth-symbol"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10"/>
+        <path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div><div class="auth-was"><b></b><small></small></div></div>
+      <div class="auth-knoepfe"><button class="hud-knopf auth-ja">Freigeben</button><button class="hud-knopf auth-nein">Abbrechen</button></div>
+      <div class="auth-hinweis">oder sag <b>„Freigeben“</b> · <span class="auth-rest"></span></div><div class="auth-zeit"><i></i></div>`;
+    let id = "", ende = 0, takt;
+    const rest = box.querySelector(".auth-rest"), balken = box.querySelector(".auth-zeit i");
+    const entscheiden = (ok) => {
+      if (!id || typeof klaus === "undefined") return;
+      box.querySelectorAll("button").forEach((k) => { k.disabled = true; });
+      klaus.freigabe(id, ok);
+    };
+    box.querySelector(".auth-ja").onclick = () => entscheiden(true);
+    box.querySelector(".auth-nein").onclick = () => entscheiden(false);
+    return {
+      update(d) {
+        id = d.id || id;
+        box.dataset.id = id;
+        box.querySelector(".auth-was b").textContent = d.was || "";
+        box.querySelector(".auth-was small").textContent = [d.anzahl > 1 ? `${d.anzahl} Stück` : "", d.an].filter(Boolean).join(" · ");
+        ende = Date.now() + (d.sekunden || 90) * 1000;
+        clearInterval(takt);
+        const zeigen = () => {
+          const s = Math.max(0, Math.round((ende - Date.now()) / 1000));
+          rest.textContent = `${s} s`;
+          balken.style.transform = `scaleX(${(s / (d.sekunden || 90)).toFixed(3)})`;
+          if (!s || !box.isConnected) clearInterval(takt);
+        };
+        zeigen();
+        takt = setInterval(zeigen, 1000);
+      },
+    };
+  },
+
   // Terminal-Stream mit Zeitstempel, alles mit klesro://-Prefix
   log(box) {
     const liste = el("div", "p-log");

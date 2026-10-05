@@ -67,12 +67,15 @@ def suche(name: str, anzahl: int = 6) -> list[dict]:
     return treffer[:anzahl]
 
 
-def in_papierkorb(pfad: str) -> str:
-    """Verschiebt in den Papierkorb (wiederherstellbar). Gibt eine Meldung fuer Klaus zurueck."""
+def in_papierkorb(pfad: str, token: str | None) -> str:
+    """Verschiebt in den Papierkorb (wiederherstellbar, nur mit Freigabe-Token). Gibt eine Meldung fuer Klaus zurueck."""
+    import freigabe
+
     p = Path(pfad)
     if not p.exists():
         return f"Gibt es nicht: {pfad}"
     if not erlaubt(p):
         return f"Das darf ich nicht löschen (geschützter Ort): {pfad}"
+    freigabe.pruefe(token, "loeschen")
     send2trash(str(p))
     return f"{p.name} liegt jetzt im Papierkorb (wiederherstellbar)."

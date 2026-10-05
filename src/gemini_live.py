@@ -31,6 +31,7 @@ from dotenv import load_dotenv
 import apps
 import dateien
 import gehirn
+import freigabe
 import hochladen
 
 load_dotenv()
@@ -134,7 +135,9 @@ Wenn der Nutzer "danke", "tschuess" oder "das war's" sagt, verabschiede dich kur
 Redet er hoerbar mit jemand anderem (z. B. einem Kunden) und nicht mit dir, misch dich nicht ein: rufe gespraech_beenden auf.
 Sagt er "sei still", "Ruhe" oder "stumm", rufe stumm_schalten auf.
 Soll etwas geloescht werden: erst datei_suchen, dann Namen und Ordner nennen und fragen "Soll ich das in den Papierkorb
-verschieben?" - in_papierkorb erst nach einem klaren Ja. Bei mehreren Treffern nachfragen, welcher gemeint ist."""
+verschieben?" - in_papierkorb erst nach einem klaren Ja. Bei mehreren Treffern nachfragen, welcher gemeint ist.
+Hochladen, Drucken und Loeschen oeffnen danach ein Freigabe-Fenster: sag kurz, dass der Nutzer "Freigeben" sagen oder
+klicken soll. Du selbst kannst nichts freigeben - das geht nur mit seiner eigenen Stimme oder einem Klick."""
 
 
 def bereit() -> bool:
@@ -241,10 +244,7 @@ class GeminiGespraech:
                 pfad = args.get("pfad", "")
                 if pfad not in self.gefunden:
                     return "Abgelehnt: Ich loesche nur, was ich vorher mit datei_suchen gefunden habe. Bitte erst suchen."
-                ergebnis = dateien.in_papierkorb(pfad)
-                b.zustand.emit("aktion")
-                b.panel.emit(json.dumps({"aktion": "neu_laden", "typ": "projekte"}))
-                return ergebnis
+                return self.a.loeschen_starten(pfad)
             if name == "graph_zeigen":
                 return self.a.graph_zeigen(args.get("was", "gedaechtnis"), args.get("projekt", ""))
             if name == "leads_suchen":
@@ -253,9 +253,9 @@ class GeminiGespraech:
             if name == "briefe_erstellen":
                 return self.a.briefe_starten(int(args.get("anzahl") or 0))
             if name == "entwuerfe_hochladen":
-                return hochladen.entwuerfe()
+                return self.a.hochladen_starten()
             if name == "briefe_drucken":
-                return hochladen.drucken()
+                return self.a.drucken_starten()
             if name == "stumm_schalten":
                 self.a.setze_stumm(True)
                 return "Stumm geschaltet. Sag nur noch kurz 'Okay'."
@@ -358,6 +358,8 @@ class GeminiGespraech:
                                 self._unterbrochen()
                             if inhalt.input_transcription and inhalt.input_transcription.text:
                                 du.append(inhalt.input_transcription.text)
+                                # Freigabe nur aus DEINER Sprache (Mitschrift des Mikrofons), nie aus einer Antwort der KI
+                                freigabe.sprache("".join(du), "gemini")
                                 self.letzte_aktivitaet = time.time()
                             if inhalt.output_transcription and inhalt.output_transcription.text:
                                 klaus.append(inhalt.output_transcription.text)
@@ -402,7 +404,7 @@ class GeminiGespraech:
                 while not self.ende:
                     await asyncio.sleep(0.3)
                     spricht = time.time() < self.spricht_bis
-                    if self.werkzeug_laeuft:
+                    if self.werkzeug_laeuft or freigabe.offen():  # nicht auflegen, solange eine Freigabe wartet
                         continue  # Zustand setzt das Werkzeug selbst (z. B. "denken" bei Claude)
                     if not spricht:
                         self._setze_zustand("hoeren")
