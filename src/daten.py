@@ -328,7 +328,15 @@ def verpasst(basis: dict) -> dict:
             index = p / "index.html" if p.is_dir() else None
             if index and index.exists() and index.stat().st_mtime > basis["zeit"]:
                 fertig.append(p.name.split("-", 3)[-1])
-    return {"dauer_min": dauer_min, "nachrichten": meldungen, "maerkte": bewegungen, "projekte": fertig}
+    termine = ""
+    try:
+        import kalender as k
+
+        if k.eingerichtet():
+            termine = k.tag_text("heute")
+    except Exception as e:
+        print(f"[Briefing] Kalender: {str(e)[:80]}")
+    return {"dauer_min": dauer_min, "nachrichten": meldungen, "maerkte": bewegungen, "projekte": fertig, "termine": termine}
 
 
 def verpasst_text(d: dict, einleitung: str = "") -> str:
@@ -337,6 +345,8 @@ def verpasst_text(d: dict, einleitung: str = "") -> str:
     stunden = "eine Stunde" if h == 1 else f"{h} Stunden"
     dauer = (f"{stunden} und {m} Minuten" if m else stunden) if h else f"{m} Minuten"
     teile = [einleitung or f"Du warst {dauer} weg."]
+    if d.get("termine"):
+        teile.append(d["termine"])
     if d["projekte"]:
         teile.append(f"Claude ist fertig mit {', '.join(d['projekte'])}.")
     starke = [b for b in d["maerkte"] if abs(b["aenderung"]) >= 0.5][:4]
@@ -383,6 +393,14 @@ def gedaechtnis() -> dict:
     return {"liste": list(reversed(gehirn.lade_gedaechtnis()))}
 
 
+def kalender() -> dict:
+    import kalender as k
+
+    if not k.eingerichtet():
+        return {"eingerichtet": False}
+    return {"eingerichtet": True, "liste": k.woche()}
+
+
 def sicherheit() -> dict:
     import sicherheit as s
 
@@ -390,6 +408,7 @@ def sicherheit() -> dict:
 
 
 QUELLEN = {
+    "kalender": kalender,
     "sicherheit": sicherheit,
     "wetter": wetter, "nachrichten": nachrichten, "aktien": aktien, "projekte": projekte,
     "favoriten": favoriten, "apps": alle_apps, "leads": leads, "system": system, "gedaechtnis": gedaechtnis,

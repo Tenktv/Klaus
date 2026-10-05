@@ -53,6 +53,8 @@ DESIGN_WOERTER = [
 ]
 # Widgets im Desktop-Panel per Sprache steuern (Typen wie in web/dashboard.html TYPEN)
 WIDGET_WOERTER = [
+    (r"kalender|termine", "kalender", "Kalender"),
+    (r"sicherheit\w*|defender", "sicherheit", "Sicherheit"),
     (r"uhr|zeit", "uhr", "Uhr"),
     (r"schnellstart|kacheln", "schnellstart", "Schnellstart"),
     (r"projekte?|projekt-widget", "projekte", "Projekte"),
@@ -90,6 +92,8 @@ WIEDER_AN = re.compile(r"\b(wieder (an|da|zuh(ö|oe)ren|reden|aktiv)|aufwachen|w
 
 PLAN_THEMA = re.compile(r"(?P<was>.+?)\s+planen\b|einen plan (?:f(?:ü|ue)r|zu[mr]?)\s+(?P<was2>.+)$", re.I)  # Plan-Board (planer.py)
 WIDGET_NEU = re.compile(r"\b(?:erstell|mach|bau|leg)\w*\s+(?:mir\s+)?(?:ein(?:e|en)?\s+)?(?:neues\s+)?widget\s+(?:f(?:ü|ue)r|mit|zu|zum|zur|namens)?\s*(?P<was>.+)$", re.I)
+KALENDER_FRAGE = re.compile(r"(was steht|was hab ich|was habe ich|welche termine|termine)\s+.*?(?P<wann>heute|morgen|(?:ü|ue)bermorgen|"
+                            r"montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|\d{1,2}\.\d{1,2}\.?)", re.I)
 SICHERHEIT = re.compile(r"\bscan\w*\s+(?:den|meinen|mein|das)?\s*(?:pc|computer|rechner|laptop|system)|viren\w*|"
                         r"sicherheit\w*|defender|virenscan|malware", re.I)
 KONKURRENZ = re.compile(r"konkurren\w*|mitbewerber\w*|wettbewerb\w*", re.I)
@@ -168,6 +172,7 @@ class Assistent:
         # Mit Gemini-Schluessel fuehrt Gemini Live das Gespraech; sonst die lokale Kette (Whisper -> Modell -> Stimme)
         self.gemini = gemini_live.GeminiGespraech(self) if gemini_live.bereit() else None
         freigabe.melden = self._freigabe_melden
+        threading.Thread(target=self._kalender_erinnern, daemon=True).start()
 
     # ---------------------------------------------------------------- von aussen
     def eingabe(self, text: str) -> None:
@@ -316,6 +321,68 @@ class Assistent:
             return ergebnis
 
         return self._mit_freigabe("loeschen", f"„{name}“ in den Papierkorb verschieben", ausfuehren, an=os.path.dirname(pfad))
+
+    # ---------------------------------------------------------------- Apple Kalender (kalender.py)
+    def kalender_text(self, wann: str = "heute") -> str:
+        import kalender
+
+        try:
+            text = kalender.tag_text(wann)
+            self.b.panel.emit(json.dumps({"aktion": "neu_laden", "typ": "kalender"}))
+            return text
+        except kalender.KalenderFehler as e:
+            return str(e)
+        except Exception as e:
+            return f"Den Kalender konnte ich nicht lesen: {str(e)[:100]}"
+
+    def termin_eintragen(self, titel: str, start: str, ende: str = "", ort: str = "") -> str:
+        """start/ende als ISO-Zeit (z. B. 2026-10-07T14:00). Eintragen nur mit Freigabe; warnt bei Ueberschneidung."""
+        import kalender
+
+        try:
+            von = dt.datetime.fromisoformat(start)
+            bis = dt.datetime.fromisoformat(ende) if ende else von + dt.timedelta(hours=1)
+        except ValueError:
+            return "Die Uhrzeit habe ich nicht verstanden. Bitte mit Datum und Uhrzeit."
+        hinweis = ""
+        try:
+            if not kalender.frei(von, bis):
+                hinweis = " Achtung: da ist schon ein Termin."
+        except Exception:
+            pass
+
+        def ausfuehren(token: str) -> str:
+            text = kalender.anlegen(titel, von, bis, ort, token)
+            self.b.panel.emit(json.dumps({"aktion": "neu_laden", "typ": "kalender"}))
+            return text
+
+        return self._mit_freigabe("kalender", f"Termin „{titel}“ am {von:%d.%m. um %H:%M}{(' in ' + ort) if ort else ''} eintragen",
+                                  ausfuehren, an="Apple Kalender") + hinweis
+
+    def _kalender_erinnern(self) -> None:
+        """Eigener Thread: 15 Minuten vor einem Termin erinnern (einmal je Termin), still wenn Klaus stumm ist."""
+        import kalender
+
+        erinnert: set[str] = set()
+        while self.laeuft:
+            time.sleep(60)
+            if not kalender.eingerichtet():
+                continue
+            try:
+                for t in kalender.bald(15):
+                    schluessel = f"{t['uid']}|{t['start']:%Y%m%d%H%M}"
+                    if schluessel in erinnert:
+                        continue
+                    erinnert.add(schluessel)
+                    minuten = max(1, int((t["start"] - dt.datetime.now()).total_seconds() // 60))
+                    text = f"In {minuten} Minuten: {t['titel']}" + (f" in {t['ort'].split(',')[-1].strip()}" if t["ort"] else "") + "."
+                    self.b.meldung.emit(text)
+                    self.log(f"kalender/erinnerung {t['titel'][:50]}")
+                    if not self.ist_stumm:
+                        self.sage(text, zustand="aktion")
+                        self.verschwinde(nach=1.0)
+            except Exception as e:
+                print(f"[Kalender] Erinnerung: {str(e)[:80]}")
 
     # ---------------------------------------------------------------- Plaene + eigene Widgets (planer.py, web/plan.js)
     def plan_zeigen(self, plan: dict) -> str:
@@ -929,6 +996,10 @@ class Assistent:
         if STUMM.search(befehl):
             self.sage("Okay, ich bin still. Sag Klaus, wieder an, wenn du mich brauchst.")
             self.setze_stumm(True)
+            return
+        m = KALENDER_FRAGE.search(befehl)
+        if m:
+            self.sage(self.kalender_text(m.group("wann")), zustand="aktion")
             return
         m = WIDGET_NEU.search(befehl)
         if m:

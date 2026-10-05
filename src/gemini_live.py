@@ -31,6 +31,7 @@ from dotenv import load_dotenv
 import apps
 import dateien
 import gehirn
+import fish
 import freigabe
 import hochladen
 
@@ -119,6 +120,14 @@ WERKZEUGE = [
     {"name": "zwischenablage", "description": "Zwischenablage lesen (nur wenn er es will) oder Text hineinschreiben.",
      "parameters": {"type": "OBJECT", "properties": {"aktion": {"type": "STRING", "description": "lesen oder schreiben"},
                                                      "text": {"type": "STRING"}}, "required": ["aktion"]}},
+    {"name": "kalender_lesen", "description": "Termine aus seinem Apple Kalender: wann = heute, morgen, uebermorgen, ein Wochentag oder TT.MM.",
+     "parameters": {"type": "OBJECT", "properties": {"wann": {"type": "STRING"}}}},
+    {"name": "termin_eintragen", "description": "Traegt einen Termin in seinen Apple Kalender ein (er muss freigeben). "
+     "Zeiten als ISO, z. B. 2026-10-07T14:00 - rechne relative Angaben ('morgen um 3') selbst in ein Datum um.",
+     "parameters": {"type": "OBJECT", "properties": {"titel": {"type": "STRING"}, "start": {"type": "STRING"},
+         "ende": {"type": "STRING", "description": "leer = 1 Stunde"}, "ort": {"type": "STRING"}}, "required": ["titel", "start"]}},
+    {"name": "zeit_frei", "description": "Prueft, ob er in einem Zeitraum frei ist (ISO-Zeiten).",
+     "parameters": {"type": "OBJECT", "properties": {"von": {"type": "STRING"}, "bis": {"type": "STRING"}}, "required": ["von", "bis"]}},
     {"name": "plan_zeigen", "description": "Wenn ihr etwas plant: baut ein Plan-Board aus Boxen (z. B. Ziele, Schritte, "
      "Zeitplan, To-dos, Budget, Risiken) mit dem, was ihr besprochen habt - auf Bildschirm 2, wenn vorhanden - und speichert es.",
      "parameters": {"type": "OBJECT", "properties": {"titel": {"type": "STRING"}, "ziel": {"type": "STRING"},
@@ -240,6 +249,15 @@ class GeminiGespraech:
         self.werkzeug_laeuft = 0
         self.gefunden: set[str] = set()  # nur diese Pfade darf in_papierkorb anfassen
         self._zustand = ""
+        # Fish Audio: Gemini denkt, Fish spricht (Saetze aus Geminis Mitschrift). Faellt Fish aus -> Gemini-Stimme.
+        self.fish_an = fish.bereit() and os.getenv("KLAUS_STIMME_ANBIETER", "fish").strip().lower() == "fish"
+        self.fish_saetze: queue.Queue[tuple[int, str]] = queue.Queue()
+        self.fish_runde = 0          # steigt bei Unterbrechung -> alte Saetze verfallen
+        self.fish_puffer = ""
+        self.fish_arbeitet = False
+        if self.fish_an:
+            threading.Thread(target=self._fish_sprecher, daemon=True).start()
+            print(f"[Gemini] Stimme: Fish Audio ({fish.MODELL}, {fish.STIMME[:8]}...)")
 
     # ---------------------------------------------------------------- von aussen
     def fuehre(self, erster_satz: str) -> None:
@@ -358,6 +376,15 @@ class GeminiGespraech:
             if name in ("fenster_steuern", "fenster_liste", "datei_kopieren", "datei_verschieben", "programm_suchen",
                         "programm_aktion", "lautstaerke", "bluetooth", "bildschirmfoto", "zwischenablage"):
                 return self._rechte(name, args)
+            if name == "kalender_lesen":
+                return self.a.kalender_text(args.get("wann") or "heute")
+            if name == "termin_eintragen":
+                return self.a.termin_eintragen(args.get("titel", "Termin"), args.get("start", ""), args.get("ende", ""), args.get("ort", ""))
+            if name == "zeit_frei":
+                import kalender
+
+                von, bis = dt.datetime.fromisoformat(args["von"]), dt.datetime.fromisoformat(args["bis"])
+                return "Frei." if kalender.frei(von, bis) else "Da ist schon ein Termin."
             if name == "plan_zeigen":
                 return self.a.plan_zeigen({"titel": args.get("titel", "Plan"), "ziel": args.get("ziel", ""),
                                            "boxen": [dict(b) for b in (args.get("boxen") or [])]})
@@ -419,6 +446,36 @@ class GeminiGespraech:
                 self.a.b.pegel.emit(min(1.0, float(np.sqrt((werte ** 2).mean())) * 6))
                 aus.write(stueck)
 
+    def _fish_sprecher(self) -> None:
+        """Eigener Thread: Saetze nacheinander von Fish sprechen lassen, Audio in dieselbe Wiedergabe wie Gemini."""
+        while True:
+            runde, satz = self.fish_saetze.get()
+            if runde != self.fish_runde or not self.fish_an:
+                continue
+            self.fish_arbeitet = True
+            try:
+                for stueck in fish.pcm_strom(satz):
+                    if runde != self.fish_runde:
+                        break  # unterbrochen
+                    self._setze_zustand("sprechen")
+                    self.wiedergabe.put(stueck)
+                    self.letzte_aktivitaet = time.time()
+            except Exception as e:  # kein Guthaben, kein Netz ... -> ab sofort wieder Geminis eigene Stimme
+                print(f"[Gemini] Fish Audio aus ({e}) - nehme die Gemini-Stimme")
+                self.fish_an = False
+            finally:
+                self.fish_arbeitet = False
+
+    def _fish_offen(self) -> bool:
+        return self.fish_an and (self.fish_arbeitet or not self.fish_saetze.empty())
+
+    def _fish_text(self, text: str, alles: bool = False) -> None:
+        """Mitschrift sammeln und fertige Saetze an Fish geben."""
+        self.fish_puffer += text
+        saetze, self.fish_puffer = fish.saetze_abtrennen(self.fish_puffer, alles)
+        for s in saetze:
+            self.fish_saetze.put((self.fish_runde, s))
+
     def _setze_zustand(self, zustand: str) -> None:
         """Nur echte Wechsel melden (sonst bekommt der Orb ein Signal pro Audio-Stueck)."""
         if zustand != self._zustand:
@@ -426,6 +483,13 @@ class GeminiGespraech:
             self.a.b.zustand.emit(zustand)
 
     def _unterbrochen(self) -> None:
+        self.fish_runde += 1          # Fish: angefangene und wartende Saetze verwerfen
+        self.fish_puffer = ""
+        while not self.fish_saetze.empty():
+            try:
+                self.fish_saetze.get_nowait()
+            except queue.Empty:
+                break
         while not self.wiedergabe.empty():
             try:
                 self.wiedergabe.get_nowait()
@@ -500,13 +564,19 @@ class GeminiGespraech:
                                 self.letzte_aktivitaet = time.time()
                             if inhalt.output_transcription and inhalt.output_transcription.text:
                                 klaus.append(inhalt.output_transcription.text)
+                                if self.fish_an:
+                                    self._fish_text(inhalt.output_transcription.text)
                             if inhalt.model_turn:
                                 for teil in inhalt.model_turn.parts or []:
                                     if teil.inline_data and teil.inline_data.data:
+                                        self.letzte_aktivitaet = time.time()
+                                        if self.fish_an:
+                                            continue  # Fish spricht - Geminis eigenes Audio nicht abspielen
                                         self._setze_zustand("sprechen")
                                         self.wiedergabe.put(teil.inline_data.data)
-                                        self.letzte_aktivitaet = time.time()
                             if inhalt.turn_complete:
+                                if self.fish_an:
+                                    self._fish_text("", alles=True)  # letzten (ggf. unvollstaendigen) Satz auch sprechen
                                 if du:
                                     self.a.b.nachricht.emit("du", "".join(du).strip())
                                     print(f"[Gemini] Du: {''.join(du).strip()}")
@@ -540,7 +610,7 @@ class GeminiGespraech:
                 """Zustand fuer den Orb pflegen und nach Stille auflegen."""
                 while not self.ende:
                     await asyncio.sleep(0.3)
-                    spricht = time.time() < self.spricht_bis
+                    spricht = time.time() < self.spricht_bis or self._fish_offen()
                     if self.werkzeug_laeuft or freigabe.offen():  # nicht auflegen, solange eine Freigabe wartet
                         continue  # Zustand setzt das Werkzeug selbst (z. B. "denken" bei Claude)
                     if not spricht:
@@ -549,7 +619,7 @@ class GeminiGespraech:
                         print(f"[Gemini] {NACHLAUF_SEK} s Stille - lege auf")
                         self.ende = True
                 # nach "gespraech_beenden" die Verabschiedung noch ausreden lassen
-                while time.time() < self.spricht_bis or not self.wiedergabe.empty():
+                while time.time() < self.spricht_bis or not self.wiedergabe.empty() or self._fish_offen():
                     await asyncio.sleep(0.2)
 
             if erster_satz:

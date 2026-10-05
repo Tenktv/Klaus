@@ -1,6 +1,7 @@
 """
 Klaus - Stimme (Text -> Audio)
 Unterstuetzt zwei Arten von Stimmen, gewaehlt ueber KLAUS_STIMME in .env:
+    fish  bzw.  fish:<modell-id>                 Fish Audio (bezahlt, eigene Klaus-Stimme, siehe fish.py)
     edge:de-DE-ConradNeural                      Microsoft-Neural-Stimme (online, sehr natuerlich)
     data/stimmen/de_DE-thorsten-high.onnx        Piper-Stimme (lokal, offline)
 """
@@ -55,6 +56,11 @@ def _piper_saetze(pfad: Path, text: str):
 
 def saetze(kennung: str, text: str):
     """Liefert (audio, rate)-Stuecke. Piper satzweise, Edge am Stueck."""
+    if kennung == "fish" or kennung.startswith("fish:"):
+        import fish
+
+        yield fish.audio(text, kennung[5:] or None)
+        return
     if kennung.startswith("edge:"):
         yield _edge(kennung[5:], text)
         return
@@ -89,4 +95,6 @@ def sprich(kennung: str, text: str, on_pegel=None) -> None:
 
 
 def name(kennung: str) -> str:
+    if kennung == "fish" or kennung.startswith("fish:"):
+        return "Fish Audio"
     return kennung[5:] if kennung.startswith("edge:") else Path(kennung).stem

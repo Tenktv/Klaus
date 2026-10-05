@@ -114,7 +114,8 @@ Sprachmodelle (`data/stimmen/`, über 500 MB) sind in `.gitignore`. Sicherung de
 ## 5. Roadmap
 
 Erledigt: **A** Design · **B** Leistung · **C** Freigabe-Gate · **D** Lagebericht + Konkurrenz-Check ·
-**F** Rechte · **G** Sicherheit · Globus · Bildschirm 2 · Pläne/Widgets.
+**F** Rechte · **G** Sicherheit · Globus · Bildschirm 2 · Pläne/Widgets ·
+**E** Fish Audio (Code fertig, wartet auf Schlüssel) · **H** Apple Kalender (Code fertig, wartet auf Zugang).
 
 ### Offene Punkte aus den erledigten Phasen
 - Globus und Lagebericht laufen in der Regionsansicht mit ~55 statt 60 fps. GPU und Skript sind es nicht, Ursache
@@ -126,22 +127,44 @@ Erledigt: **A** Design · **B** Leistung · **C** Freigabe-Gate · **D** Lageber
   die Bibliothek `monitorcontrol`, falls Nikola das will.
 - Eigene Widgets lassen sich per Stimme ändern, aber noch nicht per Tastatur bearbeiten (gewollt: „nur Stimme“).
 
-### Phase E — Natürlichere Stimme (wartet auf Nikola)
-- Entscheidung: kostenpflichtige **Fish Audio API** (kommerzielle Bedingungen vor dem Verkauf prüfen).
-- Offen: Gemini-Live-Stimme behalten oder Gemini-Text + Fish-Stimme (mehr Latenz)? Prototyp + A/B-Test mit
-  Nikola. Braucht einen Fish-Audio-Schlüssel.
+### Phase E — Natürlichere Stimme: Fish Audio (gebaut, wartet auf Schlüssel)
+- Entscheidung Nikola (05.10.2026): **Fish Audio**. `src/fish.py`: `POST https://api.fish.audio/v1/tts`
+  (Bearer, Header `model` = `s2.1-pro`, `format=pcm`, 24 kHz, `latency=balanced`). In `gemini_live.py`
+  denkt Gemini weiter, Klaus spricht aber Geminis Mitschrift satzweise mit Fish (`_fish_sprecher`); Geminis
+  eigenes Audio wird verworfen. Unterbrechen verwirft angefangene Sätze. **Fällt Fish aus (401/402/Netz),
+  schaltet die Sitzung automatisch auf die Gemini-Stimme zurück.** Lokale Kette: `KLAUS_STIMME=fish`.
+- Stimme: **eigene per Voice Design** (`python src/fish.py entwerfen "<Beschreibung>"` → Kandidaten anhören →
+  `anlegen <nr>` schreibt `FISH_STIMME` in die .env). Community-Stimmen sind oft Nachbildungen echter Personen
+  (Persönlichkeitsrecht!), nur 1 deutsche Stimme ist als lizenziert markiert → fürs Produkt nur eigene Stimmen.
+- Kosten: ca. 15 $ / 1 Mio. Zeichen; kommerzielle Nutzung nur mit Plus/Pro-Abo. Gemini erzeugt weiter Audio
+  (kleine Zusatzkosten); später ggf. Gemini-Live im TEXT-Modus testen, falls das Modell es kann.
+- Noch zu tun mit Nikola: Schlüssel eintragen, Stimme entwerfen, A/B gegen Gemini „Charon“, Latenz messen.
 
-### Phase H — Kalender & Meetings (wartet auf Nikola)
-- Frage: Google Kalender oder Outlook? Dann OAuth, „Was steht morgen an?“, Termine anlegen (mit Freigabe),
-  Erinnerungen im Briefing.
+### Phase H — Kalender & Meetings
+- Entscheidung Nikola: **Apple Kalender** → `src/kalender.py` über CalDAV (`caldav.icloud.com`, Bibliothek caldav
+  unter Apache-2.0). Braucht `APPLE_ID` + **App-spezifisches Passwort** (`APPLE_APP_PASSWORT`, appleid.apple.com).
+  Fertig: „Was steht morgen/Freitag/am 24.12. an?“, Gemini-Werkzeuge `kalender_lesen`, `termin_eintragen`
+  (Freigabe-Art „kalender“, warnt bei Überschneidung), `zeit_frei`; Kalender-Widget (7 Tage); Termine im
+  „Seit du weg warst“-Briefing; Erinnerung 15 min vorher (still, wenn stumm). Auswertung offline getestet
+  (Zeitzone, ganztägig, Dauer) - **gegen echtes iCloud noch nicht**, Zugang fehlt.
 - Meetings: zuerst Klaus als **Protokollant** (faster-whisper, Zusammenfassung + Aufgaben in den Vault).
   Mitsprechen nur mit KI-Hinweis (AI Act) und Zustimmung aller.
 
 ### Phase I — Markt-Analyse & Trading
 - Zuerst nur lesend: Watchlist, Stimmung je Ticker, Indikatoren, Markt-Briefing (Daten: Yahoo, schon vorhanden),
   Papier-Depot.
-- Echte Orders nur über dafür gemachte Plattformen. Kandidat: **Liquid** (liquid.trade) → API, Märkte,
-  Verfügbarkeit in DE und Gebühren prüfen; Alternative Interactive Brokers.
+- **Liquid geprüft (05.10.2026):** LiquidX AI, Inc. (Delaware), gegründet 2025. **Keine Lizenz/Regulierung**
+  gefunden. Nicht-verwahrend; Gelder liegen auf Hyperliquid/Lighter (Krypto-Perps) bzw. Ostium/Arbitrum
+  (Aktien/FX/Rohstoffe als Perps) → Risiko dieser DeFi-Plattformen. Bis 40x (Krypto) / 50x (FX, Indizes) Hebel,
+  24/7. Gebühren z. B. 0,095 % Taker bei Krypto-Perps (Hyperliquid 0,045 % + Liquid 0,05 %), Auszahlung 1 $.
+  Für Agenten: MCP-Server `https://coinvest.liquid.trade/mcp` (OAuth 2.1, Scopes `read` / `trade`, Trades mit
+  Bestätigungsschritt) + REST-API mit Schlüsseln; **Paper-Trading-Modus** vorhanden.
+  **EU/DE:** ESMA (Feb. 2026): Perpetual Futures fallen unter die CFD-Regeln → für Privatkunden Hebel max. 30:1
+  (FX-Majors) … 2:1 (Krypto), 5:1 (Einzelaktien), Nachschusspflicht verboten. Liquids 40-50x entsprechen dem
+  nicht; deutscher Anlegerschutz/Einlagensicherung fehlt.
+- Empfehlung: Liquid höchstens **lesend + Paper-Trading** (Scope `read`) für Klaus' Markt-Analyse. Echtgeld,
+  wenn überhaupt, nur über einen in der EU regulierten Broker mit API (z. B. Interactive Brokers) und nur über
+  das Freigabe-Gate. Nikola entscheidet.
 - **Jede Order über das Freigabe-Gate**, harte Limits, Not-Aus, erst Papier-Trading, Protokoll im Vault.
 - Die gespeicherte Warnung zu KI-Trading-Bots zeigen. Kein Auto-Trading ohne ausdrückliches, wiederholtes Ja.
 
@@ -160,9 +183,9 @@ Erledigt: **A** Design · **B** Leistung · **C** Freigabe-Gate · **D** Lageber
 - Kostenlose KI-Kontingente nur zum Testen, nie im verkauften Produkt.
 
 ## 6. Offene Fragen an Nikola
-- Kalender: Google oder Outlook?
-- Fish Audio: Gemini-Stimme im Gespräch behalten oder Gemini-Text + Fish-Stimme?
-- Trading: Liquid prüfen + erst Papier-Trading, okay?
+- Fish Audio: Schlüssel (Plus-Abo wegen kommerzieller Nutzung) eintragen, dann Stimme gemeinsam entwerfen.
+- Apple Kalender: Apple-ID + App-spezifisches Passwort in die .env (nicht in den Chat schreiben).
+- Trading: Liquid nur lesend + Paper-Trading, Echtgeld nur über regulierten Broker - einverstanden?
 - „Video“ (frühere Idee): was genau gemeint ist (Bildschirm/Kamera an Gemini Live, Videoanrufe, Video-Erzeugung)?
 - Fehlt noch in `.env`: `KLESRO_ADRESSE`, `KLESRO_TELEFON`, SFTP-Zugang (für Briefe/Upload).
 - Das GitHub-Repo ist privat (ohne Anmeldung 404). So lassen, bis der Setup-Assistent (Phase K) die
