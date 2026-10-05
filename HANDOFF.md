@@ -147,7 +147,9 @@ Konkurrenz-Check am 05.10.2026 live geprüft (Bäckerei in Göppingen: 36 Mitbew
   Fertig: „Was steht morgen/Freitag/am 24.12. an?“, Gemini-Werkzeuge `kalender_lesen`, `termin_eintragen`
   (Freigabe-Art „kalender“, warnt bei Überschneidung), `zeit_frei`; Kalender-Widget (7 Tage); Termine im
   „Seit du weg warst“-Briefing; Erinnerung 15 min vorher (still, wenn stumm). Auswertung offline getestet
-  (Zeitzone, ganztägig, Dauer) - **gegen echtes iCloud noch nicht**, Zugang fehlt.
+  (Zeitzone, ganztägig, Dauer). **iCloud-Zugang seit 05.10.2026 eingerichtet**: Anmeldung ok, Kalender „Privat“
+  und „Arbeit“ (+ „Erinnerungen“, nur Aufgaben) gefunden; noch keine Termine drin → Termin-Auswertung mit echten
+  Daten steht aus.
 - **Protokollant fertig (05.10.2026):** `src/protokoll.py` + Holo-Fenster `web/protokoll.js`. „Klaus, starte ein
   Protokoll für Kunde Maier“ → Freigabe-Art **„aufnahme“** (Nikola bestätigt die Zustimmung aller, § 201 StGB) →
   Klaus sagt die Aufnahme laut an (steht damit auch in der Mitschrift). Mikrofon → 25-s-Happen (Schnitt an leiser
