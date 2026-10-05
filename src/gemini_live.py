@@ -97,6 +97,9 @@ WERKZEUGE = [
      "NUR mit einem Pfad aus datei_suchen, und NUR nachdem du dem Nutzer Namen und Ort genannt und er ausdruecklich ja gesagt hat.",
      "parameters": {"type": "OBJECT", "properties": {"pfad": {"type": "STRING", "description": "Vollstaendiger Pfad aus datei_suchen"}},
                     "required": ["pfad"]}},
+    {"name": "lagebericht", "description": "Lagebericht im Panel: Weltkarte mit Nachrichten, dann Deutschland, Region "
+     "Goeppingen mit Leads, Maerkte und Kennzahlen. Gibt den Text zurueck - lies ihn ruhig und zuegig vor (ca. 45 Sekunden).",
+     "parameters": {"type": "OBJECT", "properties": {}}},
     {"name": "graph_zeigen", "description": "Zeigt im Panel ein Wissensnetz als Graph: dein Gedaechtnis (Fakten, Gespraeche, "
      "Briefings, Themen) oder ein Code-Projekt (Dateien, Funktionen und ihre Verbindungen, ueber graphify, kostenlos).",
      "parameters": {"type": "OBJECT", "properties": {
@@ -245,6 +248,8 @@ class GeminiGespraech:
                 if pfad not in self.gefunden:
                     return "Abgelehnt: Ich loesche nur, was ich vorher mit datei_suchen gefunden habe. Bitte erst suchen."
                 return self.a.loeschen_starten(pfad)
+            if name == "lagebericht":
+                return self.a.lagebericht_zeigen(sprechen=False)
             if name == "graph_zeigen":
                 return self.a.graph_zeigen(args.get("was", "gedaechtnis"), args.get("projekt", ""))
             if name == "leads_suchen":

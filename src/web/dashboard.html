@@ -10,6 +10,8 @@
 <script src="holo.js"></script>
 <script src="popups.js"></script>
 <script src="graph.js"></script>
+<script src="vendor/weltkarte.js"></script>
+<script src="lage.js"></script>
 <style>
   /* ================================================================ Stark Holo-Tech
      Abgeschraegte Glasfenster mit Leuchtkante, Auge auf beleuchteter Buehne, Chakra Petch / Barlow / JetBrains Mono.
@@ -227,8 +229,10 @@
 
   /* ---------- Pop-ups rund ums Auge: dunkleres Glas, Farbe = Augenfarbe, Leuchtlinie zum Kern */
   .fenster.popup { --win-c: var(--eye); }
+  /* Pop-ups ohne Glas-Unschaerfe: sie liegen ueber dem animierten Reaktor, die Unschaerfe muesste sonst jedes Bild
+     neu gerechnet werden (Ruckler). Sie sind fast deckend - optisch kein Unterschied. */
   .fenster.popup > .w { background: linear-gradient(180deg, rgba(255, 255, 255, .04), transparent 30%),
-      color-mix(in srgb, var(--bg) 86%, transparent); }
+      color-mix(in srgb, var(--bg) 90%, transparent); backdrop-filter: none; }
   .fenster.popup .w-titel { color: #fff; }
   /* Fokus wie im Video: solange Klaus Fenster offen hat, verschwinden die Widgets - nur Auge + Holo-Fenster */
   body.fokus .fenster:not(.popup):not(:has(.klaus)) { opacity: 0; visibility: hidden; pointer-events: none;
@@ -319,6 +323,50 @@
   .p-treffer[data-status="ohne"] b { color: #fff; }
   .p-treffer[data-status="ohne"] b::before { content: "◆ "; color: var(--gruen); font-size: 9px; }
   .p-treffer[data-status="website"] b { color: var(--leise); text-decoration: line-through; text-decoration-color: rgba(var(--rgb), .8); }
+
+  /* Lagebericht (lage.js): Stationen oben, Karte/Charts/Zahlen, Meldungsliste rechts */
+  .p-lage { display: flex; flex-direction: column; gap: 12px; overflow: hidden !important; }
+  .lage-kopf { display: flex; gap: 6px; flex-shrink: 0; }
+  .lage-kopf span { flex: 1; padding: 7px 10px; font-family: var(--display); font-size: 11px; font-weight: 600; letter-spacing: .24em; color: var(--leise);
+    background: rgba(var(--rgb), .04); box-shadow: inset 0 -2px 0 rgba(var(--rgb), .15); transition: color .4s, background .4s, box-shadow .4s; }
+  .lage-kopf span i { font-style: normal; margin-right: 8px; color: var(--leise); }
+  .lage-kopf span.fertig { color: var(--text-dim); box-shadow: inset 0 -2px 0 rgba(var(--rgb), .5); }
+  .lage-kopf span.an { color: #fff; background: rgba(var(--rgb), .14); box-shadow: inset 0 -2px 0 var(--eye), 0 0 18px rgba(var(--rgb), .2); }
+  .lage-kopf span.an i { color: var(--eye); }
+  .lage-haupt { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 300px; gap: 16px; }
+  .lage-buehne { position: relative; min-height: 0; background: radial-gradient(ellipse at 50% 50%, rgba(var(--rgb), .07), transparent 70%), rgba(0, 0, 0, .35);
+    clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px); }
+  .lage-buehne canvas { position: absolute; inset: 0; width: 100%; height: 100%; transition: opacity .8s; }
+  .ohne-karte .lage-buehne canvas { opacity: .18; }
+  .lage-ort { position: absolute; left: 18px; top: 14px; font-family: var(--display); font-size: 12px; font-weight: 600; letter-spacing: .4em; color: #fff;
+    text-shadow: 0 0 14px var(--eye); }
+  .lage-maerkte, .lage-zahlen { position: absolute; inset: 52px 22px 22px; display: grid; gap: 14px; opacity: 0; pointer-events: none;
+    transform: translateY(10px); transition: opacity .6s, transform .6s var(--ease); }
+  .lage-maerkte.an, .lage-zahlen.an { opacity: 1; transform: none; pointer-events: auto; }
+  .lage-maerkte { grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; }
+  .lage-kurs { display: flex; flex-direction: column; padding: 14px 16px; background: rgba(0, 0, 0, .45); box-shadow: inset 0 0 0 1px rgba(var(--rgb), .2); min-height: 0; }
+  .lk-kopf { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+  .lk-kopf b { color: #fff; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lk-kopf span { font-family: var(--display); font-size: 13px; }
+  .lk-wert { font-family: var(--display); font-size: 26px; color: #fff; margin: 4px 0 8px; }
+  .lk-wert small { font-size: 12px; color: var(--leise); }
+  .lage-kurs svg { flex: 1; width: 100%; min-height: 40px; }
+  .lage-kurs svg path { vector-effect: non-scaling-stroke; }   /* gestreckt bleibt die Linie duenn */
+  .lage-kurs svg circle { display: none; }   /* Endpunkt wuerde gestreckt zum Oval */
+  .fenster.popup.popup-lage > .w { background: linear-gradient(180deg, rgba(var(--rgb), .06), transparent 30%), var(--bg); }  /* voll deckend */
+  .lage-zahlen { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); align-content: center; }
+  .lage-zahl { position: relative; padding: 18px 20px; background: rgba(0, 0, 0, .45); box-shadow: inset 0 0 0 1px rgba(var(--rgb), .2); }
+  .lage-zahl b { display: block; font-family: var(--display); font-weight: 400; font-size: 64px; line-height: 1; color: #fff; text-shadow: 0 0 26px rgba(var(--rgb), .5); }
+  .lage-zahl span { display: block; margin-top: 8px; font-size: 12px; font-weight: 600; letter-spacing: .24em; color: var(--leise); text-transform: uppercase; }
+  .lage-zahl em { position: absolute; right: 14px; top: 14px; font-style: normal; font-family: var(--display); font-size: 11px; letter-spacing: .14em; color: var(--gruen); }
+  .lage-liste { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+  .lage-zeile { display: grid; grid-template-columns: 28px 1fr; gap: 2px 10px; text-align: left; padding: 8px 4px; border-bottom: 1px solid rgba(var(--rgb), .1);
+    animation: treffer-rein .35s var(--ease) both; }
+  .lage-zeile b { grid-row: span 2; font-family: var(--display); font-size: 12px; color: var(--eye); padding-top: 2px; }
+  .lage-zeile span { font-size: 14px; line-height: 1.3; color: var(--text); }
+  .lage-zeile small { font-family: var(--display); font-size: 10px; letter-spacing: .16em; color: var(--leise); }
+  .lage-zeile.plus small { color: var(--gruen); } .lage-zeile.minus small { color: var(--rot); }
+  .lage-zeile:hover span { color: #fff; }
 
   /* Freigabe-Fenster: Bernstein, Knoepfe, Countdown */
   .fenster.popup.auth { --win-c: var(--amber); }

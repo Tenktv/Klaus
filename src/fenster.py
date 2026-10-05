@@ -245,6 +245,12 @@ class WebBruecke(QObject):
             print(f"[Klaus] Papierkorb: {self.assistent.loeschen_starten(pfad)}")
             threading.Timer(95, lambda: self.lade("projekte", "")).start()
 
+    @Slot()
+    def lagebericht(self) -> None:
+        """Lagebericht aus dem Panel (Debug-Knopf): ohne Ton, Stationen im festen Takt."""
+        if self.assistent:
+            threading.Thread(target=self.assistent.lagebericht_zeigen, args=(False,), daemon=True).start()
+
     @Slot(str, bool)
     def freigabe(self, anfrage_id: str, ok: bool) -> None:
         """Klick auf Freigeben/Abbrechen im Freigabe-Fenster."""

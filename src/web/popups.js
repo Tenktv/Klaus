@@ -55,6 +55,7 @@ function popupPlatz(art, flaeche) {
   const F = flaeche.getBoundingClientRect(), k = holoKern(flaeche);
   const kx = k.x / F.width, kr = k.r / F.width, luecke = 0.055;
   if (art === "auth") return { x: (1 - w) / 2, y: 0.985 - h, w, h };
+  if (art === "lage") return { x: (1 - w) / 2, y: 0.02, w, h };   // grosse Buehne mittig, ueber dem Reaktor
   const offen = Object.values(holoPopups).map((p) => p.m);
   const links = Math.max(0.005, kx - kr - luecke - w), rechts = Math.min(0.995 - w, kx + kr + luecke);
   const oben = 0.02, unten = Math.max(oben, 0.98 - h);
@@ -90,6 +91,7 @@ function popupOeffnen(b) {
   const p = { item, m, art, titelEl: titel, zuletzt: Date.now(), dauer: POPUP_DAUER[art] || 60, angefasst: false };
   p.ansicht = bauer(inhalt, p);
   p.linie = popupLinie(flaeche);
+  if (art === "lage") p.linie.style.display = "none";   // liegt ueber dem Reaktor - keine Linie
   holoFrei(item, m, kopf, ecke, flaeche, {
     minB: 220, minH: 120,
     andere: () => flaeche.querySelectorAll(".fenster"),

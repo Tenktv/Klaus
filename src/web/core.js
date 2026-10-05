@@ -414,6 +414,7 @@ function coreDebug(core) {
   const demoKnopf = knopf("▶ DEMO", () => (demo ? stop() : start()));
   knopf("▶ FENSTER", () => popupDemo());
   knopf("✕ FENSTER", () => holoBefehl({ aktion: "alle_zu" }));
+  knopf("◉ LAGE", () => typeof klaus !== "undefined" && klaus.lagebericht());
   knopf("◈ GRAPH", () => typeof klaus !== "undefined" && klaus.graph("gedaechtnis", ""));
   const ablauf = [["hoeren", 1800], ["denken", 3600], ["aktion", 1300], ["freigabe", 3200], ["aktion", 1200], ["sprechen", 1600], ["aus", 2500]];
   const start = () => {

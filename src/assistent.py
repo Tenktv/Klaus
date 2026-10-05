@@ -88,7 +88,8 @@ STUMM = re.compile(r"\b(sei (mal |bitte |jetzt )?(still|ruhig|leise)|stumm|ruhe|
 WIEDER_AN = re.compile(r"\b(wieder (an|da|zuh(ö|oe)ren|reden|aktiv)|aufwachen|wach (wieder )?auf|"
                        r"du (kannst|darfst) wieder|stumm aus|nicht mehr stumm)\b", re.I)
 
-VERPASST = re.compile(r"was (hab|habe) ich verpasst|was ist (so |denn )?passiert|lagebericht|(morgen-?)?briefing|"
+LAGE = re.compile(r"(?<!in der )\blage(bericht|bild|besprechung)?\b|\bintel\b|situation report", re.I)  # nicht "in der Lage sein"
+VERPASST = re.compile(r"was (hab|habe) ich verpasst|was ist (so |denn )?passiert|(morgen-?)?briefing|"
                       r"update f(ü|ue)r mich|was gibt'?s neues", re.I)
 
 # Gedaechtnis per Sprache
@@ -309,6 +310,39 @@ class Assistent:
             return ergebnis
 
         return self._mit_freigabe("loeschen", f"„{name}“ in den Papierkorb verschieben", ausfuehren, an=os.path.dirname(pfad))
+
+    def lagebericht_zeigen(self, sprechen: bool = True) -> str:
+        """Lagebericht im Panel (web/lage.js): Welt -> Deutschland -> Region -> Maerkte -> Kennzahlen.
+        sprechen=True: Klaus spricht jede Station selbst (lokal) und schaltet danach weiter - Bild und Ton bleiben synchron.
+        sprechen=False (Gemini Live spricht): Stationen laufen im festen Takt, der Text geht an Gemini zum Vorlesen."""
+        import lage
+
+        try:
+            self.log("lage/daten nachrichten · maerkte · region · kennzahlen")
+            self.zeige("denken", "Lagebericht …")
+            d = lage.lagebericht()
+        except Exception as e:
+            print(f"[Klaus] Lagebericht: {e}")
+            return f"Den Lagebericht konnte ich nicht zusammenstellen: {str(e)[:100]}"
+        stationen = ["welt", "de", "region", "maerkte", "zahlen"]
+        self.holo("oeffne", "lage", art="lage", titel="LAGEBERICHT · " + dt.datetime.now().strftime("%d.%m.%Y %H:%M"), daten=d)
+
+        def ablauf() -> None:
+            for st in stationen:
+                self.holo("update", "lage", daten={"station": st})
+                self.log(f"lage/{st} {len(d.get(st) or []) if isinstance(d.get(st), list) else ''}".strip())
+                if sprechen:
+                    time.sleep(1.6)  # Kamera zoomt erst hin
+                    self.sage(d["text"][st], zustand="sprechen")
+                    time.sleep(0.6)
+                else:
+                    time.sleep(9)
+            self.zeige("aktion")
+            if sprechen:
+                self.verschwinde(nach=1.0)
+
+        threading.Thread(target=ablauf, daemon=True).start()
+        return " ".join(d["text"][st] for st in stationen)
 
     def graph_zeigen(self, was: str = "gedaechtnis", projekt: str = "") -> str:
         """Wissensnetz im Panel (web/graph.js): Gedaechtnis-Vault oder Code-Projekt (graphify, ohne KI/Kosten)."""
@@ -657,6 +691,9 @@ class Assistent:
         if STUMM.search(befehl):
             self.sage("Okay, ich bin still. Sag Klaus, wieder an, wenn du mich brauchst.")
             self.setze_stumm(True)
+            return
+        if LAGE.search(befehl):
+            self.lagebericht_zeigen(sprechen=True)
             return
         if VERPASST.search(befehl):
             self.zeige("denken", "Ich schaue nach …")
