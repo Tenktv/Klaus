@@ -161,6 +161,21 @@ Konkurrenz-Check am 05.10.2026 live geprüft (Bäckerei in Göppingen: 36 Mitbew
   z. B. `pyaudiowpatch`) – bisher nur Mikrofon. Wer im Meeting „Klaus“ sagt, weckt ihn auf.
 - Mitsprechen im Meeting nur mit KI-Hinweis (AI Act) und Zustimmung aller – noch nicht gebaut.
 
+### Telegram (05.10.2026, Wunsch Nikola: „Klaus auf eine Chat-Plattform“)
+- Entscheidung: **Telegram** (WhatsApp nur über Meta-Business + zweite Nummer, inoffizielle Wege = Sperr-Risiko).
+- `src/telegram_bot.py`: Long Polling (kein offener Port), nur `requests`. Gemini-**Textmodell** mit denselben
+  Werkzeugen wie Gemini Live (ohne `gespraech_beenden`/`stumm_schalten`), Verlauf ~12 Wortwechsel.
+  Sprachnachricht rein → lokales Whisper (`ohr.model`) → Antwort als Sprachnachricht (Edge/Piper → OGG/Opus mit PyAV,
+  **nie Fish** wegen Credits).
+- Sicherheit: nur `TELEGRAM_NUTZER`; Koppeln einmalig mit `/start <TELEGRAM_KOPPELCODE>`, danach PIN (sha256 in der
+  .env, PIN-Nachrichten werden gelöscht). Freigabe-Anfragen gehen als Knopf an Telegram, wenn du dort aktiv bist
+  (15 min) oder ≥10 min keine Eingabe am PC war; „Freigeben“ → PIN → `freigabe.entscheide(id, True, "Telegram + PIN")`.
+  3 falsche PINs → abgebrochen + 15 min Sperre. Freitext „Freigeben“ zählt nicht.
+- `assistent.sage()` schickt an Telegram statt zu sprechen, solange du zuletzt per Telegram (nicht per Stimme)
+  geschrieben hast. Termin-Erinnerungen gehen zusätzlich aufs Handy, wenn du weg bist.
+- Getestet: Werkzeug-Schleife (Kalender, Depot), OGG-Erzeugung, Whisper auf OGG. **Mit echtem Bot noch nicht**
+  (Token fehlt). Anrufe kann die Bot-API nicht; dafür bräuchte Klaus ein eigenes Konto/eine eigene Nummer.
+
 ### Phase I — Markt-Analyse & Trading
 - **Lesender Teil fertig (05.10.2026):** `src/markt.py` (Yahoo Chart/Suche, RSI 14, SMA 20/50, EMA, MACD,
   Nachrichten-Stimmung über Google News + 1 Gemini-Textaufruf) und das **Papier-Depot** (`data/depot.json`,

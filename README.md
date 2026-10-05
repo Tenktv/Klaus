@@ -23,6 +23,7 @@ schreibt Briefe mit einem persönlichen Website-Entwurf.
 | **Sicherheit** | „scan den PC“ (Windows Defender), Wächter für neue Autostarts, Admin-Konten, offene Ports und unsignierte Programme |
 | **Börse** | „analysier Nvidia“: Kurs-Chart mit SMA 20/50, RSI, MACD und Nachrichtenlage. **Papier-Depot** mit 10.000 € Spielgeld („kauf für 1000 Euro Nvidia im Papierdepot“). Keine echten Orders, keine Anlageberatung. |
 | **Termine & Meetings** | Apple-Kalender (iCloud): „Was steht morgen an?“, Termine eintragen mit Freigabe. **Meeting-Protokoll** („starte ein Protokoll“): nur mit Freigabe und laut angesagt; lokal mitgeschrieben, Ton wird nie gespeichert, am Ende Zusammenfassung + Aufgaben im Vault. |
+| **Telegram** | Von unterwegs mit Klaus chatten oder Sprachnachrichten schicken (er antwortet als Sprachnachricht). Erinnerungen und Meldungen kommen aufs Handy, wenn du nicht am PC bist. Nur dein Konto, Freigaben per Knopf + PIN. |
 | **Zwei Monitore** | Große Ansichten (Lagebericht, Globus, Graph, Plan, Markt) wandern auf den zweiten Bildschirm, wenn er frei ist. |
 
 Klaus fragt **Claude nur**, wenn man es ausdrücklich sagt („frag Claude …“). Standard ist Gemini mit kostenloser Recherche.
@@ -34,7 +35,8 @@ Verschieben, Programme installieren, Bluetooth aus, Fenster schließen, Termine 
 und Admin-Befehle. Das Token entsteht
 ausschließlich durch einen Klick auf „Freigeben“ im Panel oder wenn **du** „Freigeben“ sagst. Gezählt wird
 dabei die Mitschrift deines Mikrofons, nie eine Entscheidung der KI. Die ausführenden Funktionen prüfen das
-Token selbst (`src/freigabe.py`).
+Token selbst (`src/freigabe.py`). Von unterwegs geht das nur per Telegram-Knopf **und** PIN; „Freigeben“ als
+Chat-Text zählt bewusst nicht.
 
 Klaus läuft nie dauerhaft als Admin. Einzelne, fest hinterlegte Befehle (Defender, Firewall) startet
 `src/admin.py` per UAC. Webinhalte gelten für die KI als Daten, nicht als Anweisungen. Schlüssel werden im Log
@@ -79,7 +81,7 @@ src/
   sicherheit.py       Defender, Firewall, Wächter mit Basislinie
   lage.py             Lagebericht-Daten     graphen.py  Gedächtnis-/Code-Graph     planer.py  Pläne
   markt.py            Markt-Analyse + Papier-Depot   kalender.py  Apple-Kalender   protokoll.py  Meeting-Protokoll
-  fish.py             Fish-Audio-Stimme (optional)
+  fish.py             Fish-Audio-Stimme (optional)      telegram_bot.py  Chat von unterwegs
   osm_leads.py        Lead-Suche (OpenStreetMap)   konkurrenz.py  Konkurrenz-Check   briefe.py  Briefe   hochladen.py
   daten.py            Wetter, Nachrichten, Kurse, System, Projekte, Layout
   voice.py, stimme.py, llm.py   Whisper, Stimmen, Ollama

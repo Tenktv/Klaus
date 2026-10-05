@@ -173,6 +173,7 @@ class Assistent:
         self.pausiert = False
         self.ohr: voice.Ohr | None = None
         self.protokoll = None   # laufendes Meeting-Protokoll (protokoll.Protokoll)
+        self.fern = None        # Telegram (telegram_bot.TelegramKlaus), setzt klaus_app
         self.sprech_sperre = threading.Lock()
         self.eingaben: queue.Queue[str] = queue.Queue()  # getippt / Knoepfe
         self.verlauf: list[dict] = []
@@ -287,7 +288,9 @@ class Assistent:
 
     # ---------------------------------------------------------------- Freigabe-Gate (siehe freigabe.py)
     def _freigabe_melden(self, ereignis: str, a) -> None:
-        """Freigabe-Fenster im Panel auf/zu + Core-Zustand AWAITING_AUTH."""
+        """Freigabe-Fenster im Panel auf/zu + Core-Zustand AWAITING_AUTH (+ Knopf in Telegram, wenn du unterwegs bist)."""
+        if self.fern:
+            self.fern.freigabe_melden(ereignis, a)
         if ereignis == "auf":
             self.holo("oeffne", f"auth-{a.id}", art="auth", titel="AUTHORIZATION REQUIRED", dauer=freigabe.WARTEZEIT + 30,
                       daten={"id": a.id, "art": a.art, "was": a.was, "an": a.an, "anzahl": a.anzahl, "sekunden": freigabe.WARTEZEIT})
@@ -476,6 +479,8 @@ class Assistent:
                     text = f"In {minuten} Minuten: {t['titel']}" + (f" in {t['ort'].split(',')[-1].strip()}" if t["ort"] else "") + "."
                     self.b.meldung.emit(text)
                     self.log(f"kalender/erinnerung {t['titel'][:50]}")
+                    if self.fern and not self.per_telegram():
+                        self.fern.hinweis(f"⏰ {text}")
                     if not self.ist_stumm:
                         self.sage(text, zustand="aktion")
                         self.verschwinde(nach=1.0)
@@ -837,7 +842,15 @@ class Assistent:
             self.b.text.emit(text)
         self.b.zustand.emit(zustand)
 
+    def per_telegram(self) -> bool:
+        """Du hast zuletzt per Telegram geschrieben (nicht per Stimme) -> Klaus' Meldungen gehen dorthin."""
+        return bool(self.fern and self.fern.aktiv() and self.fern.zuletzt > self.zuletzt_aktiv)
+
     def sage(self, text: str, zustand: str = "sprechen") -> None:
+        if self.per_telegram():
+            self.fern.senden(text)
+            self.b.nachricht.emit("klaus", f"[Telegram] {text}")
+            return
         self.b.nachricht.emit("klaus", text)
         self.zeige(zustand, text)
         with self.sprech_sperre:

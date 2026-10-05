@@ -433,6 +433,11 @@ def main() -> None:
     sicht_timer.start(2000)
 
     threading.Thread(target=assistent.run, daemon=True).start()
+    import telegram_bot
+
+    if telegram_bot.bereit():   # Chat von unterwegs (nur dein Konto, Freigaben mit PIN)
+        assistent.fern = telegram_bot.TelegramKlaus(assistent)
+        threading.Thread(target=assistent.fern.run, daemon=True).start()
     app.exec()
     os._exit(0)  # Audio-Thread nicht abwarten
 
