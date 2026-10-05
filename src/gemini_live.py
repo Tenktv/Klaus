@@ -97,6 +97,28 @@ WERKZEUGE = [
      "NUR mit einem Pfad aus datei_suchen, und NUR nachdem du dem Nutzer Namen und Ort genannt und er ausdruecklich ja gesagt hat.",
      "parameters": {"type": "OBJECT", "properties": {"pfad": {"type": "STRING", "description": "Vollstaendiger Pfad aus datei_suchen"}},
                     "required": ["pfad"]}},
+    {"name": "fenster_steuern", "description": "Steuert ein offenes Fenster: fokus, minimieren, maximieren, wiederherstellen, "
+     "links/rechts (Bildschirmhaelfte) oder schliessen (schliessen braucht seine Freigabe). titel = Teil des Fenstertitels oder Programmname.",
+     "parameters": {"type": "OBJECT", "properties": {"aktion": {"type": "STRING"}, "titel": {"type": "STRING"}}, "required": ["aktion", "titel"]}},
+    {"name": "fenster_liste", "description": "Listet die offenen Fenster (Titel + Programm).", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "datei_kopieren", "description": "Kopiert eine Datei/einen Ordner (Pfad aus datei_suchen) in einen Zielordner.",
+     "parameters": {"type": "OBJECT", "properties": {"quelle": {"type": "STRING"}, "ziel": {"type": "STRING"}}, "required": ["quelle", "ziel"]}},
+    {"name": "datei_verschieben", "description": "Verschiebt oder benennt um (ziel = Zielordner oder nur neuer Name). Pfad aus datei_suchen, "
+     "braucht seine Freigabe.",
+     "parameters": {"type": "OBJECT", "properties": {"quelle": {"type": "STRING"}, "ziel": {"type": "STRING"}}, "required": ["quelle", "ziel"]}},
+    {"name": "programm_suchen", "description": "Sucht ein Programm im Windows-Paketmanager (winget) und gibt Name + ID zurueck.",
+     "parameters": {"type": "OBJECT", "properties": {"name": {"type": "STRING"}}, "required": ["name"]}},
+    {"name": "programm_aktion", "description": "installieren, deinstallieren oder aktualisieren per winget (ID aus programm_suchen). "
+     "Braucht seine Freigabe.",
+     "parameters": {"type": "OBJECT", "properties": {"aktion": {"type": "STRING"}, "id": {"type": "STRING"}}, "required": ["aktion", "id"]}},
+    {"name": "lautstaerke", "description": "Lautstaerke lesen oder setzen (0-100), oder Ton stumm/an.",
+     "parameters": {"type": "OBJECT", "properties": {"prozent": {"type": "NUMBER"}, "stumm": {"type": "BOOLEAN"}}}},
+    {"name": "bluetooth", "description": "Bluetooth an oder aus (aus braucht seine Freigabe, trennt Kopfhoerer/Maus).",
+     "parameters": {"type": "OBJECT", "properties": {"an": {"type": "BOOLEAN"}}, "required": ["an"]}},
+    {"name": "bildschirmfoto", "description": "Speichert ein Bildschirmfoto in Bilder/Klaus.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "zwischenablage", "description": "Zwischenablage lesen (nur wenn er es will) oder Text hineinschreiben.",
+     "parameters": {"type": "OBJECT", "properties": {"aktion": {"type": "STRING", "description": "lesen oder schreiben"},
+                                                     "text": {"type": "STRING"}}, "required": ["aktion"]}},
     {"name": "konkurrenz_check", "description": "Konkurrenz-Check fuer einen Lead: Mitbewerber im Umkreis, Reibungspunkte "
      "(keine Website, keine Oeffnungszeiten ...) und Strategie-Vorschlag, im Panel als Kreis, der sich fuellt. Kostenlos (OpenStreetMap).",
      "parameters": {"type": "OBJECT", "properties": {"firma": {"type": "STRING", "description": "Name des Betriebs aus der Lead-Liste (leer = zuletzt gefunden)"}}}},
@@ -191,6 +213,51 @@ class GeminiGespraech:
         asyncio.run(self._gespraech(erster_satz))
 
     # ---------------------------------------------------------------- Werkzeuge
+    def _rechte(self, name: str, args: dict) -> str:
+        """Phase F: feste Faehigkeiten (rechte.py). Riskantes laeuft ueber das Freigabe-Gate."""
+        import rechte
+
+        a = self.a
+        if name == "fenster_liste":
+            return "; ".join(f"{f['titel']} ({f['programm']})" for f in rechte.fenster_liste()[:15]) or "Keine Fenster."
+        if name == "fenster_steuern":
+            aktion, titel = args.get("aktion", ""), args.get("titel", "")
+            if aktion == "schliessen":
+                f = rechte._finde_fenster(titel)
+                return a._mit_freigabe("fenster_schliessen", f"Fenster „{f['titel'][:40]}“ schließen",
+                                       lambda t: rechte.fenster("schliessen", titel, t), an=f["programm"])
+            return rechte.fenster(aktion, titel)
+        if name in ("datei_kopieren", "datei_verschieben"):
+            quelle = args.get("quelle", "")
+            if quelle not in self.gefunden:
+                return "Abgelehnt: erst mit datei_suchen finden, dann kopieren/verschieben."
+            if name == "datei_kopieren":
+                return rechte.kopieren(quelle, args.get("ziel", ""))
+            ziel = args.get("ziel", "")
+            return a._mit_freigabe("verschieben", f"„{os.path.basename(quelle)}“ → {ziel}",
+                                   lambda t: rechte.verschieben(quelle, ziel, t), an=os.path.dirname(quelle))
+        if name == "programm_suchen":
+            treffer = rechte.programm_suchen(args.get("name", ""))
+            return "; ".join(f"{t['name']} (ID {t['id']}, {t['version']})" for t in treffer[:5]) or "Nichts gefunden."
+        if name == "programm_aktion":
+            aktion, pid = args.get("aktion", ""), args.get("id", "")
+            return a._mit_freigabe("programm", f"{pid} {aktion}", lambda t: rechte.programm(aktion, pid, t), an="winget")
+        if name == "lautstaerke":
+            if args.get("stumm") is not None:
+                return rechte.stumm(bool(args["stumm"]))
+            return rechte.lautstaerke(args.get("prozent"))
+        if name == "bluetooth":
+            if args.get("an"):
+                return rechte.bluetooth(True, None)
+            return a._mit_freigabe("bluetooth", "Bluetooth ausschalten", lambda t: rechte.bluetooth(False, t))
+        if name == "bildschirmfoto":
+            return f"Gespeichert: {rechte.bildschirmfoto()}"
+        if name == "zwischenablage":
+            if args.get("aktion") == "schreiben":
+                return rechte.ablage_schreiben(args.get("text", ""))
+            return rechte.ablage_lesen() or "Die Zwischenablage ist leer."
+        return "Unbekannt."
+
     def _werkzeug(self, name: str, args: dict) -> str:
         b = self.a.b
         try:
@@ -251,6 +318,9 @@ class GeminiGespraech:
                 if pfad not in self.gefunden:
                     return "Abgelehnt: Ich loesche nur, was ich vorher mit datei_suchen gefunden habe. Bitte erst suchen."
                 return self.a.loeschen_starten(pfad)
+            if name in ("fenster_steuern", "fenster_liste", "datei_kopieren", "datei_verschieben", "programm_suchen",
+                        "programm_aktion", "lautstaerke", "bluetooth", "bildschirmfoto", "zwischenablage"):
+                return self._rechte(name, args)
             if name == "konkurrenz_check":
                 return self.a.konkurrenz_check(args.get("firma", ""))
             if name == "lagebericht":

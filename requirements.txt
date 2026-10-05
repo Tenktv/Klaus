@@ -14,3 +14,4 @@ send2trash
 qrcode
 paramiko
 ddgs
+pycaw>=20240210
