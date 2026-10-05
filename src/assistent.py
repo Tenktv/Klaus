@@ -88,6 +88,8 @@ STUMM = re.compile(r"\b(sei (mal |bitte |jetzt )?(still|ruhig|leise)|stumm|ruhe|
 WIEDER_AN = re.compile(r"\b(wieder (an|da|zuh(ö|oe)ren|reden|aktiv)|aufwachen|wach (wieder )?auf|"
                        r"du (kannst|darfst) wieder|stumm aus|nicht mehr stumm)\b", re.I)
 
+KONKURRENZ = re.compile(r"konkurren\w*|mitbewerber\w*|wettbewerb\w*", re.I)
+KONKURRENZ_FIRMA = re.compile(r"(?:f(ü|ue)r|von|bei|zu)\s+(?:de[rnm]|die|das)?\s*(?P<firma>.+?)\s*$", re.I)
 LAGE = re.compile(r"(?<!in der )\blage(bericht|bild|besprechung)?\b|\bintel\b|situation report", re.I)  # nicht "in der Lage sein"
 VERPASST = re.compile(r"was (hab|habe) ich verpasst|was ist (so |denn )?passiert|(morgen-?)?briefing|"
                       r"update f(ü|ue)r mich|was gibt'?s neues", re.I)
@@ -310,6 +312,54 @@ class Assistent:
             return ergebnis
 
         return self._mit_freigabe("loeschen", f"„{name}“ in den Papierkorb verschieben", ausfuehren, an=os.path.dirname(pfad))
+
+    def konkurrenz_check(self, firma: str = "") -> str:
+        """Konkurrenz -> Reibungspunkte -> Strategie fuer einen Lead (OpenStreetMap, kostenlos). Kreis fuellt sich im Panel."""
+        import csv
+        import difflib
+
+        import konkurrenz
+        import osm_leads
+
+        try:
+            with open(osm_leads.LEADS_PATH, newline="", encoding="utf-8") as f:
+                leads = [r for r in csv.DictReader(f) if r.get("name")]
+        except OSError:
+            leads = []
+        if not leads:
+            return "Ich habe noch keine Leads. Sag zum Beispiel: Klaus, such Friseure in Göppingen."
+        if firma.strip():
+            namen = {l["name"].lower(): l for l in leads}
+            treffer = difflib.get_close_matches(firma.lower(), list(namen), n=1, cutoff=0.4) \
+                or [n for n in namen if firma.lower() in n]
+            if not treffer:
+                return f"„{firma}“ finde ich nicht in der Lead-Liste."
+            lead = namen[treffer[0]]
+        else:
+            lead = leads[-1]  # zuletzt gefundener Lead
+
+        def los() -> None:
+            fid = "strategie"
+            self.holo("oeffne", fid, art="strategie", titel=f"STRATEGIE · {lead['name'].upper()[:30]}",
+                      daten={"stufe": 0, "name": lead["name"]})
+            self.log(f"konkurrenz/osm {lead['name']} · {konkurrenz.RADIUS_KM} km")
+            try:
+                d = konkurrenz.analyse(lead)
+            except Exception as e:
+                self.log(f"konkurrenz/fehler {str(e)[:80]}")
+                self.holo("update", fid, daten={"fehler": str(e)[:120]})
+                self.sage(f"Der Konkurrenz-Check ging nicht: {str(e)[:100]}")
+                return
+            for stufe in (1, 2, 3):  # Kreis fuellt sich: Mitbewerber -> Reibungspunkte -> Strategie
+                self.holo("update", fid, daten={**d, "stufe": stufe})
+                self.log(f"konkurrenz/{['', 'mitbewerber', 'reibung', 'strategie'][stufe]} ok")
+                time.sleep(1.4)
+            self.sage(f"{lead['name']}: {d['online']} von {d['gesamt']} Mitbewerbern im Umkreis sind online. "
+                      + d["reibung"][-1] + " Mein Vorschlag: " + d["strategie"][0], zustand="aktion")
+            self.verschwinde(nach=1.0)
+
+        threading.Thread(target=los, daemon=True).start()
+        return f"Ich prüfe die Konkurrenz von {lead['name']}."
 
     def lagebericht_zeigen(self, sprechen: bool = True) -> str:
         """Lagebericht im Panel (web/lage.js): Welt -> Deutschland -> Region -> Maerkte -> Kennzahlen.
@@ -691,6 +741,10 @@ class Assistent:
         if STUMM.search(befehl):
             self.sage("Okay, ich bin still. Sag Klaus, wieder an, wenn du mich brauchst.")
             self.setze_stumm(True)
+            return
+        if KONKURRENZ.search(befehl):
+            m = KONKURRENZ_FIRMA.search(befehl)
+            self.sage(self.konkurrenz_check(m.group("firma") if m else ""), zustand="aktion")
             return
         if LAGE.search(befehl):
             self.lagebericht_zeigen(sprechen=True)

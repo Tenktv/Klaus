@@ -133,7 +133,7 @@ def _ki_auftrag(lead: dict, bewertung: str) -> str:
     name = lead.get("name", "Ihre Firma")
     return f"""Schreibe den Text eines kurzen Geschaeftsbriefs an die Firma "{name}" ({lead.get('branche_suchbegriff', '')}).
 Absender: {ABSENDER['name']} von {ABSENDER['firma']}, Webdesign aus der Region.
-Fakten, die du verwenden darfst (sonst NICHTS erfinden): Die Firma hat online keine eigene Website. {('Sie hat ' + bewertung + '.') if bewertung else ''}
+Fakten, die du verwenden darfst (sonst NICHTS erfinden): Die Firma hat online keine eigene Website. {('Sie hat ' + bewertung + '.') if bewertung else ''} {lead.get('konkurrenz', '')}
 Dem Brief liegt ein unverbindlicher Website-Entwurf nur fuer diese Firma bei (siehe Bild unten, QR-Code).
 Ziel: ein kurzes, kostenloses Gespraech vorschlagen. Keine Preise, keine Versprechen, kein Druck.
 Form: Sie-Form, natuerliches Deutsch mit korrekten Umlauten (ä, ö, ü) und ß, 3 kurze Absaetze, insgesamt 90 bis 130 Woerter. Beginne mit "Sehr geehrte Damen und Herren,".
@@ -190,7 +190,8 @@ def brief_text(lead: dict, ki: str = "aus") -> str:
     return "".join(f"<p>{html.escape(a)}</p>" for a in [
         "Sehr geehrte Damen und Herren,",
         f"bei der Suche nach Betrieben in unserer Region ist mir aufgefallen, dass {name} noch keine eigene Website hat.{zusatz} "
-        "Viele Menschen suchen heute zuerst online nach Öffnungszeiten, Leistungen und Kontakt – dort sind Sie bisher kaum zu finden.",
+        "Viele Menschen suchen heute zuerst online nach Öffnungszeiten, Leistungen und Kontakt – dort sind Sie bisher kaum zu finden."
+        + (f" {lead['konkurrenz']}" if lead.get("konkurrenz") else ""),
         "Deshalb habe ich Ihnen unverbindlich einen ersten Entwurf erstellt, wie Ihre Website aussehen könnte. "
         "Sie sehen ihn unten auf diesem Brief oder über den QR-Code.",
         "Wenn Ihnen der Entwurf gefällt, besprechen wir gern in einem kurzen, kostenlosen Gespräch, was Ihnen wichtig ist. "
@@ -232,6 +233,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--leads", default=str(BASE_DIR / "data" / "leads.csv"))
     ap.add_argument("--nur", type=int, default=0, help="nur die ersten N Leads")
+    ap.add_argument("--ohne-konkurrenz", action="store_true", help="keinen Konkurrenz-Check (OpenStreetMap) fuer den Brieftext")
     ap.add_argument("--ki", choices=["aus", "lokal", "gemini", "claude"], default="aus",
                     help="Brieftext: Standardvorlage (aus), lokales Modell oder Claude (beste Qualitaet)")
     args = ap.parse_args()
@@ -243,6 +245,19 @@ def main() -> None:
     if not leads:
         print(f"Keine Leads in {args.leads}.")
         return
+    # Konkurrenz-Check: ein belegbarer Satz ("x von y Betrieben im Umkreis sind online") fuer den Brief
+    if not args.ohne_konkurrenz:
+        import konkurrenz
+
+        for lead in leads:
+            try:
+                lead["konkurrenz"] = konkurrenz.analyse(lead)["briefsatz"]
+                print(f"- {lead['name']}: Konkurrenz · {lead['konkurrenz'] or 'keine vergleichbaren Betriebe online'}", flush=True)
+            except Exception as e:
+                print(f"- {lead['name']}: Konkurrenz-Check nicht moeglich ({str(e)[:80]})", flush=True)
+                if "erreichbar" in str(e):
+                    print("  OpenStreetMap nicht erreichbar - Briefe ohne Konkurrenz-Satz.")
+                    break
 
     from PySide6.QtCore import QMarginsF, QRect, QTimer, QUrl
     from PySide6.QtGui import QPageLayout, QPageSize

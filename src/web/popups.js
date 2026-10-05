@@ -3,9 +3,9 @@
 // Arten: log (Live-Log), pipeline (Phasen-Checkliste), karte (Lead-Karte), entwurf (Brief tippt sich live).
 
 const holoPopups = {};   // id -> { item, m, art, ansicht, linie, zuletzt, dauer, angefasst }
-const POPUP_GROESSE = { log: [0.27, 0.3], pipeline: [0.27, 0.38], karte: [0.33, 0.46], entwurf: [0.3, 0.44], auth: [0.25, 0.24] };
+const POPUP_GROESSE = { log: [0.27, 0.3], pipeline: [0.27, 0.38], karte: [0.33, 0.46], entwurf: [0.3, 0.44], auth: [0.25, 0.24], strategie: [0.3, 0.62] };
 const POPUP_DAUER = { log: 25, pipeline: 90, karte: 120, entwurf: 120 };  // Sekunden ohne Neuigkeit -> schliesst sich
-const POPUP_TITEL = { log: "LIVE LOG", pipeline: "PIPELINE", karte: "LEAD MAP", entwurf: "BRIEF-ENTWURF", auth: "AUTHORIZATION REQUIRED" };
+const POPUP_TITEL = { log: "LIVE LOG", pipeline: "PIPELINE", karte: "LEAD MAP", entwurf: "BRIEF-ENTWURF", auth: "AUTHORIZATION REQUIRED", strategie: "STRATEGIE" };
 let popupSchleifeLaeuft = false;
 let fokusAn = false;
 
@@ -190,6 +190,46 @@ function holoTippen(ziel, text, proSchritt = 2, ms = 16, fertig) {
 }
 
 const POPUP_ARTEN = {
+  // Konkurrenz -> Reibungspunkte -> Strategie: Kreis aus drei Segmenten fuellt sich Stufe fuer Stufe
+  strategie(box) {
+    box.classList.add("p-strategie");
+    const U = 2 * Math.PI * 70, SEG = U / 3, LUECKE = 10;
+    box.innerHTML = `<div class="st-kreis"><svg viewBox="0 0 180 180">
+        ${[0, 1, 2].map((i) => `<circle class="st-spur" cx="90" cy="90" r="70" stroke-dasharray="${SEG - LUECKE} ${U}" stroke-dashoffset="${-i * SEG}"/>
+        <circle class="st-wert" data-i="${i}" cx="90" cy="90" r="70" stroke-dasharray="0 ${U}" stroke-dashoffset="${-i * SEG}"/>`).join("")}
+      </svg><div class="st-mitte"><b>–</b><span>ONLINE</span></div></div>
+      <div class="st-stufen"><span>01 MITBEWERBER</span><span>02 REIBUNGSPUNKTE</span><span>03 STRATEGIE</span></div>
+      <div class="st-inhalt"><div class="st-block" data-b="1"></div><div class="st-block" data-b="2"></div><div class="st-block" data-b="3"></div></div>`;
+    const block = (n) => box.querySelector(`.st-block[data-b="${n}"]`);
+    let gebaut = 0;
+    return {
+      update(d) {
+        if (d.fehler) { box.querySelector(".st-inhalt").innerHTML = ""; box.querySelector(".st-inhalt").append(el("div", "leer", d.fehler)); return; }
+        const stufe = d.stufe || 0;
+        box.querySelectorAll(".st-wert").forEach((c, i) => {
+          c.setAttribute("stroke-dasharray", `${i < stufe ? SEG - LUECKE : 0} ${U}`);
+          c.classList.toggle("fertig", i < stufe);
+        });
+        box.querySelectorAll(".st-stufen span").forEach((s, i) => { s.className = i < stufe ? "fertig" : i === stufe ? "an" : ""; });
+        if (d.gesamt !== undefined) {
+          box.querySelector(".st-mitte b").textContent = `${d.online}/${d.gesamt}`;
+          box.querySelector(".st-mitte span").textContent = `ONLINE · ${String(d.radius_km).replace(".", ",")} KM`;
+        }
+        if (stufe >= 1 && gebaut < 1) {
+          gebaut = 1;
+          for (const m of (d.mitbewerber || []).slice(0, 6)) {
+            const z = el("div", "st-zeile" + (m.website ? " web" : ""));
+            z.append(el("b", "", m.name), el("small", "", `${String(m.km).replace(".", ",")} KM${m.website ? " · ONLINE" : ""}`));
+            block(1).append(z);
+          }
+          if (!block(1).children.length) block(1).append(el("div", "leer", "KEINE VERGLEICHBAREN BETRIEBE IM UMKREIS"));
+        }
+        if (stufe >= 2 && gebaut < 2) { gebaut = 2; for (const r of d.reibung || []) block(2).append(el("div", "st-punkt neg", r)); }
+        if (stufe >= 3 && gebaut < 3) { gebaut = 3; for (const s of d.strategie || []) block(3).append(el("div", "st-punkt pos", s)); }
+      },
+    };
+  },
+
   // Freigabe: was, an wen, wie viele - Knoepfe Freigeben/Abbrechen, Countdown. Entscheiden kann nur Python (Token).
   auth(box) {
     box.classList.add("p-auth");

@@ -97,6 +97,9 @@ WERKZEUGE = [
      "NUR mit einem Pfad aus datei_suchen, und NUR nachdem du dem Nutzer Namen und Ort genannt und er ausdruecklich ja gesagt hat.",
      "parameters": {"type": "OBJECT", "properties": {"pfad": {"type": "STRING", "description": "Vollstaendiger Pfad aus datei_suchen"}},
                     "required": ["pfad"]}},
+    {"name": "konkurrenz_check", "description": "Konkurrenz-Check fuer einen Lead: Mitbewerber im Umkreis, Reibungspunkte "
+     "(keine Website, keine Oeffnungszeiten ...) und Strategie-Vorschlag, im Panel als Kreis, der sich fuellt. Kostenlos (OpenStreetMap).",
+     "parameters": {"type": "OBJECT", "properties": {"firma": {"type": "STRING", "description": "Name des Betriebs aus der Lead-Liste (leer = zuletzt gefunden)"}}}},
     {"name": "lagebericht", "description": "Lagebericht im Panel: Weltkarte mit Nachrichten, dann Deutschland, Region "
      "Goeppingen mit Leads, Maerkte und Kennzahlen. Gibt den Text zurueck - lies ihn ruhig und zuegig vor (ca. 45 Sekunden).",
      "parameters": {"type": "OBJECT", "properties": {}}},
@@ -248,6 +251,8 @@ class GeminiGespraech:
                 if pfad not in self.gefunden:
                     return "Abgelehnt: Ich loesche nur, was ich vorher mit datei_suchen gefunden habe. Bitte erst suchen."
                 return self.a.loeschen_starten(pfad)
+            if name == "konkurrenz_check":
+                return self.a.konkurrenz_check(args.get("firma", ""))
             if name == "lagebericht":
                 return self.a.lagebericht_zeigen(sprechen=False)
             if name == "graph_zeigen":

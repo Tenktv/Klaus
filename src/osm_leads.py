@@ -105,12 +105,12 @@ def _adresse_nachschlagen(lat: float, lon: float) -> str:
     return ", ".join(t for t in (strasse, ort) if t) if a.get("house_number") else ""
 
 
-def _overpass(abfrage: str) -> list[dict]:
+def _overpass(abfrage: str, timeout: float = 120, runden: int = 2) -> list[dict]:
     fehler = None
-    for versuch in range(2):
+    for versuch in range(runden):
         for server in OVERPASS:
             try:
-                r = requests.post(server, data={"data": abfrage}, headers=UA, timeout=120)
+                r = requests.post(server, data={"data": abfrage}, headers=UA, timeout=timeout)
                 if r.status_code == 200:
                     return r.json()["elements"]
                 fehler = f"{server}: {r.status_code}"
