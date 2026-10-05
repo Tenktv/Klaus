@@ -260,11 +260,14 @@ class TelegramKlaus:
             if not text or text.startswith("/start"):
                 return
             # Freigaben per Telegram nur mit Knopf + PIN - "Freigeben" als Text zaehlt bewusst NICHT
+            print(f"[Telegram] ← {text[:80]}")
             with self._sperre:   # eine Antwort nach der anderen
                 antwort = self._antworten(text)
-            if sprache and self._sprachnachricht(antwort):
+            print(f"[Telegram] → {antwort[:80]}")
+            if sprache and self._sprachnachricht(antwort, n["message_id"]):
                 return
-            self.senden(antwort)
+            # als Antwort auf deine Nachricht zitiert - sonst wirkt eine spaete Antwort wie aus dem Nichts
+            self.senden(antwort, reply_parameters={"message_id": n["message_id"], "allow_sending_without_reply": True})
         except Exception as e:
             traceback.print_exc()
             self.senden(f"Da ist etwas schiefgelaufen: {str(e)[:120]}")
@@ -281,7 +284,7 @@ class TelegramKlaus:
         finally:
             os.unlink(f.name)
 
-    def _sprachnachricht(self, text: str) -> bool:
+    def _sprachnachricht(self, text: str, antwort_auf: int | None = None) -> bool:
         """Antwort als Telegram-Sprachnachricht (OGG/Opus). Nie Fish (Credits) - Edge/Piper wie die Ersatzstimme."""
         try:
             import av
@@ -303,7 +306,8 @@ class TelegramKlaus:
                     aus.mux(p)
                 for p in spur.encode(None):
                     aus.mux(p)
-            self._api("sendVoice", frist=60, chat_id=self.nutzer, caption=text[:1000],
+            extra = {"reply_to_message_id": str(antwort_auf)} if antwort_auf else {}
+            self._api("sendVoice", frist=60, chat_id=self.nutzer, caption=text[:1000], **extra,
                       files={"voice": ("klaus.ogg", puffer.getvalue(), "audio/ogg")})
             return True
         except Exception as e:
