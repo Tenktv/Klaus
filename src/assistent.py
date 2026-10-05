@@ -487,6 +487,8 @@ class Assistent:
         sprechen=False: Gemini erzaehlt selbst, der Globus wechselt alle 6 s; sprechen=True: Klaus liest jede Meldung vor."""
         import lage
 
+        if getattr(self, "lage_laeuft", False):
+            return "Der Lagebericht zeigt die Orte gerade schon auf seinem Globus."
         punkte = []
         for m in meldungen[:8]:
             koord = lage.ort_koordinaten(str(m.get("ort", ""))) if m.get("ort") else None
@@ -544,6 +546,16 @@ class Assistent:
         self.holo("oeffne", "lage", art="lage", titel="LAGEBERICHT · " + dt.datetime.now().strftime("%d.%m.%Y %H:%M"), daten=d)
 
         def ablauf() -> None:
+            self.lage_laeuft = True
+            try:
+                self._lage_stationen(stationen, d, sprechen)
+            finally:
+                self.lage_laeuft = False
+
+        threading.Thread(target=ablauf, daemon=True).start()
+        return " ".join(d["text"][st] for st in stationen)
+
+    def _lage_stationen(self, stationen: list, d: dict, sprechen: bool) -> None:
             for st in stationen:
                 self.holo("update", "lage", daten={"station": st})
                 self.log(f"lage/{st} {len(d.get(st) or []) if isinstance(d.get(st), list) else ''}".strip())
@@ -569,9 +581,6 @@ class Assistent:
             self.zeige("aktion")
             if sprechen:
                 self.verschwinde(nach=1.0)
-
-        threading.Thread(target=ablauf, daemon=True).start()
-        return " ".join(d["text"][st] for st in stationen)
 
     def graph_zeigen(self, was: str = "gedaechtnis", projekt: str = "") -> str:
         """Wissensnetz im Panel (web/graph.js): Gedaechtnis-Vault oder Code-Projekt (graphify, ohne KI/Kosten)."""

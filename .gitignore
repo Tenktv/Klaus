@@ -12,3 +12,9 @@ data/klaus.lock
 data/sicherheit_basis.json
 data/lage_stand.json
 data/plaene/
+
+# Lokal und gross/privat - nicht ins Repo
+data/stimmen/
+data/zuletzt.json
+data/layout*.json
+data/einstellungen.json

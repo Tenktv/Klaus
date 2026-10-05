@@ -249,7 +249,7 @@ class WebBruecke(QObject):
     def zweit(self, befehl: str) -> bool:
         """Panel -> zweiter Bildschirm: Holo-Befehl dorthin weiterreichen. False = nicht verfuegbar (lokal oeffnen)."""
         ziel = getattr(self, "zweit_fenster", None)
-        if not ziel or not ziel.verfuegbar():
+        if not ziel or not getattr(self.zweit_bruecke, "seite_bereit", False) or not ziel.verfuegbar():
             print(f"[Klaus] Bildschirm 2 nicht verfuegbar (Fenster: {bool(ziel)}, Bildschirm: {bool(_zweiter_bildschirm())})")
             return False
         if '"oeffne"' in befehl or '"art"' in befehl:
@@ -266,6 +266,11 @@ class WebBruecke(QObject):
             ziel.panelBefehl.emit(json.dumps({"aktion": "eigen", "einst": {"titel": box["titel"], "art": box["art"],
                                                                             "eintraege": box["eintraege"], "plan": plan.get("titel", "")}},
                                              ensure_ascii=False))
+
+    @Slot()
+    def zweitBereit(self) -> None:
+        """Seite auf Bildschirm 2 ist geladen und hoert auf Holo-Befehle."""
+        self.seite_bereit = True
 
     @Slot()
     def zweitLeer(self) -> None:
@@ -520,6 +525,8 @@ def _vollbild_auf(bildschirm) -> bool:
         h = win32gui.GetForegroundWindow()
         if not h or win32process.GetWindowThreadProcessId(h)[1] == os.getpid() or ctypes.windll.user32.IsZoomed(h):
             return False             # Klaus selbst oder nur maximiert (z. B. VS Code) -> kein Vollbild
+        if win32gui.GetClassName(h) in ("Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"):
+            return False             # Windows-Desktop/Taskleiste ist bildschirmgross, aber kein Spiel
         monitor = win32api.GetMonitorInfo(win32api.MonitorFromWindow(h, 2))["Monitor"]
         return tuple(win32gui.GetWindowRect(h)) == tuple(monitor)  # randloses Vollbild (Spiel im Fenstermodus)
     except Exception:

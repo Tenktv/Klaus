@@ -1866,6 +1866,7 @@ klausBereit.then((k) => {
   });
   if (KLAUS_ZWEIT) {   // Bildschirm 2: nur Pop-ups + Knopf zum Schliessen
     document.body.classList.add("zweit");
+    klaus.zweitBereit();   // erst jetzt leitet das Panel Befehle hierher
     const zu = el("button", "hud-knopf zweit-zu", "✕ Bildschirm 2 freigeben");
     zu.onclick = () => holoBefehl({ aktion: "alle_zu" });
     document.body.append(zu);
