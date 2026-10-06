@@ -125,8 +125,30 @@ def bauen(innen: bool = True):
     a.telegram = tg
     remote_ids: set[str] = set()
 
-    # Werkzeuge: Daten-Werkzeuge hier, Rest auf dem PC
-    tg.werkzeug_aufruf = lambda name, args: a.gemini._werkzeug(name, args) if name in LOKAL else pc_werkzeug(name, args)
+    # Werkzeuge: Daten-Werkzeuge hier, Rest auf dem PC; dazu das Selbst-Update (nur auf dem Server)
+    import selbst_update
+
+    tg.deklarationen.append({"name": "update_einspielen", "description": "Klaus' eigenen Code auf dem Server aktualisieren (neuer Stand "
+                             "aus GitHub). Zeigt die neuen Aenderungen, braucht Nikolas Freigabe (Knopf + PIN), testet vor dem "
+                             "Uebernehmen und bleibt bei einem Fehler auf der alten Version. Nur wenn Nikola ein Update will.",
+                             "parameters": {"type": "OBJECT", "properties": {}}})
+
+    def update_werkzeug() -> str:
+        try:
+            neu = selbst_update.pruefen()
+        except Exception as e:
+            return f"Ich konnte nicht nach Updates schauen: {str(e)[:120]}"
+        if not neu:
+            return "Klaus ist auf dem neuesten Stand, es gibt kein Update."
+        liste = "; ".join(z.split(" ", 1)[-1] for z in neu[:5])
+        return a._mit_freigabe("update", f"Update einspielen ({len(neu)} Änderung{'en' if len(neu) != 1 else ''}: {liste[:180]})",
+                               selbst_update.einspielen, an="Klaus-Server")
+
+    def werkzeug(name, args):
+        if name == "update_einspielen":
+            return update_werkzeug()
+        return a.gemini._werkzeug(name, args) if name in LOKAL else pc_werkzeug(name, args)
+    tg.werkzeug_aufruf = werkzeug
 
     # Gedaechtnis kommt vom PC (zuletzt bekannter Stand, wenn der PC aus ist)
     def gedaechtnis() -> str:
@@ -197,6 +219,13 @@ def bauen(innen: bool = True):
 def main() -> None:
     a, tg = bauen()
     print(f"[Server] Klaus-Gehirn laeuft (Telegram, Werkzeuge lokal: {sorted(LOKAL)})", flush=True)
+    try:
+        import selbst_update
+        meldung = selbst_update.nach_neustart()
+        if meldung:
+            tg.senden(meldung)
+    except Exception as e:
+        print(f"[Update] Meldung nach Neustart: {e}", flush=True)
     tg.run()   # blockiert
 
 
