@@ -4,6 +4,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
+Environment=TZ=Europe/Berlin
 User=klaus
 WorkingDirectory=/home/klaus/klaus
 ExecStart=/home/klaus/klaus/.venv/bin/python -u src/server_gehirn.py

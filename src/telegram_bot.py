@@ -117,6 +117,7 @@ class TelegramKlaus:
         self.entscheider = freigabe.entscheide
         self.gedaechtnis_fn = gehirn.gedaechtnis_text
         self.ereignis_fn = None          # (art, text) -> Meldung ans Panel des PCs
+        self.befehle: dict = {}          # "/name" -> fn(text) -> Antwort (z. B. /briefing auf dem Server)
 
     def _melde(self, art: str, text: str) -> None:
         if self.ereignis_fn:
@@ -279,6 +280,10 @@ class TelegramKlaus:
                     return
                 self.senden(f"🎤 „{text}“")
             if not text or text.startswith("/start"):
+                return
+            befehl = text.strip().split()[0].lower() if text.strip().startswith("/") else ""
+            if befehl in self.befehle:
+                self.senden(self.befehle[befehl](text))
                 return
             if text.strip().lower() in ("/mikro_aus", "/mikro_an"):
                 an = text.strip().lower() == "/mikro_an"

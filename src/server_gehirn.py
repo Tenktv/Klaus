@@ -144,9 +144,19 @@ def bauen(innen: bool = True):
         return a._mit_freigabe("update", f"Update einspielen ({len(neu)} Änderung{'en' if len(neu) != 1 else ''}: {liste[:180]})",
                                selbst_update.einspielen, an="Klaus-Server")
 
+    import briefing
+
+    tg.befehle["/briefing"] = briefing.befehl
+    tg.deklarationen.append({"name": "briefing", "description": "Morgen-Briefing jetzt (Wetter, Termine heute, Nachrichten) oder "
+                             "Uhrzeit/an/aus einstellen. Fuer 'Briefing', 'was steht heute an und wie ist das Wetter'.",
+                             "parameters": {"type": "OBJECT", "properties": {"einstellung": {"type": "STRING",
+                                            "description": "leer = jetzt; '7:30' = Uhrzeit; 'aus' oder 'an'"}}}})
+
     def werkzeug(name, args):
         if name == "update_einspielen":
             return update_werkzeug()
+        if name == "briefing":
+            return briefing.befehl(f"/briefing {args.get('einstellung') or ''}")
         return a.gemini._werkzeug(name, args) if name in LOKAL else pc_werkzeug(name, args)
     tg.werkzeug_aufruf = werkzeug
 
@@ -219,6 +229,9 @@ def bauen(innen: bool = True):
 def main() -> None:
     a, tg = bauen()
     print(f"[Server] Klaus-Gehirn laeuft (Telegram, Werkzeuge lokal: {sorted(LOKAL)})", flush=True)
+    import briefing
+
+    briefing.starte(tg.senden)
     try:
         import selbst_update
         meldung = selbst_update.nach_neustart()
