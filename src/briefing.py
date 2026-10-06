@@ -38,7 +38,9 @@ def text() -> str:
     import kalender
 
     heute = dt.date.today()
-    teile = [f"☀️ Guten Morgen, Nikola! {WOCHENTAGE[heute.weekday()]}, {heute:%d.%m.}"]
+    stunde = dt.datetime.now().hour
+    gruss = "☀️ Guten Morgen" if stunde < 11 else "👋 Hallo" if stunde < 18 else "🌙 Guten Abend"
+    teile = [f"{gruss}, Nikola! {WOCHENTAGE[heute.weekday()]}, {heute:%d.%m.}"]
     w = daten.wetter()
     if "fehler" not in w and w.get("tage"):
         t = w["tage"][0]
@@ -54,7 +56,8 @@ def text() -> str:
         except Exception as e:
             teile.append(f"📅 Kalender gerade nicht lesbar ({str(e)[:60]}).")
     try:
-        meldungen = daten.nachrichten(5)["liste"]
+        # Sendungsnamen ("tagesthemen") sind keine Meldung: nur echte Schlagzeilen mit mindestens 4 Woertern
+        meldungen = [m for m in daten.nachrichten(12)["liste"] if len(m["titel"].split()) >= 4][:5]
         if meldungen:
             teile.append("📰 Nachrichten:\n" + "\n".join(f"  • {m['titel']}" for m in meldungen))
     except Exception:

@@ -173,12 +173,53 @@ def anlegen(titel: str, start: dt.datetime, ende: dt.datetime | None, ort: str, 
     return f"Eingetragen in „{ziel.get_display_name()}“: {titel} am {start:%d.%m.} {_uhrzeit({'ganztag': False, 'start': start})}."
 
 
-def loeschen(uid: str, token: str | None) -> str:
+def anlegen_mehrere(termine: list[dict], token: str | None, kalender_name: str = "") -> str:
+    """Viele Termine mit einer Freigabe (z. B. aus einem Foto). termine: [{start: datetime, ende: datetime|None, titel, ort}].
+    Termine, die es mit gleichem Titel und Beginn schon gibt, werden uebersprungen."""
     freigabe.pruefe(token, "kalender")
+    if not termine:
+        return "Keine Termine zum Eintragen."
+    kalender = _kalender()
+    if not kalender:
+        raise KalenderFehler("Kein Kalender gefunden.")
+    wunsch = (kalender_name or ZIEL).lower()
+    ziel = next((k for k in kalender if (k.get_display_name() or "").lower() == wunsch), kalender[0])
+    von = min(t["start"] for t in termine) - dt.timedelta(days=1)
+    bis = max(t["start"] for t in termine) + dt.timedelta(days=1)
+    vorhanden = {(t["titel"], t["start"]) for t in termine_(von, bis)}
+    neu = doppelt = 0
+    for t in termine:
+        if (t["titel"], t["start"]) in vorhanden:
+            doppelt += 1
+            continue
+        ende = t.get("ende") or t["start"] + dt.timedelta(hours=1)
+        ziel.save_event(dtstart=t["start"].astimezone(), dtend=ende.astimezone(), summary=t["titel"],
+                        location=t.get("ort") or None, uid=str(uuid.uuid4()))
+        neu += 1
+    return (f"{neu} Termin{'e' if neu != 1 else ''} in „{ziel.get_display_name()}“ eingetragen"
+            + (f", {doppelt} gab es schon." if doppelt else "."))
+
+
+def termine_(von: dt.datetime, bis: dt.datetime) -> list[dict]:
+    return termine(von, bis)
+
+
+def loeschen(uid: str, token: str | None, start: dt.datetime | None = None) -> str:
+    """Termin per UID loeschen. iCloud lehnt die direkte UID-Suche ab (412) -> dann ueber den Zeitraum suchen
+    (um `start` herum, sonst die naechsten 13 Monate)."""
+    freigabe.pruefe(token, "kalender")
+    von = (start - dt.timedelta(days=1)) if start else dt.datetime.now() - dt.timedelta(days=31)
+    bis = (start + dt.timedelta(days=1)) if start else dt.datetime.now() + dt.timedelta(days=400)
     for k in _kalender():
         try:
             ev = k.event_by_uid(uid)
         except Exception:
+            try:
+                ev = next((e for e in k.search(start=von, end=bis, event=True)
+                           if str(e.icalendar_component.get("uid")) == uid), None)
+            except Exception:
+                ev = None
+        if ev is None:
             continue
         titel = str(ev.icalendar_component.get("summary") or "")
         ev.delete()
