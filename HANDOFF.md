@@ -176,6 +176,27 @@ Konkurrenz-Check am 05.10.2026 live geprüft (Bäckerei in Göppingen: 36 Mitbew
 - Getestet: Werkzeug-Schleife (Kalender, Depot), OGG-Erzeugung, Whisper auf OGG. **Mit echtem Bot noch nicht**
   (Token fehlt). Anrufe kann die Bot-API nicht; dafür bräuchte Klaus ein eigenes Konto/eine eigene Nummer.
 
+### Server-Gehirn (06.10.2026): Telegram läuft auf dem IONOS-Server
+- **Aufteilung:** Der Server (`217.154.85.0`, Benutzer `klaus`, `/home/klaus/klaus`, systemd-Dienst `klaus-gehirn`) beantwortet
+  Telegram rund um die Uhr (`src/server_gehirn.py`, headless; PySide6 wird dort durch eine Attrappe ersetzt). Der PC ist der
+  „Körper“ (Panel, Mikro, Apps, Drucken, Gedächtnis).
+- **Verbindung** (`src/fernlink.py`): PC baut per SSH zwei Tunnel auf (`klaus_tunnel`-Schlüssel, auf dem Server nur
+  Weiterleitung, keine Shell): Server `127.0.0.1:7701` → PC-Werkzeug-Server `:7700`; PC `:7702` → Server-Meldungen. Jede Anfrage
+  braucht `KLAUS_LINK_TOKEN`. Der SSH-Prozess hängt in einem Windows-Job (stirbt mit Klaus), alte Reste werden beim Start beendet.
+- **Werkzeuge:** nur Kalender, Recherche, Markt-Analyse laufen auf dem Server; alles andere (Gedächtnis, Depot, Apps, Mikro,
+  Drucken, Protokoll …) geht über den Tunnel an den PC. Ist der PC aus, sagt Klaus das ehrlich und führt nichts aus.
+  Gedächtnis-Kontext holt der Server vom PC (Cache `data/gedaechtnis_cache.txt`).
+- **Freigaben:** PC-Aktionen fragen auf dem PC an; `FernProxy` meldet sie dem Server → Telegram-Knopf + PIN → Server ruft
+  `/entscheide` am PC. Die PIN-Prüfung liegt auf dem Server (Hash in dessen `.env`).
+- **Schalter:** PC-`.env` `TELEGRAM_AUF_SERVER=1` (PC startet keinen eigenen Bot, Erinnerungen laut aus). **Rückfall:** Wert auf `0`
+  setzen oder Zeile löschen, Klaus neu starten, auf dem Server `systemctl stop klaus-gehirn` (nur ein Bot darf abfragen!).
+- Server-`.env` (nur Gemini, Telegram, Apple-Kalender, Link-Token; kein Fish/SFTP), `TELEGRAM_MODELLE` mit schnellen Modellen
+  zuerst, `KLAUS_ERINNERUNG_NICHT=Frühstück|Mittagessen|Abendessen`. Werkzeug-Ergebnisse werden bei Modellwechsel nicht doppelt
+  ausgeführt. Whisper (small, CPU) lädt erst bei der ersten Sprachnachricht.
+- **Backup** (`/usr/local/sbin/klaus-backup.sh`, Timer 03:30): verschlüsselt (age) nach `Tenktv/Klaus-back-up-`; Schlüssel nur bei
+  Nikola. PC-Gedächtnis/`.env` sind noch **nicht** im Backup (offen).
+- Offen: Server-Dienst bei Absturz melden, Bilder/Dateien in den Chat senden, Herunterfahren/Neustart mit PIN, Selbst-Update.
+
 ### Phase I — Markt-Analyse & Trading
 - **Lesender Teil fertig (05.10.2026):** `src/markt.py` (Yahoo Chart/Suche, RSI 14, SMA 20/50, EMA, MACD,
   Nachrichten-Stimmung über Google News + 1 Gemini-Textaufruf) und das **Papier-Depot** (`data/depot.json`,
