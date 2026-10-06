@@ -212,7 +212,20 @@ Konkurrenz-Check am 05.10.2026 live geprüft (Bäckerei in Göppingen: 36 Mitbew
   PCs. Zwei Anläufe am 06.10.2026 wurden vom Sicherheitsfilter gestoppt; Nikola hat Einspruch bei Anthropic eingereicht.
   Erst nach dessen Antwort einen einzigen neuen Versuch, sonst nicht wieder anfangen.
 - Gegen „bei Claude abgemeldet“: `claude setup-token` (langlebiger Token) als Umgebungsvariable `CLAUDE_CODE_OAUTH_TOKEN`.
-- Offen: Server-Dienst bei Absturz melden, Bilder/Dateien (PDF, Charts) in den Chat senden, ESP32 zum Aufwecken des PCs.
+- **Morgen-Briefing** (`src/briefing.py`, Server): täglich 07:00 (deutsche Zeit) Wetter, Termine heute, 5 Schlagzeilen –
+  ohne Gemini (spart Kontingent). `/briefing` jetzt, `/briefing 7:30`, `/briefing aus|an`; Einstellung `data/briefing.json`.
+  Eigene Telegram-Befehle registriert der Server über `tg.befehle`.
+- **Foto → Kalender** (`telegram_bot.termine_aus_bild`, `_foto`): Foto eines Plans per Telegram → Gemini liest die Termine →
+  Liste zur Kontrolle → Freigabe (Knopf + PIN) → `kalender.anlegen_mehrere` (eine Freigabe für alle, Doppelte mit gleichem Titel
+  und Beginn werden übersprungen). „Arbeit“/„Privat“ im Foto-Text wählt den Kalender. Erkennung am Seminarplan: erster Versuch
+  nur 1 von 5 Tagen → Anweisung für Wochenpläne nachgeschärft, **Nachtest offen** (Gemini-Kontingent war aufgebraucht).
+- **Zeitzone:** Der Dienst läuft mit `TZ=Europe/Berlin` (vorher UTC → Erinnerungen kamen 2 h zu spät, behoben 06.10.).
+- `kalender.loeschen`: iCloud lehnt die UID-Suche ab (412) → Rückfall über Zeitraum-Suche.
+- **Gemini-Kontingent:** kostenlos nur **20 Anfragen pro Tag und Modell** (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`).
+  Telegram nutzt mehrere Modelle nacheinander, `flash-lite` als Letztes. Mit Abrechnung bei Google AI Studio wären die Grenzen viel
+  höher (Kosten für Klaus' Nutzung: Cent-Bereich) – Entscheidung Nikola. Tests sparsam machen!
+- Offen: Angebote/Rechnungen als PDF (braucht Nikolas Firmendaten: Adresse, Steuernummer, Kleinunternehmer ja/nein, IBAN),
+  Server-Dienst bei Absturz melden, Dateien (PDF, Charts) in den Chat senden, ESP32 zum Aufwecken des PCs.
 
 ### Phase I — Markt-Analyse & Trading
 - **Lesender Teil fertig (05.10.2026):** `src/markt.py` (Yahoo Chart/Suche, RSI 14, SMA 20/50, EMA, MACD,
