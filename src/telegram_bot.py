@@ -22,6 +22,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import io
+import json
 import os
 import re
 import secrets
@@ -43,6 +44,8 @@ load_dotenv(BASE_DIR / ".env")
 
 TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
 API = f"https://api.telegram.org/bot{TOKEN}"
+# Modelle fuer den Chat, schnellste zuerst (TELEGRAM_MODELLE); sonst die Reihenfolge der Recherche
+CHAT_MODELLE = [m.strip() for m in os.getenv("TELEGRAM_MODELLE", "").split(",") if m.strip()]
 AKTIV_MIN = 15           # so lange nach deiner letzten Nachricht gehen Klaus' Meldungen an Telegram
 ABWESEND_MIN = 10        # ohne Maus/Tastatur so lange -> Erinnerungen auch an Telegram
 NICHT_PER_CHAT = {"gespraech_beenden", "stumm_schalten"}
@@ -352,7 +355,8 @@ class TelegramKlaus:
         except Exception:
             pass
         letzter_fehler = None
-        for modell in recherche.TEXT_MODELLE:
+        ergebnisse: dict[str, str] = {}   # Werkzeug+Argumente -> Ergebnis: bei Modellwechsel wird nichts doppelt ausgefuehrt
+        for modell in CHAT_MODELLE or recherche.TEXT_MODELLE:
             try:
                 for _ in range(8):   # Werkzeug-Runden
                     antwort = recherche._client().models.generate_content(model=modell, contents=self.verlauf, config=config)
@@ -367,9 +371,11 @@ class TelegramKlaus:
                     teile = []
                     for f in aufrufe:
                         print(f"[Telegram] Werkzeug {f.name} {dict(f.args or {})}")
-                        self._melde("log", f"telegram/{f.name}")
-                        teile.append(types.Part.from_function_response(
-                            name=f.name, response={"ergebnis": self.werkzeug_aufruf(f.name, dict(f.args or {}))}))
+                        schluessel = f"{f.name}|{json.dumps(dict(f.args or {}), sort_keys=True, default=str)}"
+                        if schluessel not in ergebnisse:
+                            self._melde("log", f"telegram/{f.name}")
+                            ergebnisse[schluessel] = self.werkzeug_aufruf(f.name, dict(f.args or {}))
+                        teile.append(types.Part.from_function_response(name=f.name, response={"ergebnis": ergebnisse[schluessel]}))
                     self.verlauf.append(types.Content(role="user", parts=teile))
                 return "Das waren zu viele Schritte auf einmal – sag mir bitte genauer, was du willst."
             except Exception as e:   # Kontingent/Modell weg -> naechstes Modell, Verlauf bis zur Frage zuruecksetzen
