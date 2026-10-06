@@ -1,0 +1,19 @@
+[Unit]
+Description=Klaus Gehirn (Telegram + Werkzeuge)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=klaus
+WorkingDirectory=/home/klaus/klaus
+ExecStart=/home/klaus/klaus/.venv/bin/python -u src/server_gehirn.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/klaus
+ProtectHome=false
+
+[Install]
+WantedBy=multi-user.target

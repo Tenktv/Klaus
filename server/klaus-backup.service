@@ -1,0 +1,9 @@
+[Unit]
+Description=Klaus Backup (verschluesselt nach GitHub)
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/klaus-backup.sh
+StandardOutput=append:/var/log/klaus-backup.log
+StandardError=append:/var/log/klaus-backup.log

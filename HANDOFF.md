@@ -193,8 +193,13 @@ Konkurrenz-Check am 05.10.2026 live geprüft (Bäckerei in Göppingen: 36 Mitbew
 - Server-`.env` (nur Gemini, Telegram, Apple-Kalender, Link-Token; kein Fish/SFTP), `TELEGRAM_MODELLE` mit schnellen Modellen
   zuerst, `KLAUS_ERINNERUNG_NICHT=Frühstück|Mittagessen|Abendessen`. Werkzeug-Ergebnisse werden bei Modellwechsel nicht doppelt
   ausgeführt. Whisper (small, CPU) lädt erst bei der ersten Sprachnachricht.
-- **Backup** (`/usr/local/sbin/klaus-backup.sh`, Timer 03:30): verschlüsselt (age) nach `Tenktv/Klaus-back-up-`; Schlüssel nur bei
-  Nikola. PC-Gedächtnis/`.env` sind noch **nicht** im Backup (offen).
+- **Backup** (`server/klaus-backup.sh` → `/usr/local/sbin/`, Timer 03:30): verschlüsselt (age) nach `Tenktv/Klaus-back-up-`
+  (Repo wird jedes Mal neu aufgebaut, nur aktuelle Stände). Täglich Datenbank + Konfiguration + Server-`.env`/`data`, sonntags die
+  Website (45-MB-Stücke), dazu das **PC-Archiv** (`src/pc_backup.py`: Vault, `data/` ohne `stimmen`/`browser`, `.env` – der PC
+  verschlüsselt selbst mit `KLAUS_BACKUP_OEFFENTLICH`, schickt es täglich über den Tunnel an `/backup`, der Server hält die
+  letzten 7). Bei einem Fehler meldet das Skript per Telegram. Wiederherstellen: `WIEDERHERSTELLEN.md` im Backup-Repo; der
+  geheime Schlüssel liegt nur bei Nikola (`KLAUS-BACKUP-SCHLUESSEL.txt`). **Falle:** Der Klaus-Ordner auf dem Server enthält
+  `.venv` (hunderte MB) - nie komplett sichern (GitHub-Grenze 100 MB je Datei).
 - Offen: Server-Dienst bei Absturz melden, Bilder/Dateien in den Chat senden, Herunterfahren/Neustart mit PIN, Selbst-Update.
 
 ### Phase I — Markt-Analyse & Trading
