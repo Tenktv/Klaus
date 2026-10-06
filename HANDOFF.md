@@ -200,7 +200,19 @@ Konkurrenz-Check am 05.10.2026 live geprüft (Bäckerei in Göppingen: 36 Mitbew
   letzten 7). Bei einem Fehler meldet das Skript per Telegram. Wiederherstellen: `WIEDERHERSTELLEN.md` im Backup-Repo; der
   geheime Schlüssel liegt nur bei Nikola (`KLAUS-BACKUP-SCHLUESSEL.txt`). **Falle:** Der Klaus-Ordner auf dem Server enthält
   `.venv` (hunderte MB) - nie komplett sichern (GitHub-Grenze 100 MB je Datei).
-- Offen: Server-Dienst bei Absturz melden, Bilder/Dateien in den Chat senden, Herunterfahren/Neustart mit PIN, Selbst-Update.
+- **Selbst-Update** (`src/selbst_update.py`, 06.10.2026): Telegram „Update dich“ → Werkzeug `update_einspielen` (nur Server) zeigt
+  neue Commits aus `origin/main` → Freigabe-Art „update“ (Knopf + PIN) → `git merge --ff-only`, danach Test (alle Module
+  kompilieren + `server_gehirn` laden). Schlägt der Test fehl: `git reset --hard` auf den alten Stand + Meldung. Klappt er:
+  Marker schreiben, Prozess beendet sich, systemd startet neu, beim Start Meldung „Wieder da, Update alt → neu“ mit Liste.
+  Nur der Server wird aktualisiert (der PC ist die Entwicklungs-Kopie). Neue Python-Pakete muss man auf dem Server von Hand
+  nachinstallieren.
+- Gesicherte Werkzeuge (PC): `claude_remote_starten` (Terminal mit `claude --remote-control` in „Neuer Ordner (5)“) und
+  `pc_ausschalten` (herunterfahren/neustart mit 60 s Vorlauf, `abbrechen` ohne Freigabe) - beide nur mit Knopf + PIN.
+- **Nicht gebaut:** Bildschirm sehen, Maus/Tastatur/Browser bedienen, freie Shell, Claude Code auf dem Server mit Zugriff auf
+  PCs. Zwei Anläufe am 06.10.2026 wurden vom Sicherheitsfilter gestoppt; Nikola hat Einspruch bei Anthropic eingereicht.
+  Erst nach dessen Antwort einen einzigen neuen Versuch, sonst nicht wieder anfangen.
+- Gegen „bei Claude abgemeldet“: `claude setup-token` (langlebiger Token) als Umgebungsvariable `CLAUDE_CODE_OAUTH_TOKEN`.
+- Offen: Server-Dienst bei Absturz melden, Bilder/Dateien (PDF, Charts) in den Chat senden, ESP32 zum Aufwecken des PCs.
 
 ### Phase I — Markt-Analyse & Trading
 - **Lesender Teil fertig (05.10.2026):** `src/markt.py` (Yahoo Chart/Suche, RSI 14, SMA 20/50, EMA, MACD,
