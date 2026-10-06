@@ -230,6 +230,37 @@ $bt.State
     return f"Bluetooth ist {'an' if an else 'aus'}."
 
 
+# ================================================================ Claude Remote Control + PC ausschalten
+import os
+
+CLAUDE_ORDNER = Path(os.getenv("KLAUS_CLAUDE_ORDNER", "").strip() or Path.home() / "Desktop" / "Neuer Ordner (5)")
+
+
+def claude_remote(token: str | None) -> str:
+    """Oeffnet ein Terminal und startet dort Claude Code mit Remote Control. Gibt Zugriff auf den PC -> immer Freigabe."""
+    freigabe.pruefe(token, "claude_remote")
+    if not CLAUDE_ORDNER.is_dir():
+        return f"Der Ordner {CLAUDE_ORDNER} existiert nicht."
+    subprocess.Popen(["cmd.exe", "/k", "claude --remote-control"], cwd=str(CLAUDE_ORDNER),
+                     creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+    protokoll(f"Claude Remote Control gestartet in {CLAUDE_ORDNER}")
+    return f"Ich habe ein Terminal in „{CLAUDE_ORDNER.name}“ geöffnet und `claude --remote-control` gestartet."
+
+
+def pc_ausschalten(aktion: str, token: str | None = None) -> str:
+    """Herunterfahren/Neustart mit 60 s Vorlauf (abbrechen moeglich). Danach ist der PC nicht mehr zu erreichen."""
+    if aktion == "abbrechen":
+        r = subprocess.run(["shutdown", "/a"], capture_output=True, text=True)
+        protokoll("Herunterfahren abgebrochen")
+        return "Herunterfahren abgebrochen." if r.returncode == 0 else "Es lief kein Herunterfahren."
+    freigabe.pruefe(token, "pc_ausschalten")
+    flag = "/r" if aktion == "neustart" else "/s"
+    subprocess.run(["shutdown", flag, "/t", "60", "/c", "Klaus: Herunterfahren auf Wunsch von Nikola (60 s)"], check=True)
+    protokoll(f"PC {aktion} in 60 s")
+    return (f"Der PC {'startet neu' if aktion == 'neustart' else 'fährt herunter'} in 60 Sekunden. Abbrechen: pc_ausschalten mit aktion abbrechen. "
+            "Danach ist Klaus' PC-Teil nicht mehr erreichbar" + (" (kurz)." if aktion == "neustart" else " und ich kann ihn nicht aus der Ferne wecken."))
+
+
 # ================================================================ Bildschirm + Zwischenablage
 def bildschirmfoto() -> str:
     ordner = Path.home() / "Pictures" / "Klaus"
