@@ -163,6 +163,20 @@ def bauen(innen: bool = True):
         def do_POST(self):
             if not hmac.compare_digest(self.headers.get("X-Token", ""), TOKEN):
                 self.send_response(403); self.end_headers(); return
+            if self.path == "/backup":   # verschluesseltes PC-Archiv (der Server kann es nicht lesen)
+                laenge = int(self.headers.get("Content-Length", "0"))
+                if not 0 < laenge <= 50 * 1024 * 1024:
+                    self.send_response(413); self.end_headers(); return
+                roh = self.rfile.read(laenge)
+                ziel = Path("/home/klaus/backup-pc"); ziel.mkdir(exist_ok=True)
+                datei = ziel / f"pc-{time.strftime('%Y-%m-%d')}.tar.gz.age"
+                (datei.with_suffix(".tmp")).write_bytes(roh); datei.with_suffix(".tmp").replace(datei)
+                for alt in sorted(ziel.glob("pc-*.age"))[:-7]:
+                    alt.unlink()
+                antwort = json.dumps({"ok": True, "bytes": len(roh)}).encode()
+                self.send_response(200); self.send_header("Content-Length", str(len(antwort))); self.end_headers(); self.wfile.write(antwort)
+                print(f"[Backup] PC-Archiv erhalten: {len(roh) // 1024} KB", flush=True)
+                return
             d = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))) or b"{}")
             if self.path == "/senden":
                 tg.senden(str(d.get("text", ""))[:4000])

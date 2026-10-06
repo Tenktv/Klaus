@@ -232,5 +232,10 @@ def starte(assistent) -> Tunnel:
     threading.Thread(target=server.serve_forever, daemon=True, name="klaus-link-server").start()
     tunnel = Tunnel()
     tunnel.start()
+    try:
+        import pc_backup
+        pc_backup.starte(tunnel)   # taeglich verschluesseltes Backup von Gedaechtnis/data/.env an den Server
+    except Exception as e:
+        print(f"[Link] PC-Backup nicht gestartet: {e}")
     print(f"[Link] bereit (Werkzeug-Server :{PC_PORT}, Telegram {'auf dem Server' if telegram_auf_server() else 'lokal'})")
     return tunnel
