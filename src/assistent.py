@@ -167,6 +167,9 @@ class Pipeline:
 
 
 class Assistent:
+    # Laeuft Telegram auf dem Server, erinnert der Server (aufs Handy) - der PC liest nichts mehr laut vor
+    erinnerungen_aus = os.getenv("TELEGRAM_AUF_SERVER", "").strip() == "1"
+
     def __init__(self, bruecke: Bruecke, dry_run: bool) -> None:
         self.b = bruecke
         self.dry_run = dry_run
@@ -468,10 +471,13 @@ class Assistent:
         erinnert: set[str] = set()
         while self.laeuft:
             time.sleep(60)
-            if not kalender.eingerichtet():
+            if not kalender.eingerichtet() or self.erinnerungen_aus:
                 continue
+            nicht = os.getenv("KLAUS_ERINNERUNG_NICHT", "").strip()   # Regex: solche Termine nicht ankuendigen (z. B. Mahlzeiten)
             try:
                 for t in kalender.bald(15):
+                    if nicht and re.search(nicht, t["titel"], re.I):
+                        continue
                     schluessel = f"{t['uid']}|{t['start']:%Y%m%d%H%M}"
                     if schluessel in erinnert:
                         continue

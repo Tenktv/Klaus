@@ -84,6 +84,8 @@ class LazyOhr:
 class ServerAssistent(A.Assistent):
     """Der Assistent ohne Fenster: Antworten gehen immer an Telegram."""
 
+    erinnerungen_aus = False   # der Server erinnert aufs Handy
+
     def __init__(self) -> None:
         self.telegram = None
         super().__init__(A.Bruecke(), dry_run=False)
