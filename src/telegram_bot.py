@@ -73,6 +73,9 @@ def abwesend_min() -> float:
     """Minuten seit der letzten Maus-/Tastatureingabe (Windows)."""
     import ctypes
 
+    if not hasattr(ctypes, "windll"):
+        return 999.0   # Server (Linux): es gibt keinen Bildschirm, Freigaben gehen immer aufs Handy
+
     class LASTINPUTINFO(ctypes.Structure):
         _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
 
@@ -104,6 +107,19 @@ class TelegramKlaus:
         self.fehlversuche, self.gesperrt_bis = 0, 0.0
         self.freigabe_nachrichten: dict[str, int] = {}
         self._sperre = threading.Lock()
+        # Austauschbar fuer den Server-Betrieb (server_gehirn.py): dort laufen PC-Werkzeuge ueber den Tunnel zum PC
+        self.werkzeug_aufruf = self.werkzeuge._werkzeug
+        self.entscheider = freigabe.entscheide
+        self.gedaechtnis_fn = gehirn.gedaechtnis_text
+        self.ereignis_fn = None          # (art, text) -> Meldung ans Panel des PCs
+
+    def _melde(self, art: str, text: str) -> None:
+        if self.ereignis_fn:
+            self.ereignis_fn(art, text)
+        elif art == "log":
+            self.a.log(text)
+        else:
+            self.a.b.nachricht.emit(art, text)
 
     # ---------------------------------------------------------------- Telegram-API
     def _api(self, methode: str, frist: float = 30, **daten):
@@ -161,7 +177,7 @@ class TelegramKlaus:
             pass
         art, _, fid = (q.get("data") or "").partition(":")
         if art == "nein":
-            freigabe.entscheide(fid, False, "Telegram")
+            self.entscheider(fid, False, "Telegram")
         elif art == "ja":
             if time.time() < self.gesperrt_bis:
                 self.senden("Freigaben per Telegram sind nach falschen PINs kurz gesperrt.")
@@ -177,14 +193,14 @@ class TelegramKlaus:
             pass
         if secrets.compare_digest(_hash(text.strip()), self.pin):
             self.fehlversuche = 0
-            if not freigabe.entscheide(fid, True, "Telegram + PIN"):
+            if not self.entscheider(fid, True, "Telegram + PIN"):
                 self.senden("Die Anfrage ist schon abgelaufen.")
             return
         self.fehlversuche += 1
         freigabe._log(f"Telegram: falsche PIN ({self.fehlversuche})")
         if self.fehlversuche >= 3:
             self.gesperrt_bis, self.fehlversuche = time.time() + 15 * 60, 0
-            freigabe.entscheide(fid, False, "Telegram: 3x falsche PIN")
+            self.entscheider(fid, False, "Telegram: 3x falsche PIN")
             self.senden("3x falsche PIN – abgebrochen, Freigaben per Telegram 15 Minuten gesperrt.")
         else:
             self.wartet_pin = fid
@@ -324,10 +340,10 @@ class TelegramKlaus:
         import recherche
         from google.genai import types
 
-        self.a.b.nachricht.emit("du", f"[Telegram] {text}")
+        self._melde("du", f"[Telegram] {text}")
         jetzt = dt.datetime.now().strftime("%A, %d.%m.%Y, %H:%M Uhr")
         config = types.GenerateContentConfig(
-            system_instruction=f"{gehirn.PERSONA}{ANWEISUNG}\n\nJetzt ist {jetzt}.{gehirn.gedaechtnis_text()}",
+            system_instruction=f"{gehirn.PERSONA}{ANWEISUNG}\n\nJetzt ist {jetzt}.{self.gedaechtnis_fn()}",
             tools=[types.Tool(function_declarations=self.deklarationen)],
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True))
         self.verlauf.append(types.Content(role="user", parts=[types.Part(text=text)]))
@@ -346,14 +362,14 @@ class TelegramKlaus:
                     if not aufrufe:
                         ergebnis = (antwort.text or "").strip() or "Erledigt."
                         self._kuerzen()
-                        self.a.b.nachricht.emit("klaus", f"[Telegram] {ergebnis}")
+                        self._melde("klaus", f"[Telegram] {ergebnis}")
                         return ergebnis
                     teile = []
                     for f in aufrufe:
                         print(f"[Telegram] Werkzeug {f.name} {dict(f.args or {})}")
-                        self.a.log(f"telegram/{f.name}")
+                        self._melde("log", f"telegram/{f.name}")
                         teile.append(types.Part.from_function_response(
-                            name=f.name, response={"ergebnis": self.werkzeuge._werkzeug(f.name, dict(f.args or {}))}))
+                            name=f.name, response={"ergebnis": self.werkzeug_aufruf(f.name, dict(f.args or {}))}))
                     self.verlauf.append(types.Content(role="user", parts=teile))
                 return "Das waren zu viele Schritte auf einmal – sag mir bitte genauer, was du willst."
             except Exception as e:   # Kontingent/Modell weg -> naechstes Modell, Verlauf bis zur Frage zuruecksetzen

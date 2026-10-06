@@ -433,9 +433,14 @@ def main() -> None:
     sicht_timer.start(2000)
 
     threading.Thread(target=assistent.run, daemon=True).start()
+    import fernlink
     import telegram_bot
 
-    if telegram_bot.bereit():   # Chat von unterwegs (nur dein Konto, Freigaben mit PIN)
+    if fernlink.konfiguriert():   # Verbindung zum Server (Gehirn): Tunnel + Werkzeug-Server nur auf 127.0.0.1
+        if fernlink.telegram_auf_server():
+            assistent.fern = fernlink.FernProxy(assistent)   # der Bot laeuft auf dem Server, der PC meldet nur dorthin
+        fernlink.starte(assistent)
+    if assistent.fern is None and telegram_bot.bereit():   # Chat von unterwegs (nur dein Konto, Freigaben mit PIN)
         assistent.fern = telegram_bot.TelegramKlaus(assistent)
         threading.Thread(target=assistent.fern.run, daemon=True).start()
     app.exec()
