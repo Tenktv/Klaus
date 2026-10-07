@@ -1,0 +1,10 @@
+[Unit]
+Description=Klaus-Waechter taeglich 05:00 UTC (07:00 deutsche Zeit)
+
+[Timer]
+OnCalendar=*-*-* 05:00:00
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

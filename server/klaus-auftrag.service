@@ -1,0 +1,8 @@
+[Unit]
+Description=Klaus-Waechter: Auftrag von Klaus ausfuehren (pruefen, scan oder basis)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/klaus-waechter.py auftrag
+Nice=10
+MemoryMax=2G

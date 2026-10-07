@@ -1,0 +1,8 @@
+[Unit]
+Description=Klaus-Waechter: Serverzustand pruefen
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/klaus-waechter.py pruefen
+Nice=10

@@ -1,0 +1,9 @@
+[Unit]
+Description=Klaus-Waechter: ClamAV-Virenscan (Website, Uploads)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/klaus-waechter.py scan
+Nice=15
+IOSchedulingClass=idle
+MemoryMax=2G

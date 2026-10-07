@@ -1,0 +1,10 @@
+[Unit]
+Description=Klaus-Virenscan sonntags 02:00 UTC
+
+[Timer]
+OnCalendar=Sun *-*-* 02:00:00
+RandomizedDelaySec=600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

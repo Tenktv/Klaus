@@ -1,0 +1,9 @@
+[Unit]
+Description=Klaus-Auftragsdatei beobachten
+
+[Path]
+PathChanged=/var/lib/klaus-sicherheit/auftrag
+Unit=klaus-auftrag.service
+
+[Install]
+WantedBy=multi-user.target

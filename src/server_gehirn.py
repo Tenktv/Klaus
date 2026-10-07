@@ -145,7 +145,31 @@ def bauen(innen: bool = True):
                                selbst_update.einspielen, an="Klaus-Server")
 
     import briefing
+    import server_sicherheit as sicherheit
 
+    def pc_sicherheit() -> str:
+        t = pc_werkzeug("sicherheit_status", {})
+        return "💻 PC: nicht erreichbar (aus oder nicht verbunden)" if t.startswith("Dein PC ist gerade nicht erreichbar") else f"💻 PC: {t}"
+
+    def sicherheit_befehl(eingabe: str) -> str:
+        """/sicherheit [scan|basis] - Server und PC zusammen"""
+        arg = eingabe.strip().split(maxsplit=1)[1].strip().lower() if len(eingabe.split()) > 1 else ""
+        if arg == "scan":
+            sicherheit.auftrag("scan")
+            pc = pc_werkzeug("sicherheit_scan", {"art": "schnell"})
+            return ("🦠 Ich starte den Virenscan auf dem Server (ClamAV, ein paar Minuten) und auf dem PC (Defender). "
+                    "Die Ergebnisse kommen als Nachricht.\n💻 PC: " + pc)
+        if arg == "basis":
+            return a._mit_freigabe("sicherheit_basis", "Server-Normalzustand neu setzen (aktuellen Zustand als sicher übernehmen)",
+                                   lambda token: (freigabe.pruefe(token, "sicherheit_basis"), sicherheit.auftrag("basis"))[0] or
+                                   "Ich übernehme den Zustand als Normalzustand, die Bestätigung kommt gleich.", an="Server-Wächter")
+        neu = sicherheit.auftrag("pruefen", warte_s=45)   # frischer Bericht
+        return (neu or sicherheit.text()) + "\n\n" + pc_sicherheit()
+
+    tg.befehle["/sicherheit"] = sicherheit_befehl
+    tg.deklarationen.append({"name": "sicherheit_gesamt", "description": "Sicherheitszustand von Server UND PC (Abweichungen, Angriffe, "
+                             "Updates, Virenscan). Fuer 'wie sicher ist alles', 'Sicherheitscheck'. Scan starten: einstellung=scan.",
+                             "parameters": {"type": "OBJECT", "properties": {"einstellung": {"type": "STRING", "description": "leer = Bericht; scan = Virenscan starten"}}}})
     tg.befehle["/briefing"] = briefing.befehl
     tg.deklarationen.append({"name": "briefing", "description": "Morgen-Briefing jetzt (Wetter, Termine heute, Nachrichten) oder "
                              "Uhrzeit/an/aus einstellen. Fuer 'Briefing', 'was steht heute an und wie ist das Wetter'.",
@@ -157,6 +181,8 @@ def bauen(innen: bool = True):
             return update_werkzeug()
         if name == "briefing":
             return briefing.befehl(f"/briefing {args.get('einstellung') or ''}")
+        if name == "sicherheit_gesamt":
+            return sicherheit_befehl(f"/sicherheit {args.get('einstellung') or ''}")
         return a.gemini._werkzeug(name, args) if name in LOKAL else pc_werkzeug(name, args)
     tg.werkzeug_aufruf = werkzeug
 
