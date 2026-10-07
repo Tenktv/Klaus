@@ -219,6 +219,19 @@ Konkurrenz-Check am 05.10.2026 live geprüft (Bäckerei in Göppingen: 36 Mitbew
   Liste zur Kontrolle → Freigabe (Knopf + PIN) → `kalender.anlegen_mehrere` (eine Freigabe für alle, Doppelte mit gleichem Titel
   und Beginn werden übersprungen). „Arbeit“/„Privat“ im Foto-Text wählt den Kalender. Erkennung am Seminarplan: erster Versuch
   nur 1 von 5 Tagen → Anweisung für Wochenpläne nachgeschärft, **Nachtest offen** (Gemini-Kontingent war aufgebraucht).
+- **Server-Sicherheit** (07.10.2026): `fail2ban` (SSH: 4 Fehlversuche/10 min → 24 h Sperre, Journal-Backend, nftables; Test mit RFC-5737-Adresse),
+  `clamav` (kein Dauerdienst, Datenbank per `klaus-freshclam.timer` täglich 04:30 UTC; `clamav-freshclam`-Daemon bleibt AUS: 650 MB RAM),
+  2 GB Swapfile (`vm.swappiness=10`), **Klaus-Wächter** (`server/klaus-waechter.py` → `/usr/local/sbin`, root, nur Standardbibliothek):
+  täglich 05:00 UTC Zustand gegen `/var/lib/klaus-sicherheit/basis.json` vergleichen (Konten, UID 0, SSH-Schlüssel als Prüfsumme, offene Ports,
+  aktivierte Dienste, Container, SUID-Dateien, Prüfsummen wichtiger Dateien: sshd, sudoers, cron, Caddyfile, compose, klaus-Skripte, ufw),
+  Klaus-Code lokal verändert?, neue Anmelde-Adressen, Firewall aus, Virendatenbank > 72 h; bei Abweichung Telegram (nur einmal je Befund).
+  ClamAV-Wochenscan sonntags 02:00 UTC über /var/www, /opt/klesro, /home/sftpuser, klaus/data, /tmp (erster Lauf: 9.051 Dateien, 123 s, 0 Funde,
+  Spitze 1,1 GB RAM). Bericht `report.json` (keine Geheimnisse). **Klaus-Seite** (`src/server_sicherheit.py`): `/sicherheit` (Server + PC über
+  `sicherheit_status`), `/sicherheit scan` (ClamAV + Defender-Schnellscan), `/sicherheit basis` (Normalzustand neu setzen, nur mit Freigabe
+  Knopf + PIN), Werkzeug `sicherheit_gesamt`. Der Benutzer `klaus` kann nur eines von `pruefen|scan|basis` in `/var/lib/klaus-sicherheit/auftrag`
+  schreiben; ein systemd-Pfad (`klaus-auftrag.path`) startet dann den Wächter als root (feste Whitelist).
+  **Nach jeder Server-Wartung** (neue Dienste, Pakete, Konfig): `/usr/local/sbin/klaus-waechter.py basis` oder `/sicherheit basis`.
+  Offen: sftpuser hat noch Passwort-Login (Match-Block, nur SFTP im chroot) - fail2ban schützt jetzt; ggf. auf Schlüssel umstellen.
 - **Markt-Analyse erweitert** (`markt.py`, 07.10.2026): Rechnung auf 1 Jahr Kursdaten (Panel zeigt die letzten 130 Tage). Neu: Bollinger-Bänder
   (20, 2σ, %B, Squeeze), ATR-Schwankung, Unterstützung/Widerstand (Umkehrpunkte, 1,5 % zusammengefasst, Berührungen), Volumen-Verhältnis,
   Golden/Death Cross (SMA 50/200, nur wenn ≤ 30 Tage her), 52-Wochen-Abstand → `signale` (Texte) und `niveaus`; Vorlesetext nennt die ersten drei.

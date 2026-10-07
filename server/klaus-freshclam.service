@@ -1,0 +1,10 @@
+[Unit]
+Description=Klaus: Virendatenbank aktualisieren (einmalig, kein Dauerdienst)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/freshclam --quiet
+Nice=15
+MemoryMax=1500M
