@@ -46,16 +46,21 @@ def symbol(name: str) -> str:
     return treffer[0]["symbol"]
 
 
-def _verlauf(sym: str, bereich: str = "6mo") -> dict:
+def _verlauf(sym: str, bereich: str = "1y") -> dict:
     r = requests.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(sym)}",
                      params={"range": bereich, "interval": "1d"}, headers=daten.UA, timeout=12)
     r.raise_for_status()
     res = r.json()["chart"]["result"][0]
     zeiten = res.get("timestamp") or []
-    schluss = res["indicators"]["quote"][0].get("close") or []
-    paare = [(t, c) for t, c in zip(zeiten, schluss) if c is not None]
-    return {"meta": res["meta"], "tage": [dt.datetime.fromtimestamp(t).strftime("%Y-%m-%d") for t, _ in paare],
-            "kurse": [float(c) for _, c in paare]}
+    q = res["indicators"]["quote"][0]
+    schluss, hoch, tief, vol = q.get("close") or [], q.get("high") or [], q.get("low") or [], q.get("volume") or []
+    zeilen = [(t, c, hoch[i] if i < len(hoch) else None, tief[i] if i < len(tief) else None, vol[i] if i < len(vol) else None)
+              for i, (t, c) in enumerate(zip(zeiten, schluss)) if c is not None]
+    return {"meta": res["meta"], "tage": [dt.datetime.fromtimestamp(z[0]).strftime("%Y-%m-%d") for z in zeilen],
+            "kurse": [float(z[1]) for z in zeilen],
+            "hoch": [float(z[2]) if z[2] is not None else float(z[1]) for z in zeilen],
+            "tief": [float(z[3]) if z[3] is not None else float(z[1]) for z in zeilen],
+            "volumen": [float(z[4]) if z[4] else 0.0 for z in zeilen]}
 
 
 def kurs(sym: str) -> tuple[float, str]:
@@ -120,6 +125,113 @@ def indikatoren(kurse: list[float]) -> dict:
             "verlauf_rsi": [None if np.isnan(v) else round(float(v), 1) for v in rsi]}
 
 
+# ------------------------------------------------------------------ Chart-Analyse
+def _de(z: float, stellen: int = 2) -> str:
+    """12345.6 -> 12.345,60 (Punkt nur als Tausendertrenner, Komma als Dezimalzeichen)."""
+    return f"{z:,.{stellen}f}".replace(",", "§").replace(".", ",").replace("§", ".")
+
+
+def _rollend_std(x: np.ndarray, n: int) -> np.ndarray:
+    aus = np.full(len(x), np.nan)
+    for i in range(n - 1, len(x)):
+        aus[i] = x[i - n + 1:i + 1].std()
+    return aus
+
+
+def _niveaus(schluss: np.ndarray, hoch: np.ndarray, tief: np.ndarray, fenster: int = 5, tage: int = 150) -> list[dict]:
+    """Unterstuetzungen/Widerstaende: Umkehrpunkte der letzten Monate, nahe beieinanderliegende zu einem Niveau zusammengefasst
+    (mehr Beruehrungen = staerker)."""
+    start = max(fenster, len(schluss) - tage)
+    punkte = []
+    for i in range(start, len(schluss) - fenster):
+        if hoch[i] >= hoch[i - fenster:i + fenster + 1].max():
+            punkte.append(float(hoch[i]))
+        if tief[i] <= tief[i - fenster:i + fenster + 1].min():
+            punkte.append(float(tief[i]))
+    gruppen: list[list[float]] = []
+    for pkt in sorted(punkte):
+        if gruppen and pkt <= gruppen[-1][-1] * 1.015:
+            gruppen[-1].append(pkt)
+        else:
+            gruppen.append([pkt])
+    letzter = float(schluss[-1])
+    return [{"preis": round(float(np.mean(g)), 4), "beruehrungen": len(g), "art": "widerstand" if np.mean(g) > letzter else "unterstuetzung"}
+            for g in gruppen]
+
+
+def chart_analyse(v: dict) -> dict:
+    """Bollinger-Baender, Schwankung (ATR), Unterstuetzung/Widerstand, Volumen, Golden/Death Cross, 52-Wochen-Spanne."""
+    x, h, t = (np.array(v[k], dtype=float) for k in ("kurse", "hoch", "tief"))
+    vol = np.array(v.get("volumen") or [], dtype=float)
+    n = len(x)
+    out: dict = {}
+    signale: list[str] = []
+    if n >= 20:
+        mitte, sd = _sma(x, 20), _rollend_std(x, 20)
+        oben, unten = mitte + 2 * sd, mitte - 2 * sd
+        spanne = oben[-1] - unten[-1]
+        pos = float((x[-1] - unten[-1]) / spanne * 100) if spanne else 50.0
+        breite = float(spanne / mitte[-1] * 100)
+        out["bollinger"] = {"oben": round(float(oben[-1]), 4), "mitte": round(float(mitte[-1]), 4), "unten": round(float(unten[-1]), 4),
+                            "position_proz": round(pos, 1), "breite_proz": round(breite, 1)}
+        out["verlauf_bb_oben"] = [None if np.isnan(a) else round(float(a), 4) for a in oben]
+        out["verlauf_bb_unten"] = [None if np.isnan(a) else round(float(a), 4) for a in unten]
+        if pos >= 95:
+            signale.append("Der Kurs liegt am oberen Bollinger-Band – kurzfristig überdehnt, Rücksetzer möglich.")
+        elif pos <= 5:
+            signale.append("Der Kurs liegt am unteren Bollinger-Band – kurzfristig überverkauft, Erholung möglich.")
+        if len(x) >= 120:
+            weit = [b for b in ((oben - unten) / mitte * 100)[-120:] if not np.isnan(b)]
+            if weit and breite <= np.percentile(weit, 10):
+                signale.append("Die Bollinger-Bänder sind ungewöhnlich eng (Squeeze) – oft folgt eine größere Bewegung, die Richtung ist offen.")
+    if n >= 15:
+        wahr = np.maximum(h[1:] - t[1:], np.maximum(abs(h[1:] - x[:-1]), abs(t[1:] - x[:-1])))
+        atr = float(wahr[-14:].mean())
+        out["atr_proz"] = round(atr / float(x[-1]) * 100, 2)
+        signale.append(f"Typische Tagesschwankung: etwa {_de(out['atr_proz'])} Prozent (ATR 14).")
+    niv = _niveaus(x, h, t)
+    letzter = float(x[-1])
+    stuetz = [a for a in niv if a["art"] == "unterstuetzung"]
+    widerst = [a for a in niv if a["art"] == "widerstand"]
+    u = max(stuetz, key=lambda a: a["preis"]) if stuetz else None
+    w = min(widerst, key=lambda a: a["preis"]) if widerst else None
+    out["unterstuetzung"], out["widerstand"] = u, w
+    out["niveaus"] = (sorted(stuetz, key=lambda a: -a["preis"])[:2] + sorted(widerst, key=lambda a: a["preis"])[:2])
+    dist = lambda a: abs(a["preis"] / letzter - 1) * 100
+    if u:
+        signale.append(f"Nächste Unterstützung bei {_de(u['preis'])} ({_de(dist(u), 1)} % entfernt, {u['beruehrungen']}x getestet).")
+    if w:
+        signale.append(f"Nächster Widerstand bei {_de(w['preis'])} ({_de(dist(w), 1)} % entfernt, {w['beruehrungen']}x getestet).")
+    if len(vol) >= 50 and vol[-50:].mean() > 0:
+        verh = float(vol[-10:].mean() / vol[-50:].mean())
+        out["volumen_verhaeltnis"] = round(verh, 2)
+        if verh >= 1.3:
+            signale.append("Das Handelsvolumen ist zuletzt deutlich höher als üblich – die Bewegung hat Gewicht.")
+        elif verh <= 0.7:
+            signale.append("Das Handelsvolumen ist zuletzt dünn – Bewegungen sind weniger verlässlich.")
+    if n >= 200:
+        s50, s200 = _sma(x, 50), _sma(x, 200)
+        diff = s50 - s200
+        gueltig = np.where(~np.isnan(diff))[0]
+        wechsel = [i for i in gueltig[1:] if diff[i] * diff[i - 1] < 0]
+        if wechsel and n - 1 - wechsel[-1] <= 30:
+            art = "Golden Cross (SMA 50 über SMA 200)" if diff[-1] > 0 else "Death Cross (SMA 50 unter SMA 200)"
+            out["kreuz"] = art
+            signale.append(f"Vor {n - 1 - wechsel[-1]} Handelstagen gab es ein {art}.")
+        else:
+            out["langfristtrend"] = "aufwärts" if diff[-1] > 0 else "abwärts"
+    jahr = x[-252:]
+    out["hoch52"], out["tief52"] = round(float(jahr.max()), 4), round(float(jahr.min()), 4)
+    abstand = (letzter / float(jahr.max()) - 1) * 100
+    out["abstand_hoch52_proz"] = round(abstand, 1)
+    if abstand >= -2:
+        signale.append("Der Kurs steht nahe am 52-Wochen-Hoch.")
+    elif abstand <= -30:
+        signale.append(f"Der Kurs liegt {abs(abstand):.0f} % unter dem 52-Wochen-Hoch.")
+    out["signale"] = signale
+    return out
+
+
 # ------------------------------------------------------------------ Nachrichten-Stimmung
 POSITIV = ("steigt", "rekord", "gewinn", "plus", "übertrifft", "kaufempfehlung", "hochgestuft", "wachstum", "durchbruch", "rally",
            "beats", "surge", "upgrade", "record", "growth")
@@ -137,6 +249,55 @@ def _schlagzeilen(name: str, anzahl: int = 8) -> list[dict]:
     except Exception as e:
         print(f"[Markt] Nachrichten {name}: {str(e)[:60]}")
         return []
+
+
+def _yahoo_news(sym: str, anzahl: int = 8) -> list[dict]:
+    try:
+        r = requests.get("https://feeds.finance.yahoo.com/rss/2.0/headline", params={"s": sym, "region": "US", "lang": "en-US"},
+                         headers=daten.UA, timeout=10)
+        return [{"titel": i.findtext("title", "").strip(), "link": i.findtext("link", ""),
+                 "alter": daten._alter(daten._zeit(i.findtext("pubDate"))), "quelle": "Yahoo Finance",
+                 "_zeit": daten._zeit(i.findtext("pubDate"))} for i in list(ET.fromstring(r.content).iter("item"))[:anzahl]]
+    except Exception as e:
+        print(f"[Markt] Yahoo-News {sym}: {str(e)[:60]}")
+        return []
+
+
+def _newsapi(name: str, anzahl: int = 8) -> list[dict]:
+    """Optional: NewsAPI.org (NEWSAPI_KEY in der .env). Ohne Schluessel nichts."""
+    import os
+
+    key = os.getenv("NEWSAPI_KEY", "").strip()
+    if not key:
+        return []
+    try:
+        r = requests.get("https://newsapi.org/v2/everything", params={"q": f'"{name}"', "sortBy": "publishedAt", "pageSize": anzahl,
+                                                                      "language": "de"}, headers={"X-Api-Key": key}, timeout=10)
+        return [{"titel": a["title"].rsplit(" - ", 1)[0].strip(), "link": a["url"], "quelle": (a.get("source") or {}).get("name", "NewsAPI"),
+                 "alter": daten._alter(daten._zeit(a.get("publishedAt"))), "_zeit": daten._zeit(a.get("publishedAt"))}
+                for a in r.json().get("articles", []) if a.get("title") and a["title"] != "[Removed]"]
+    except Exception as e:
+        print(f"[Markt] NewsAPI {name}: {str(e)[:60]}")
+        return []
+
+
+def nachrichten(name: str, sym: str, anzahl: int = 8) -> list[dict]:
+    """Google News + Yahoo Finance (+ NewsAPI, wenn Schluessel da), ohne Doppelte, neueste zuerst."""
+    gesehen, aus = set(), []
+    google = _schlagzeilen(name, anzahl)
+    for m in google:
+        m.setdefault("quelle", "Google News")
+    quellen = [google, _yahoo_news(sym, anzahl), _newsapi(name, anzahl)]   # jede Quelle ist schon nach Aktualitaet/Relevanz sortiert
+    for i in range(anzahl):   # abwechselnd je Quelle, damit keine alle anderen verdraengt
+        for liste in quellen:
+            if i < len(liste):
+                m = liste[i]
+                schluessel = re.sub(r"\W+", "", m["titel"].lower())[:50]
+                if schluessel and schluessel not in gesehen:
+                    gesehen.add(schluessel)
+                    m.pop("_zeit", None)
+                    aus.append(m)
+    return aus[:anzahl]
 
 
 def stimmung(name: str, meldungen: list[dict]) -> dict:
@@ -165,15 +326,19 @@ def analyse(name_oder_symbol: str) -> dict:
     if len(v["kurse"]) < 30:
         raise ValueError(f"Zu wenig Kursdaten für {sym}.")
     m = v["meta"]
-    name = m.get("shortName") or m.get("longName") or daten.AKTIEN_NAMEN.get(sym, sym)
+    name = " ".join((m.get("shortName") or m.get("longName") or daten.AKTIEN_NAMEN.get(sym, sym)).split())
     ind = indikatoren(v["kurse"])
-    meldungen = _schlagzeilen(daten.SPRECH_NAMEN.get(sym, name))
+    chart = chart_analyse(v)
+    meldungen = nachrichten(daten.SPRECH_NAMEN.get(sym, name), sym)
     st = stimmung(name, meldungen)
     preis, vortag = float(m.get("regularMarketPrice") or v["kurse"][-1]), float(m.get("chartPreviousClose") or v["kurse"][-2])
     tag_proz = round((preis / v["kurse"][-2] - 1) * 100, 2) if v["kurse"][-2] else 0.0
+    K = 130   # das Panel zeichnet ~6 Monate, gerechnet wird mit dem vollen Jahr
+    kuerze = lambda liste: liste[-K:] if isinstance(liste, list) else liste
     d = {"symbol": sym, "name": name, "preis": round(preis, 4), "waehrung": m.get("currency", ""), "tag": tag_proz,
-         "tage": v["tage"], "kurse": [round(k, 4) for k in v["kurse"]], **ind, "stimmung": st, "meldungen": meldungen,
-         "hinweis": HINWEIS}
+         "tage": v["tage"][-K:], "kurse": [round(k, 4) for k in v["kurse"][-K:]],
+         **{k: (kuerze(val) if k.startswith("verlauf_") else val) for k, val in {**ind, **chart}.items()},
+         "stimmung": st, "meldungen": meldungen, "hinweis": HINWEIS}
     d["text"] = analyse_text(d)
     return d
 
@@ -188,6 +353,8 @@ def analyse_text(d: dict) -> str:
         teile.append(f"RSI {round(d['rsi'])}, also {d['rsi_zone']}.")
     if d.get("macd_kreuz"):
         teile.append(f"Der MACD hat gerade ein {d['macd_kreuz']}es Kreuz gebildet.")
+    if d.get("signale"):   # Chart-Analyse: die zwei wichtigsten Punkte genuegen fuers Vorlesen (alles steht im Fenster)
+        teile.append("Chart: " + " ".join(d["signale"][:3]))
     s = d["stimmung"]
     teile.append(f"Nachrichtenlage {'positiv' if s['wert'] > 0.25 else 'negativ' if s['wert'] < -0.25 else 'gemischt'}: {s['text']}")
     teile.append(HINWEIS)

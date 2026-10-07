@@ -1,6 +1,6 @@
 // Markt-Analyse (Holo-Pop-up "markt") + Papier-Depot-Widget. Daten aus markt.py. Nur Analyse, keine Anlageberatung.
 
-POPUP_GROESSE.markt = [0.5, 0.74];
+POPUP_GROESSE.markt = [0.5, 0.8];
 POPUP_DAUER.markt = 300;
 POPUP_TITEL.markt = "MARKT-ANALYSE";
 if (typeof ZWEIT_ARTEN !== "undefined") ZWEIT_ARTEN.add("markt");   // gross -> wenn moeglich auf Bildschirm 2
@@ -12,7 +12,7 @@ POPUP_ARTEN.markt = function (box) {
   box.innerHTML = `<div class="mk-kopf"><div><b class="mk-name"></b><small class="mk-sym"></small></div>
       <div class="mk-preis"><b></b><span></span></div></div>
     <div class="mk-haupt"><div class="mk-charts"><canvas class="mk-kurs"></canvas><canvas class="mk-rsi"></canvas>
-      <div class="mk-legende"><i style="--f:#fff"></i>KURS <i style="--f:var(--bernstein)"></i>SMA 20 <i style="--f:#6cb4ff"></i>SMA 50 <i style="--f:var(--eye)"></i>RSI 14</div></div>
+      <div class="mk-signale"></div><div class="mk-legende"><i style="--f:#fff"></i>KURS <i style="--f:var(--bernstein)"></i>SMA 20 <i style="--f:#6cb4ff"></i>SMA 50 <i style="--f:rgba(180,170,255,.8)"></i>BOLLINGER <i style="--f:rgba(120,255,190,.8)"></i>NIVEAUS <i style="--f:var(--eye)"></i>RSI 14</div></div>
       <aside class="mk-seite"><div class="mk-chips"></div><div class="lbl">Nachrichtenlage</div><div class="mk-stimmung"><i></i></div>
         <div class="mk-stimmung-text"></div><div class="mk-news"></div></aside></div>
     <div class="mk-fuss"></div>`;
@@ -38,7 +38,9 @@ POPUP_ARTEN.markt = function (box) {
       ctx.clearRect(0, 0, w, h);
       const n = d.kurse.length, x = (i) => 6 + (i / (n - 1)) * (w - 52);
       if (art === "kurs") {
-        const alle = [...d.kurse, ...d.verlauf_sma20.filter((v) => v != null), ...d.verlauf_sma50.filter((v) => v != null)];
+        const niv = (d.niveaus || []).map((a) => a.preis);
+        const alle = [...d.kurse, ...d.verlauf_sma20.filter((v) => v != null), ...d.verlauf_sma50.filter((v) => v != null),
+          ...(d.verlauf_bb_oben || []).filter((v) => v != null), ...(d.verlauf_bb_unten || []).filter((v) => v != null)];
         const lo = Math.min(...alle), hi = Math.max(...alle), y = (v) => 10 + (1 - (v - lo) / (hi - lo || 1)) * (h - 26);
         ctx.strokeStyle = `rgba(${rgb},.08)`; ctx.lineWidth = 1; ctx.font = "10px 'JetBrains Mono', monospace"; ctx.fillStyle = "rgba(220,210,205,.6)";
         for (let k = 0; k <= 4; k++) {   // Raster + Preis-Achse rechts
@@ -51,6 +53,20 @@ POPUP_ARTEN.markt = function (box) {
         g.addColorStop(0, `rgba(${f},.22)`); g.addColorStop(1, `rgba(${f},0)`);
         ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x(0), h - 16);
         d.kurse.forEach((v, i) => ctx.lineTo(x(i), y(v))); ctx.lineTo(x(n - 1), h - 16); ctx.fill();
+        if (d.verlauf_bb_oben) {   // Bollinger-Baender
+          ctx.setLineDash([4, 4]);
+          linie(ctx, d.verlauf_bb_oben, x, y, "rgba(180,170,255,.55)", 1);
+          linie(ctx, d.verlauf_bb_unten, x, y, "rgba(180,170,255,.55)", 1);
+          ctx.setLineDash([]);
+        }
+        for (const a of d.niveaus || []) {   // Unterstuetzung/Widerstand: nur sichtbar, wenn im Bereich
+          if (a.preis < lo || a.preis > hi) continue;
+          ctx.strokeStyle = a.art === "widerstand" ? "rgba(255,120,120,.55)" : "rgba(120,255,190,.55)";
+          ctx.lineWidth = Math.min(2.2, 0.8 + a.beruehrungen * 0.3);
+          ctx.beginPath(); ctx.moveTo(6, y(a.preis)); ctx.lineTo(w - 46, y(a.preis)); ctx.stroke();
+          ctx.fillStyle = ctx.strokeStyle; ctx.fillText(a.art === "widerstand" ? "W" : "U", w - 14, y(a.preis) + 3);
+        }
+        ctx.lineWidth = 1;
         linie(ctx, d.verlauf_sma50, x, y, "#6cb4ff", 1.1);
         linie(ctx, d.verlauf_sma20, x, y, amber, 1.1);
         linie(ctx, d.kurse, x, y, "#fff", 1.6);
@@ -86,7 +102,15 @@ POPUP_ARTEN.markt = function (box) {
       q(".mk-chips").innerHTML = chip("Trend", d.trend.toUpperCase(), d.trend === "aufwärts" ? "plus" : d.trend === "abwärts" ? "minus" : "")
         + chip("RSI 14", `${d.rsi ?? "–"} · ${d.rsi_zone}`, d.rsi_zone === "überkauft" ? "warn" : d.rsi_zone === "überverkauft" ? "warn" : "")
         + chip("1 Monat", d.veraenderung_1m == null ? "–" : `${d.veraenderung_1m >= 0 ? "+" : ""}${zahlDE(d.veraenderung_1m)} %`, (d.veraenderung_1m ?? 0) >= 0 ? "plus" : "minus")
-        + chip("MACD", d.macd_kreuz ? `${d.macd_kreuz.toUpperCase()}ES KREUZ` : (d.macd > d.macd_signal ? "ÜBER SIGNAL" : "UNTER SIGNAL"));
+        + chip("MACD", d.macd_kreuz ? `${d.macd_kreuz.toUpperCase()}ES KREUZ` : (d.macd > d.macd_signal ? "ÜBER SIGNAL" : "UNTER SIGNAL"))
+        + (d.bollinger ? chip("Bollinger", `${zahlDE(d.bollinger.position_proz, 0)} % im Band`, d.bollinger.position_proz >= 95 || d.bollinger.position_proz <= 5 ? "warn" : "") : "")
+        + (d.atr_proz != null ? chip("Schwankung", `${zahlDE(d.atr_proz)} % / Tag`) : "")
+        + (d.unterstuetzung ? chip("Unterstützung", zahlDE(d.unterstuetzung.preis, d.unterstuetzung.preis > 1000 ? 0 : 2), "plus") : "")
+        + (d.widerstand ? chip("Widerstand", zahlDE(d.widerstand.preis, d.widerstand.preis > 1000 ? 0 : 2), "minus") : "")
+        + (d.kreuz ? chip("Kreuz", d.kreuz.split(" (")[0].toUpperCase(), d.kreuz.startsWith("Golden") ? "plus" : "minus") : "");
+      const sig = q(".mk-signale");   // alle Chart-Hinweise als Liste unter dem Chart
+      sig.innerHTML = "";
+      for (const t of (d.signale || []).slice(0, 3)) sig.append(el("div", "mk-signal", t));   // alle Hinweise werden vorgelesen, hier die ersten drei
       const s = d.stimmung || { wert: 0, text: "" };
       q(".mk-stimmung i").style.left = `${((s.wert + 1) / 2) * 100}%`;
       q(".mk-stimmung-text").textContent = `${s.text}${s.quelle && s.quelle !== "-" ? ` (${s.quelle})` : ""}`;
@@ -94,7 +118,7 @@ POPUP_ARTEN.markt = function (box) {
       news.innerHTML = "";
       for (const m of (d.meldungen || []).slice(0, 6)) {
         const z = el("button", "mk-meldung");
-        z.append(el("span", "", m.titel), el("small", "", m.alter ? `VOR ${m.alter.toUpperCase()}` : ""));
+        z.append(el("span", "", m.titel), el("small", "", [m.quelle, m.alter ? `VOR ${m.alter.toUpperCase()}` : ""].filter(Boolean).join(" · ").toUpperCase()));
         z.onclick = () => webOeffnen(m.link);
         news.append(z);
       }

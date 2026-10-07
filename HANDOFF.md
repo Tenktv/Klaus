@@ -219,6 +219,12 @@ Konkurrenz-Check am 05.10.2026 live geprüft (Bäckerei in Göppingen: 36 Mitbew
   Liste zur Kontrolle → Freigabe (Knopf + PIN) → `kalender.anlegen_mehrere` (eine Freigabe für alle, Doppelte mit gleichem Titel
   und Beginn werden übersprungen). „Arbeit“/„Privat“ im Foto-Text wählt den Kalender. Erkennung am Seminarplan: erster Versuch
   nur 1 von 5 Tagen → Anweisung für Wochenpläne nachgeschärft, **Nachtest offen** (Gemini-Kontingent war aufgebraucht).
+- **Markt-Analyse erweitert** (`markt.py`, 07.10.2026): Rechnung auf 1 Jahr Kursdaten (Panel zeigt die letzten 130 Tage). Neu: Bollinger-Bänder
+  (20, 2σ, %B, Squeeze), ATR-Schwankung, Unterstützung/Widerstand (Umkehrpunkte, 1,5 % zusammengefasst, Berührungen), Volumen-Verhältnis,
+  Golden/Death Cross (SMA 50/200, nur wenn ≤ 30 Tage her), 52-Wochen-Abstand → `signale` (Texte) und `niveaus`; Vorlesetext nennt die ersten drei.
+  Nachrichten aus Google News + Yahoo Finance (abwechselnd, ohne Doppelte); mit `NEWSAPI_KEY` in der `.env` kommt NewsAPI.org dazu (optional,
+  Free-Tarif nur Entwicklung/verzögert). Panel (`markt.js`): Bänder gestrichelt, Niveaus als Linien (U/W), neue Kennzahlen, Hinweisliste, Quelle je Meldung.
+  Getestet: Bollinger/52W an synthetischen Daten nachgerechnet, echte Werte (NVDA, SAP, BTC), Panel-Foto nur vom Klaus-Fenster.
 - **Zeitzone:** Der Dienst läuft mit `TZ=Europe/Berlin` (vorher UTC → Erinnerungen kamen 2 h zu spät, behoben 06.10.).
 - `kalender.loeschen`: iCloud lehnt die UID-Suche ab (412) → Rückfall über Zeitraum-Suche.
 - **Gemini-Kontingent:** kostenlos nur **20 Anfragen pro Tag und Modell** (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`).
