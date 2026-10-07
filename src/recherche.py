@@ -70,6 +70,13 @@ def gemini(prompt: str, system: str = "", google: bool = False) -> str:
                 return antwort.text.strip()
         except Exception as e:  # 429 RESOURCE_EXHAUSTED, 404, 503 ...
             fehler.append(f"{modell}: {str(e)[:40]}")
+    if not google:   # Ersatz-KI (Groq o. a.), wenn Gemini nicht erreichbar ist - nur fuer reine Textfragen (ohne Google-Suche)
+        try:
+            import ersatz_ki
+            if ersatz_ki.bereit():
+                return ersatz_ki.text(prompt, system)
+        except Exception as e:
+            fehler.append(f"ersatz: {str(e)[:40]}")
     raise KeineKI("; ".join(fehler) or "leere Antworten")
 
 

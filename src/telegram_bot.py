@@ -122,7 +122,11 @@ def termine_aus_bild(bild: bytes, mime: str, hinweis: str = "") -> list[dict]:
         except Exception as e:
             letzter = e
     else:
-        raise RuntimeError(f"Gemini antwortet nicht ({str(letzter)[:80]})")
+        import ersatz_ki
+        if not ersatz_ki.bereit():
+            raise RuntimeError(f"Gemini antwortet nicht ({str(letzter)[:80]})")
+        print("[Telegram] Foto: Gemini ausgefallen -> Ersatz-KI")
+        roh = json.loads(re.search(r"\[.*\]", ersatz_ki.bild_json(bild, mime, auftrag), re.S).group(0))
     termine = []
     for t in roh if isinstance(roh, list) else []:
         try:
@@ -149,6 +153,7 @@ class TelegramKlaus:
         self.nutzer = int(os.getenv("TELEGRAM_NUTZER", "0") or 0)
         self.pin = os.getenv("TELEGRAM_PIN", "").strip()
         self.verlauf: list = []          # Gemini-Contents (letzte Runden)
+        self.verlauf_text: list = []     # dieselben Wortwechsel als reiner Text (fuer die Ersatz-KI, die Gemini-Objekte nicht kennt)
         self.zuletzt = 0.0               # deine letzte Nachricht
         self.offset = 0
         self.wartet_pin: str | None = None   # Freigabe-ID, fuer die gerade die PIN abgefragt wird
@@ -435,8 +440,19 @@ class TelegramKlaus:
         self._ende = time.time() + 200   # Gesamtlimit je Nachricht: haengt Gemini, bleibt der Chat nicht stehen
         for runde in range(3):
             try:
-                return self._antworten_einmal(text)
+                antwort = self._antworten_einmal(text)
+                self._merke(text, antwort)
+                return antwort
             except RuntimeError as e:
+                if "Gemini antwortet nicht" in str(e) and runde == 0:
+                    import ersatz_ki
+                    if ersatz_ki.bereit():   # Google streikt: nicht warten, sondern gleich die Ersatz-KI fragen
+                        try:
+                            antwort = self._antworten_ersatz(text)
+                            self._merke(text, antwort)
+                            return antwort
+                        except Exception as e2:
+                            print(f"[Telegram] Ersatz-KI: {str(e2)[:120]}")
                 if "Gemini antwortet nicht" in str(e) and runde < 2 and time.time() < self._ende - 40:
                     print(f"[Telegram] Gemini ueberlastet, neuer Versuch ({runde + 2}/3)")
                     time.sleep(12 * (runde + 1))
@@ -490,10 +506,50 @@ class TelegramKlaus:
                 letzter_fehler = e
                 while self.verlauf and not (self.verlauf[-1].role == "user" and self.verlauf[-1].parts[0].text == text):
                     self.verlauf.pop()
-                if not re.search(r"429|404|RESOURCE_EXHAUSTED|NOT_FOUND|503|UNAVAILABLE", str(e)):
+                if not re.search(r"429|404|RESOURCE_EXHAUSTED|NOT_FOUND|503|504|UNAVAILABLE|DEADLINE|Timeout|timed out", str(e)):
                     break
         self.verlauf.pop() if self.verlauf else None
         raise RuntimeError(f"Gemini antwortet nicht ({str(letzter_fehler)[:80]})")
+
+    def _merke(self, frage: str, antwort: str) -> None:
+        self.verlauf_text += [{"role": "user", "content": frage}, {"role": "assistant", "content": antwort}]
+        del self.verlauf_text[:-20]
+
+    def _antworten_ersatz(self, text: str) -> str:
+        """Dasselbe wie _antworten_einmal, aber ueber die Ersatz-KI (OpenAI-Format). Werkzeuge laufen identisch (mit Freigabe-Gate)."""
+        import ersatz_ki
+
+        jetzt = dt.datetime.now().strftime("%A, %d.%m.%Y, %H:%M Uhr")
+        system = (f"{gehirn.PERSONA}{ANWEISUNG}\n\nJetzt ist {jetzt}.{self.gedaechtnis_fn()}\n\n"
+                  "Hinweis: Du laeufst gerade ueber ein Ersatz-Modell, weil Gemini ausgefallen ist. Antworte trotzdem wie gewohnt.")
+        nachrichten = [{"role": "system", "content": system}] + self.verlauf_text[-12:] + [{"role": "user", "content": text}]
+        tools = ersatz_ki.tools_umwandeln(self.deklarationen)
+        ergebnisse: dict[str, str] = {}
+        print("[Telegram] Gemini ausgefallen -> Ersatz-KI")
+        for _ in range(8):
+            if time.time() > self._ende:
+                raise RuntimeError("Gemini antwortet nicht (Zeitlimit)")
+            antwort = ersatz_ki.chat(nachrichten, tools)
+            msg = antwort["message"]
+            aufrufe = msg.get("tool_calls") or []
+            if not aufrufe:
+                ergebnis = (msg.get("content") or "").strip() or "Erledigt."
+                self._melde("klaus", f"[Telegram/{antwort['modell']}] {ergebnis}")
+                return ergebnis
+            nachrichten.append({"role": "assistant", "content": msg.get("content") or "", "tool_calls": aufrufe})
+            for aufruf in aufrufe:
+                name = aufruf["function"]["name"]
+                try:
+                    args = json.loads(aufruf["function"].get("arguments") or "{}")
+                except ValueError:
+                    args = {}
+                print(f"[Telegram] Werkzeug {name} {args} (Ersatz-KI)")
+                schluessel = f"{name}|{json.dumps(args, sort_keys=True, default=str)}"
+                if schluessel not in ergebnisse:
+                    self._melde("log", f"telegram/{name}")
+                    ergebnisse[schluessel] = self.werkzeug_aufruf(name, args)
+                nachrichten.append({"role": "tool", "tool_call_id": aufruf["id"], "content": str(ergebnisse[schluessel])[:6000]})
+        return "Das waren zu viele Schritte auf einmal – sag mir bitte genauer, was du willst."
 
     def _kuerzen(self) -> None:
         """Verlauf klein halten: die letzten ~12 Wortwechsel, Schnitt immer vor einer Nutzer-Textnachricht."""
