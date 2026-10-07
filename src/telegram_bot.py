@@ -142,6 +142,61 @@ def termine_aus_bild(bild: bytes, mime: str, hinweis: str = "") -> list[dict]:
     return sorted(termine, key=lambda x: x["start"])[:80]
 
 
+STATUS_TEXTE = {
+    "recherche": "🔎 Ich recherchiere im Netz …", "markt_analyse": "📈 Ich analysiere den Markt …",
+    "kalender_lesen": "📅 Ich schaue in den Kalender …", "termin_eintragen": "📅 Ich bereite den Termin vor …",
+    "sicherheit_gesamt": "🛡️ Ich prüfe Server und PC …", "briefing": "☀️ Ich stelle dein Briefing zusammen …",
+    "update_einspielen": "⬇️ Ich schaue nach Updates …", "depot_status": "💼 Ich rechne dein Depot durch …",
+    "papier_order": "💼 Ich bearbeite die Papier-Order …", "oeffne": "🖥️ Ich öffne das am PC …",
+    "lagebericht": "🌍 Ich hole den Lagebericht …", "globus_zeigen": "🌍 Ich zeige das auf dem Globus …",
+}
+
+
+class _Lebenszeichen:
+    """Zeigt waehrend der Arbeit "Klaus schreibt ..." und - ab `nach` Sekunden - eine Statusmeldung, die sich mit dem
+    Werkzeug aendert und am Ende wieder verschwindet."""
+
+    def __init__(self, bot, nach: float = 8, takt: float = 4) -> None:
+        self.bot, self.nach, self.takt = bot, nach, takt
+        self.text = "⏳ Ich arbeite daran …"
+        self.stopp = __import__("threading").Event()
+        self.mid = None
+        self.gezeigt = ""
+
+    def setze(self, text: str) -> None:
+        self.text = text
+
+    def __enter__(self):
+        self.bot._lebenszeichen = self
+        threading.Thread(target=self._lauf, daemon=True, name="klaus-lebenszeichen").start()
+        return self
+
+    def _lauf(self) -> None:
+        start = time.time()
+        while not self.stopp.is_set():
+            try:
+                self.bot._api("sendChatAction", chat_id=self.bot.nutzer, action="typing")
+                if time.time() - start >= self.nach and self.text != self.gezeigt:
+                    if self.mid is None:
+                        self.mid = self.bot.senden(self.text, disable_notification=True)
+                    else:
+                        self.bot._api("editMessageText", chat_id=self.bot.nutzer, message_id=self.mid, text=self.text)
+                    self.gezeigt = self.text
+            except Exception as e:
+                print(f"[Telegram] Lebenszeichen: {str(e)[:80]}")
+            self.stopp.wait(self.takt)
+
+    def __exit__(self, *fehler) -> bool:
+        self.stopp.set()
+        self.bot._lebenszeichen = None
+        if self.mid:
+            try:
+                self.bot._api("deleteMessage", chat_id=self.bot.nutzer, message_id=self.mid)
+            except Exception:
+                pass
+        return False
+
+
 class TelegramKlaus:
     def __init__(self, assistent) -> None:
         import gemini_live
@@ -162,6 +217,7 @@ class TelegramKlaus:
         self.freigabe_nachrichten: dict[str, int] = {}
         self._sperre = threading.Lock()
         # Austauschbar fuer den Server-Betrieb (server_gehirn.py): dort laufen PC-Werkzeuge ueber den Tunnel zum PC
+        self._lebenszeichen = None       # laufende Statusanzeige (_Lebenszeichen) oder None
         self.werkzeug_aufruf = self.werkzeuge._werkzeug
         self.entscheider = freigabe.entscheide
         self.gedaechtnis_fn = gehirn.gedaechtnis_text
@@ -343,7 +399,7 @@ class TelegramKlaus:
                 return
             # Freigaben per Telegram nur mit Knopf + PIN - "Freigeben" als Text zaehlt bewusst NICHT
             print(f"[Telegram] ← {text[:80]}")
-            with self._sperre:   # eine Antwort nach der anderen
+            with self._sperre, _Lebenszeichen(self):   # eine Antwort nach der anderen, mit "Klaus schreibt ..." und Statusmeldung
                 antwort = self._antworten(text)
             print(f"[Telegram] → {antwort[:80]}")
             if sprache and self._sprachnachricht(antwort, n["message_id"]):
@@ -375,7 +431,9 @@ class TelegramKlaus:
         if not kalender.eingerichtet():
             self.senden("Der Kalender ist nicht eingerichtet, deshalb kann ich keine Termine aus Fotos eintragen.")
             return
-        termine = termine_aus_bild(bild, "image/jpeg" if "photo" in n else datei.get("mime_type", "image/jpeg"), hinweis)
+        with _Lebenszeichen(self, nach=6) as lz:
+            lz.setze("📷 Ich lese die Termine vom Foto …")
+            termine = termine_aus_bild(bild, "image/jpeg" if "photo" in n else datei.get("mime_type", "image/jpeg"), hinweis)
         if not termine:
             self.senden("Auf dem Bild habe ich keine Termine erkannt. Wenn es ein Plan ist, schick es nochmal schärfer "
                         "oder schreib dazu, was ich eintragen soll.")
@@ -560,6 +618,8 @@ class TelegramKlaus:
         """Fuehrt ein Werkzeug mit Zeitlimit aus: haengt es, wartet der Chat nicht ewig (der Lauf selbst kann im Hintergrund enden)."""
         import concurrent.futures as cf
 
+        if self._lebenszeichen:
+            self._lebenszeichen.setze(STATUS_TEXTE.get(name, f"⚙️ Ich arbeite mit „{name}“ …"))
         pool = cf.ThreadPoolExecutor(max_workers=1)
         zukunft = pool.submit(self.werkzeug_aufruf, name, args)
         try:
@@ -585,6 +645,8 @@ class TelegramKlaus:
         tools = ersatz_ki.tools_umwandeln(waehle)
         ergebnisse: dict[str, str] = {}
         print(f"[Telegram] Gemini ausgefallen -> Ersatz-KI ({len(waehle)} von {len(self.deklarationen)} Werkzeugen)")
+        if self._lebenszeichen:
+            self._lebenszeichen.setze("🔄 Gemini ist gerade langsam, ich nehme die Ersatz-KI …")
         for _ in range(8):
             if time.time() > self._ende:
                 raise RuntimeError("Gemini antwortet nicht (Zeitlimit)")
