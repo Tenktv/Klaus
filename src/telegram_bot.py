@@ -484,7 +484,10 @@ class TelegramKlaus:
             pass
         letzter_fehler = None
         ergebnisse: dict[str, str] = {}   # Werkzeug+Argumente -> Ergebnis: bei Modellwechsel wird nichts doppelt ausgefuehrt
+        fehlversuche = 0
         for modell in CHAT_MODELLE or recherche.TEXT_MODELLE:
+            if fehlversuche >= 2:   # zwei Modelle fielen aus: nicht alle durchprobieren, die Ersatz-KI ist schneller
+                break
             if time.time() > self._ende:
                 letzter_fehler = letzter_fehler or "Zeitlimit"
                 break
@@ -507,12 +510,13 @@ class TelegramKlaus:
                         schluessel = f"{f.name}|{json.dumps(dict(f.args or {}), sort_keys=True, default=str)}"
                         if schluessel not in ergebnisse:
                             self._melde("log", f"telegram/{f.name}")
-                            ergebnisse[schluessel] = self.werkzeug_aufruf(f.name, dict(f.args or {}))
+                            ergebnisse[schluessel] = self._werkzeug_sicher(f.name, dict(f.args or {}))
                         teile.append(types.Part.from_function_response(name=f.name, response={"ergebnis": ergebnisse[schluessel]}))
                     self.verlauf.append(types.Content(role="user", parts=teile))
                 return "Das waren zu viele Schritte auf einmal – sag mir bitte genauer, was du willst."
             except Exception as e:   # Kontingent/Modell weg -> naechstes Modell, Verlauf bis zur Frage zuruecksetzen
                 letzter_fehler = e
+                fehlversuche += 1
                 while self.verlauf and not (self.verlauf[-1].role == "user" and self.verlauf[-1].parts[0].text == text):
                     self.verlauf.pop()
                 if not re.search(r"429|404|RESOURCE_EXHAUSTED|NOT_FOUND|503|504|UNAVAILABLE|DEADLINE|Timeout|timed out", str(e)):
@@ -552,6 +556,19 @@ class TelegramKlaus:
             namen.update(["kalender_lesen", "markt_analyse", "briefing", "sicherheit_gesamt", "oeffne"])
         return [d for d in self.deklarationen if d["name"] in namen][:16]
 
+    def _werkzeug_sicher(self, name: str, args: dict, frist: int = 150) -> str:
+        """Fuehrt ein Werkzeug mit Zeitlimit aus: haengt es, wartet der Chat nicht ewig (der Lauf selbst kann im Hintergrund enden)."""
+        import concurrent.futures as cf
+
+        pool = cf.ThreadPoolExecutor(max_workers=1)
+        zukunft = pool.submit(self.werkzeug_aufruf, name, args)
+        try:
+            return zukunft.result(timeout=frist)
+        except cf.TimeoutError:
+            return f"Das Werkzeug {name} braucht zu lange (über {frist} s). Ich warte nicht länger - versuch es später nochmal."
+        finally:
+            pool.shutdown(wait=False)
+
     def _merke(self, frage: str, antwort: str) -> None:
         self.verlauf_text += [{"role": "user", "content": frage}, {"role": "assistant", "content": antwort}]
         del self.verlauf_text[:-20]
@@ -589,7 +606,7 @@ class TelegramKlaus:
                 schluessel = f"{name}|{json.dumps(args, sort_keys=True, default=str)}"
                 if schluessel not in ergebnisse:
                     self._melde("log", f"telegram/{name}")
-                    ergebnisse[schluessel] = self.werkzeug_aufruf(name, args)
+                    ergebnisse[schluessel] = self._werkzeug_sicher(name, args)
                 nachrichten.append({"role": "tool", "tool_call_id": aufruf["id"], "content": str(ergebnisse[schluessel])[:6000]})
         return "Das waren zu viele Schritte auf einmal – sag mir bitte genauer, was du willst."
 

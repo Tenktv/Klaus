@@ -57,7 +57,7 @@ def _client():
         from google import genai
         from google.genai import types
         # Zeitlimit je Anfrage: ohne eines blockiert eine haengende Antwort den ganzen Chat (Telegram bearbeitet eine Nachricht nach der anderen)
-        _gemini_client = genai.Client(api_key=GEMINI_KEY, http_options=types.HttpOptions(timeout=45_000))   # Millisekunden
+        _gemini_client = genai.Client(api_key=GEMINI_KEY, http_options=types.HttpOptions(timeout=25_000))   # Millisekunden
     return _gemini_client
 
 
@@ -70,7 +70,10 @@ def gemini(prompt: str, system: str = "", google: bool = False) -> str:
         system_instruction=system or None,
         tools=[types.Tool(google_search=types.GoogleSearch())] if google else None)
     fehler = []
-    if not google and time.time() < GEMINI_AUS_BIS:   # Gemini fiel gerade aus: erst die Ersatz-KI
+    # Einfache Textaufgaben (Zusammenfassung, Stimmung ...) zuerst ueber die schnelle Ersatz-KI (Groq ~1 s, schont Gemini-Kontingent);
+    # ERSATZ_ZUERST=0 stellt das ab. Mit Google-Suche (google=True) bleibt es bei Gemini.
+    zuerst = os.getenv("ERSATZ_ZUERST", "1").strip() != "0"
+    if not google and (zuerst or time.time() < GEMINI_AUS_BIS):
         try:
             import ersatz_ki
             if ersatz_ki.bereit():
