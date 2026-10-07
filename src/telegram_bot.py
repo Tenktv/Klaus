@@ -586,6 +586,7 @@ class TelegramKlaus:
     WERKZEUG_GRUPPEN = [
         (r"kalender|termin|morgen|heute|uhr|woche|frei|verabred|seminar", ["kalender_lesen", "termin_eintragen", "zeit_frei"]),
         (r"aktie|b(ö|oe)rse|kurs|depot|bitcoin|dax|nvidia|tesla|apple|analys|chart|markt|trading", ["markt_analyse", "papier_order", "depot_status"]),
+        (r"watchlist|beobacht|alarm|bescheid|f(ä|ae)llt|steigt|unter|(ü|ue)ber", ["watchlist_verwalten", "alarm_verwalten", "markt_analyse"]),
         (r"sicher|virus|scan|angriff|firewall|hack|schutz", ["sicherheit_gesamt", "sicherheit_status", "sicherheit_scan", "sicherheit_bestaetigen"]),
         (r"briefing|wetter|nachricht|news|schlagzeile", ["briefing", "lagebericht", "globus_zeigen"]),
         (r"update|aktualisier|upgrade|neue version", ["update_einspielen"]),

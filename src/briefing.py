@@ -56,6 +56,13 @@ def text() -> str:
         except Exception as e:
             teile.append(f"📅 Kalender gerade nicht lesbar ({str(e)[:60]}).")
     try:
+        import watchlist
+        zeile = watchlist.briefing_block()
+        if zeile:
+            teile.append(zeile)
+    except Exception as e:
+        print(f"[Briefing] Watchlist: {e}", flush=True)
+    try:
         # Sendungsnamen ("tagesthemen") sind keine Meldung: nur echte Schlagzeilen mit mindestens 4 Woertern
         meldungen = [m for m in daten.nachrichten(12)["liste"] if len(m["titel"].split()) >= 4][:5]
         if meldungen:

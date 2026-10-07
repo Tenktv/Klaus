@@ -167,6 +167,19 @@ def bauen(innen: bool = True):
         return (neu or sicherheit.text()) + "\n\n" + pc_sicherheit()
 
     tg.befehle["/sicherheit"] = sicherheit_befehl
+
+    import watchlist
+    tg.befehle["/watchlist"] = watchlist.watchlist_befehl
+    tg.befehle["/alarm"] = tg.befehle["/alarme"] = watchlist.alarm_befehl
+    tg.deklarationen += [
+        {"name": "watchlist_verwalten", "description": "Watchlist: zeigen (mit Kursen), Wert hinzufuegen oder entfernen. Fuer 'setz Nvidia auf die Watchlist', 'was beobachte ich'.",
+         "parameters": {"type": "OBJECT", "properties": {"aktion": {"type": "STRING", "description": "zeigen, hinzufuegen oder entfernen"},
+                                                        "name": {"type": "STRING", "description": "Name oder Kuerzel, z. B. Nvidia"}}, "required": ["aktion"]}},
+        {"name": "alarm_verwalten", "description": "Kurs-Alarm: 'Sag Bescheid, wenn Nvidia unter 200 faellt'. Setzt einen Einmal-Alarm (Meldung per Telegram), zeigt oder loescht Alarme.",
+         "parameters": {"type": "OBJECT", "properties": {"aktion": {"type": "STRING", "description": "setzen, zeigen oder loeschen"},
+                                                        "name": {"type": "STRING"}, "richtung": {"type": "STRING", "description": "unter (faellt unter) oder ueber (steigt ueber)"},
+                                                        "preis": {"type": "NUMBER", "description": "Schwelle in der Waehrung der Aktie"},
+                                                        "nummer": {"type": "INTEGER", "description": "Nummer des Alarms beim Loeschen"}}, "required": ["aktion"]}}]
     tg.deklarationen.append({"name": "sicherheit_gesamt", "description": "Sicherheitszustand von Server UND PC (Abweichungen, Angriffe, "
                              "Updates, Virenscan). Fuer 'wie sicher ist alles', 'Sicherheitscheck'. Scan starten: einstellung=scan.",
                              "parameters": {"type": "OBJECT", "properties": {"einstellung": {"type": "STRING", "description": "leer = Bericht; scan = Virenscan starten"}}}})
@@ -183,6 +196,20 @@ def bauen(innen: bool = True):
             return briefing.befehl(f"/briefing {args.get('einstellung') or ''}")
         if name == "sicherheit_gesamt":
             return sicherheit_befehl(f"/sicherheit {args.get('einstellung') or ''}")
+        if name == "watchlist_verwalten":
+            akt, nm = (args.get("aktion") or "zeigen").lower(), (args.get("name") or "").strip()
+            if akt.startswith("hinzu") and nm:
+                return watchlist.hinzu(nm)
+            if akt.startswith(("entfern", "weg", "loesch", "lösch")) and nm:
+                return watchlist.weg(nm)
+            return watchlist.liste()
+        if name == "alarm_verwalten":
+            akt = (args.get("aktion") or "zeigen").lower()
+            if akt.startswith("setz") and args.get("name") and args.get("preis") is not None:
+                return watchlist.alarm_setzen(args["name"], args.get("richtung") or "unter", float(args["preis"]))
+            if akt.startswith(("loesch", "lösch", "weg")) and args.get("nummer"):
+                return watchlist.alarm_loeschen(int(args["nummer"]))
+            return watchlist.alarme_text()
         return a.gemini._werkzeug(name, args) if name in LOKAL else pc_werkzeug(name, args)
     tg.werkzeug_aufruf = werkzeug
 
@@ -258,6 +285,8 @@ def main() -> None:
     import briefing
 
     briefing.starte(tg.senden)
+    import watchlist
+    watchlist.starte(tg.senden)   # alle 10 Minuten Kurse pruefen: Alarme und starke Tagesbewegungen
     try:
         import selbst_update
         meldung = selbst_update.nach_neustart()
