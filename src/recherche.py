@@ -50,7 +50,7 @@ def _client():
         from google import genai
         from google.genai import types
         # Zeitlimit je Anfrage: ohne eines blockiert eine haengende Antwort den ganzen Chat (Telegram bearbeitet eine Nachricht nach der anderen)
-        _gemini_client = genai.Client(api_key=GEMINI_KEY, http_options=types.HttpOptions(timeout=100_000))   # Millisekunden
+        _gemini_client = genai.Client(api_key=GEMINI_KEY, http_options=types.HttpOptions(timeout=45_000))   # Millisekunden
     return _gemini_client
 
 
