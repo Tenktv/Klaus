@@ -13,6 +13,7 @@ Reihenfolge:
 
 import os
 import re
+import time
 from urllib.parse import urlparse
 
 import requests
@@ -38,6 +39,12 @@ VERZEICHNISSE = ("dasoertliche", "dastelefonbuch", "gelbeseiten", "11880", "cyle
                  "malerinmeinernaehe", "firmania", "infobel", "hotfrog", "werliefertwas", "stadtbranchenbuch")
 
 _gemini_client = None
+GEMINI_AUS_BIS = 0.0   # Zeitpunkt bis zu dem Gemini als ausgefallen gilt -> Ersatz-KI zuerst fragen (spart die Warterei auf Zeitlimits)
+
+
+def gemini_ausgefallen(sekunden: int = 180) -> None:
+    global GEMINI_AUS_BIS
+    GEMINI_AUS_BIS = time.time() + sekunden
 
 
 class KeineKI(RuntimeError):
@@ -63,6 +70,13 @@ def gemini(prompt: str, system: str = "", google: bool = False) -> str:
         system_instruction=system or None,
         tools=[types.Tool(google_search=types.GoogleSearch())] if google else None)
     fehler = []
+    if not google and time.time() < GEMINI_AUS_BIS:   # Gemini fiel gerade aus: erst die Ersatz-KI
+        try:
+            import ersatz_ki
+            if ersatz_ki.bereit():
+                return ersatz_ki.text(prompt, system)
+        except Exception as e:
+            fehler.append(f"ersatz: {str(e)[:40]}")
     for modell in TEXT_MODELLE:
         try:
             antwort = _client().models.generate_content(model=modell, contents=prompt, config=config)
@@ -70,6 +84,8 @@ def gemini(prompt: str, system: str = "", google: bool = False) -> str:
                 return antwort.text.strip()
         except Exception as e:  # 429 RESOURCE_EXHAUSTED, 404, 503 ...
             fehler.append(f"{modell}: {str(e)[:40]}")
+    if len(fehler) >= len(TEXT_MODELLE):
+        gemini_ausgefallen()   # alle Modelle fielen aus
     if not google:   # Ersatz-KI (Groq o. a.), wenn Gemini nicht erreichbar ist - nur fuer reine Textfragen (ohne Google-Suche)
         try:
             import ersatz_ki

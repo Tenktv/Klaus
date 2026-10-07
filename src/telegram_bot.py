@@ -438,6 +438,15 @@ class TelegramKlaus:
         """Gemini ist manchmal kurz ueberlastet (503/429 bei allen Modellen): dann bis zu 3 Runden mit Pause statt aufzugeben."""
         self._melde("du", f"[Telegram] {text}")
         self._ende = time.time() + 200   # Gesamtlimit je Nachricht: haengt Gemini, bleibt der Chat nicht stehen
+        import ersatz_ki
+        import recherche
+        if ersatz_ki.bereit() and time.time() < recherche.GEMINI_AUS_BIS:   # Gemini fiel gerade aus: gleich die Ersatz-KI
+            try:
+                antwort = self._antworten_ersatz(text)
+                self._merke(text, antwort)
+                return antwort
+            except Exception as e:
+                print(f"[Telegram] Ersatz-KI: {str(e)[:120]}")
         for runde in range(3):
             try:
                 antwort = self._antworten_einmal(text)
@@ -445,7 +454,7 @@ class TelegramKlaus:
                 return antwort
             except RuntimeError as e:
                 if "Gemini antwortet nicht" in str(e) and runde == 0:
-                    import ersatz_ki
+                    recherche.gemini_ausgefallen()
                     if ersatz_ki.bereit():   # Google streikt: nicht warten, sondern gleich die Ersatz-KI fragen
                         try:
                             antwort = self._antworten_ersatz(text)
