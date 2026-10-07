@@ -431,11 +431,12 @@ class TelegramKlaus:
     def _antworten(self, text: str) -> str:
         """Gemini ist manchmal kurz ueberlastet (503/429 bei allen Modellen): dann bis zu 3 Runden mit Pause statt aufzugeben."""
         self._melde("du", f"[Telegram] {text}")
+        self._ende = time.time() + 200   # Gesamtlimit je Nachricht: haengt Gemini, bleibt der Chat nicht stehen
         for runde in range(3):
             try:
                 return self._antworten_einmal(text)
             except RuntimeError as e:
-                if "Gemini antwortet nicht" in str(e) and runde < 2:
+                if "Gemini antwortet nicht" in str(e) and runde < 2 and time.time() < self._ende - 40:
                     print(f"[Telegram] Gemini ueberlastet, neuer Versuch ({runde + 2}/3)")
                     time.sleep(12 * (runde + 1))
                     continue
@@ -458,8 +459,13 @@ class TelegramKlaus:
         letzter_fehler = None
         ergebnisse: dict[str, str] = {}   # Werkzeug+Argumente -> Ergebnis: bei Modellwechsel wird nichts doppelt ausgefuehrt
         for modell in CHAT_MODELLE or recherche.TEXT_MODELLE:
+            if time.time() > self._ende:
+                letzter_fehler = letzter_fehler or "Zeitlimit"
+                break
             try:
                 for _ in range(8):   # Werkzeug-Runden
+                    if time.time() > self._ende:
+                        raise RuntimeError("Zeitlimit")
                     antwort = recherche._client().models.generate_content(model=modell, contents=self.verlauf, config=config)
                     inhalt = antwort.candidates[0].content
                     self.verlauf.append(inhalt)
