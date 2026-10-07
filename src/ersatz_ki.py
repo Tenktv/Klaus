@@ -59,14 +59,16 @@ def modelle() -> list[str]:
 def reihenfolge(vorlieben: list[str]) -> list[str]:
     ids = modelle()
     gewaehlt = [m for v in vorlieben for m in ids if v in m.lower()]
-    return list(dict.fromkeys(gewaehlt)) or ids[:4]
+    return list(dict.fromkeys(gewaehlt + ids))   # Vorlieben zuerst, danach alle uebrigen (jedes Modell hat sein eigenes Minutenlimit)
 
 
 def tools_umwandeln(deklarationen: list[dict]) -> list[dict]:
-    """Gemini: {"name", "description", "parameters": {"type": "OBJECT", ...}} -> OpenAI: {"type": "function", "function": {...}}"""
+    """Gemini: {"name", "description", "parameters": {"type": "OBJECT", ...}} -> OpenAI: {"type": "function", "function": {...}}
+    Beschreibungen werden gekuerzt: Groq erlaubt im kostenlosen Tarif nur ~8000 Token pro Minute und Modell."""
     def klein(x):
         if isinstance(x, dict):
-            return {k: (v.lower() if k == "type" and isinstance(v, str) else klein(v)) for k, v in x.items()}
+            return {k: (v.lower() if k == "type" and isinstance(v, str) else
+                        (v[:90] if k == "description" and isinstance(v, str) else klein(v))) for k, v in x.items()}
         if isinstance(x, list):
             return [klein(i) for i in x]
         return x
@@ -75,7 +77,7 @@ def tools_umwandeln(deklarationen: list[dict]) -> list[dict]:
         p = klein(d.get("parameters") or {"type": "object", "properties": {}})
         p.setdefault("type", "object")
         p.setdefault("properties", {})
-        aus.append({"type": "function", "function": {"name": d["name"], "description": d.get("description", "")[:900], "parameters": p}})
+        aus.append({"type": "function", "function": {"name": d["name"], "description": d.get("description", "")[:200], "parameters": p}})
     return aus
 
 

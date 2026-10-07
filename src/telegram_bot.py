@@ -511,6 +511,38 @@ class TelegramKlaus:
         self.verlauf.pop() if self.verlauf else None
         raise RuntimeError(f"Gemini antwortet nicht ({str(letzter_fehler)[:80]})")
 
+    # Stichworte -> Werkzeuge. Die Ersatz-KI hat ein kleines Minutenbudget; mehr als das Passende zu schicken waere Verschwendung.
+    WERKZEUG_GRUPPEN = [
+        (r"kalender|termin|morgen|heute|uhr|woche|frei|verabred|seminar", ["kalender_lesen", "termin_eintragen", "zeit_frei"]),
+        (r"aktie|b(ö|oe)rse|kurs|depot|bitcoin|dax|nvidia|tesla|apple|analys|chart|markt|trading", ["markt_analyse", "papier_order", "depot_status"]),
+        (r"sicher|virus|scan|angriff|firewall|hack|schutz", ["sicherheit_gesamt", "sicherheit_status", "sicherheit_scan", "sicherheit_bestaetigen"]),
+        (r"briefing|wetter|nachricht|news|schlagzeile", ["briefing", "lagebericht", "globus_zeigen"]),
+        (r"update|aktualisier|upgrade|neue version", ["update_einspielen"]),
+        (r"mikro|lautst|ton|bluetooth|stumm|leise|laut", ["mikrofon", "lautstaerke", "bluetooth", "stumm_schalten"]),
+        (r"herunterfahr|neustart|ausschalt|pc aus|remote", ["pc_ausschalten", "claude_remote_starten"]),
+        (r"öffne|oeffne|start|app|programm|spiel|steam|browser|website|youtube|installier", ["oeffne", "google_suche", "website_im_panel", "programm_suchen", "programm_aktion"]),
+        (r"datei|ordner|kopier|verschieb|l(ö|oe)sch|papierkorb|download", ["datei_suchen", "datei_kopieren", "datei_verschieben", "in_papierkorb"]),
+        (r"fenster|schlie(ß|ss)", ["fenster_liste", "fenster_steuern"]),
+        (r"brief|lead|konkurrenz|kunde|firma|hochlad|druck", ["leads_suchen", "briefe_erstellen", "entwuerfe_hochladen", "briefe_drucken", "konkurrenz_check"]),
+        (r"plan|widget|box|liste|notiz", ["plan_zeigen", "plan_oeffnen", "plan_anheften", "widget", "widget_erstellen", "widget_aendern"]),
+        (r"protokoll|meeting|mitschrift", ["protokoll_starten", "protokoll_beenden"]),
+        (r"claude|programmier|bauen|projekt", ["frage_claude", "projekt_bauen"]),
+        (r"zwischenablage|bildschirmfoto|screenshot", ["bildschirmfoto", "zwischenablage"]),
+        (r"graph|gedaechtnis|gedächtnis", ["graph_zeigen"]),
+        (r"design|farbe|theme", ["design"]),
+    ]
+    KERN = ["recherche", "merken", "vergessen"]
+
+    def _passende_werkzeuge(self, text: str) -> list[dict]:
+        t = text.lower()
+        namen = set(self.KERN)
+        for muster, liste in self.WERKZEUG_GRUPPEN:
+            if re.search(muster, t):
+                namen.update(liste)
+        if len(namen) == len(self.KERN):   # nichts erkannt: die haeufigsten
+            namen.update(["kalender_lesen", "markt_analyse", "briefing", "sicherheit_gesamt", "oeffne"])
+        return [d for d in self.deklarationen if d["name"] in namen][:16]
+
     def _merke(self, frage: str, antwort: str) -> None:
         self.verlauf_text += [{"role": "user", "content": frage}, {"role": "assistant", "content": antwort}]
         del self.verlauf_text[:-20]
@@ -523,9 +555,10 @@ class TelegramKlaus:
         system = (f"{gehirn.PERSONA}{ANWEISUNG}\n\nJetzt ist {jetzt}.{self.gedaechtnis_fn()}\n\n"
                   "Hinweis: Du laeufst gerade ueber ein Ersatz-Modell, weil Gemini ausgefallen ist. Antworte trotzdem wie gewohnt.")
         nachrichten = [{"role": "system", "content": system}] + self.verlauf_text[-12:] + [{"role": "user", "content": text}]
-        tools = ersatz_ki.tools_umwandeln(self.deklarationen)
+        waehle = self._passende_werkzeuge(" ".join(m["content"] for m in nachrichten if m["role"] == "user")[-600:])
+        tools = ersatz_ki.tools_umwandeln(waehle)
         ergebnisse: dict[str, str] = {}
-        print("[Telegram] Gemini ausgefallen -> Ersatz-KI")
+        print(f"[Telegram] Gemini ausgefallen -> Ersatz-KI ({len(waehle)} von {len(self.deklarationen)} Werkzeugen)")
         for _ in range(8):
             if time.time() > self._ende:
                 raise RuntimeError("Gemini antwortet nicht (Zeitlimit)")
