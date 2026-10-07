@@ -219,6 +219,13 @@ Konkurrenz-Check am 05.10.2026 live geprüft (Bäckerei in Göppingen: 36 Mitbew
   Liste zur Kontrolle → Freigabe (Knopf + PIN) → `kalender.anlegen_mehrere` (eine Freigabe für alle, Doppelte mit gleichem Titel
   und Beginn werden übersprungen). „Arbeit“/„Privat“ im Foto-Text wählt den Kalender. Erkennung am Seminarplan: erster Versuch
   nur 1 von 5 Tagen → Anweisung für Wochenpläne nachgeschärft, **Nachtest offen** (Gemini-Kontingent war aufgebraucht).
+- **Ersatz-KI** (`src/ersatz_ki.py`, 07.10.2026): Fällt Gemini aus (503/504/Zeitlimit/429), fragt Klaus Groq (`GROQ_API_KEY`, OpenAI-Format,
+  austauschbar über `ERSATZ_KI_URL`). Chat mit Werkzeugen (`_antworten_ersatz`), Foto→Termine (`bild_json`, am Seminarplan alle 5 Tage/28
+  Termine in 4 s), Textfragen (`recherche.gemini`). **Groq-Grenzen (kostenlos): 8.000 Token/Min je Modell** → nur passende Werkzeuge senden
+  (`_passende_werkzeuge`, Stichwortgruppen, 5–16 statt 53), Beschreibungen gekürzt, alle Modelle der Reihe nach (gpt-oss-120b zuerst; dieses
+  Konto sieht: gpt-oss-120b/20b, qwen3.8-27b, allam-2-7b). `recherche.GEMINI_AUS_BIS`: nach einem Ausfall 180 s lang gleich Ersatz-KI
+  (Nvidia-Analyse 4,6 s statt 69 s). Gemini-Zeitlimit 45 s je Anfrage, 200 s je Nachricht (zuvor blockierte eine hängende Anfrage den Chat).
+  Ersatz-Antworten haben dieselben Freigaben. Der Schlüssel liegt in den `.env` von Server und PC (nie im Repo).
 - **Server-Sicherheit** (07.10.2026): `fail2ban` (SSH: 4 Fehlversuche/10 min → 24 h Sperre, Journal-Backend, nftables; Test mit RFC-5737-Adresse),
   `clamav` (kein Dauerdienst, Datenbank per `klaus-freshclam.timer` täglich 04:30 UTC; `clamav-freshclam`-Daemon bleibt AUS: 650 MB RAM),
   2 GB Swapfile (`vm.swappiness=10`), **Klaus-Wächter** (`server/klaus-waechter.py` → `/usr/local/sbin`, root, nur Standardbibliothek):
