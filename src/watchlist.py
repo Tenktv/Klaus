@@ -70,7 +70,7 @@ def kurse_holen(symbole: list[str]) -> dict[str, dict]:
             preis = float(m["regularMarketPrice"])
             vortag = float(m.get("chartPreviousClose") or m.get("previousClose") or preis)
             return sym, {"preis": preis, "waehrung": m.get("currency", ""), "tag_proz": round((preis / vortag - 1) * 100, 2) if vortag else 0.0,
-                         "name": m.get("shortName") or sym}
+                         "name": " ".join((m.get("shortName") or sym).split())}   # Yahoo liefert Namen mit vielen Leerzeichen
         except Exception as e:
             print(f"[Watchlist] Kurs {sym}: {str(e)[:60]}", flush=True)
             return sym, None

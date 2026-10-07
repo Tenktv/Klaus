@@ -219,6 +219,15 @@ Konkurrenz-Check am 05.10.2026 live geprüft (Bäckerei in Göppingen: 36 Mitbew
   Liste zur Kontrolle → Freigabe (Knopf + PIN) → `kalender.anlegen_mehrere` (eine Freigabe für alle, Doppelte mit gleichem Titel
   und Beginn werden übersprungen). „Arbeit“/„Privat“ im Foto-Text wählt den Kalender. Erkennung am Seminarplan: erster Versuch
   nur 1 von 5 Tagen → Anweisung für Wochenpläne nachgeschärft, **Nachtest offen** (Gemini-Kontingent war aufgebraucht).
+- **Watchlist + Alarme** (`src/watchlist.py`, Server, 07.10.2026, ohne KI-Anfragen): `/watchlist` (Kurse), `/watchlist add|weg <Name>`,
+  `/alarm <Name> unter|über <Preis>`, `/alarm` (Liste), `/alarm weg <Nr>`; dazu Werkzeuge `watchlist_verwalten`/`alarm_verwalten` für normale
+  Sprache. Alle 10 Minuten (`TAKT_S`) ein Yahoo-Abruf je Wert; Alarm löst **einmal** aus (Telegram) und ist danach „erledigt“;
+  automatische Meldung bei Tagesbewegung ≥ 5 % (`SPRUNG_PROZ`, einmal je Wert und Tag); Watchlist-Zeile im Morgen-Briefing. Schwellen gelten in
+  der Währung des Wertes (USD bei US-Aktien). Wert von der Watchlist nehmen löscht dessen Alarme. Daten `data/watchlist.json` (im Backup).
+  Nur Information, keine Anlageberatung, keine Orders. Getestet: Parser (deutsche Zahlen), Einmal-Auslösung, echte Kurse (NVDA, SAP, BTC, DAX).
+- **Lebenszeichen im Chat** (`telegram_bot._Lebenszeichen`): „Klaus schreibt …“ dauerhaft, ab 8 s eine stille Statusmeldung je Werkzeug
+  (`STATUS_TEXTE`), die nach der Antwort gelöscht wird. **Tempo:** einfache Textaufgaben zuerst über Groq (`ERSATZ_ZUERST=0` schaltet ab),
+  Gemini höchstens 2 Modelle à 25 s, jedes Werkzeug max. 150 s (`_werkzeug_sicher`).
 - **Ersatz-KI** (`src/ersatz_ki.py`, 07.10.2026): Fällt Gemini aus (503/504/Zeitlimit/429), fragt Klaus Groq (`GROQ_API_KEY`, OpenAI-Format,
   austauschbar über `ERSATZ_KI_URL`). Chat mit Werkzeugen (`_antworten_ersatz`), Foto→Termine (`bild_json`, am Seminarplan alle 5 Tage/28
   Termine in 4 s), Textfragen (`recherche.gemini`). **Groq-Grenzen (kostenlos): 8.000 Token/Min je Modell** → nur passende Werkzeuge senden
