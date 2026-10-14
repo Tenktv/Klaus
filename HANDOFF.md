@@ -208,7 +208,7 @@ Konkurrenz-Check am 05.10.2026 live geprüft (Bäckerei in Göppingen: 36 Mitbew
   nachinstallieren.
 - Gesicherte Werkzeuge (PC): `claude_remote_starten` (Terminal mit `claude --remote-control` in „Neuer Ordner (5)“) und
   `pc_ausschalten` (herunterfahren/neustart mit 60 s Vorlauf, `abbrechen` ohne Freigabe) - beide nur mit Knopf + PIN.
-- **PC-Zugriff** (`src/pc_zugriff.py`, 15.10.2026, auf Nikolas ausdrücklichen Wunsch): Werkzeuge `shell` (PowerShell; nur reine
+- **PC-Zugriff** (`src/pc_zugriff.py`, 14.10.2026, auf Nikolas ausdrücklichen Wunsch): Werkzeuge `shell` (PowerShell; nur reine
   Lese-Befehle frei, alles andere Freigabe-Art `shell`), `browser` (Playwright + installiertes Edge, eigenes Profil `data/klaus_edge`,
   sichtbar, Downloads aus; Elemente nummeriert; Freigabe `browser` vor Absenden/Kaufen/Löschen/Anmelden/Enter, `passwort` vor
   Passwort-/Zahlungsfeldern), `bildschirm_sehen` (JPEG → Gemini, optional Foto an Telegram über `/foto`). Jede Aktion läuft durch
