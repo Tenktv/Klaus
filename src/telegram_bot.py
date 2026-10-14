@@ -150,7 +150,7 @@ STATUS_TEXTE = {
     "papier_order": "💼 Ich bearbeite die Papier-Order …", "oeffne": "🖥️ Ich öffne das am PC …",
     "lagebericht": "🌍 Ich hole den Lagebericht …", "globus_zeigen": "🌍 Ich zeige das auf dem Globus …",
     "shell": "🖥 Ich arbeite in der Shell am PC …", "browser": "🌐 Ich bediene den Browser am PC …",
-    "bildschirm_sehen": "👀 Ich schaue auf deinen Bildschirm …",
+    "bildschirm_sehen": "👀 Ich schaue auf deinen Bildschirm …", "spiel_coach": "🎮 Ich schaue mir dein Spiel an …",
 }
 
 
@@ -615,6 +615,7 @@ class TelegramKlaus:
         (r"shell|powershell|befehl|terminal|konsole|cmd|prozess|ipconfig|festplatte|speicherplatz", ["shell"]),
         (r"browser|website|webseite|seite|klick|formular|ausf(ü|ue)ll|eintipp|google|edge|online|bestell|login|anmeld", ["browser"]),
         (r"bildschirm|screenshot|monitor|siehst|schau|was ist (offen|auf)", ["bildschirm_sehen"]),
+        (r"coach|zock|gameplay|spiel|tipp|skyrim|tft|league|cs2|valorant|minecraft", ["spiel_coach", "oeffne"]),
         (r"brief|lead|konkurrenz|kunde|firma|hochlad|druck", ["leads_suchen", "briefe_erstellen", "entwuerfe_hochladen", "briefe_drucken", "konkurrenz_check"]),
         (r"plan|widget|box|liste|notiz", ["plan_zeigen", "plan_oeffnen", "plan_anheften", "widget", "widget_erstellen", "widget_aendern"]),
         (r"protokoll|meeting|mitschrift", ["protokoll_starten", "protokoll_beenden"]),

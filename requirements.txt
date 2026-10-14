@@ -19,3 +19,4 @@ caldav>=3.0
 pyrage
 soundcard
 playwright
+Pillow

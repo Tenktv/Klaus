@@ -137,6 +137,14 @@ WERKZEUGE = [
          "aktion": {"type": "STRING", "description": "oeffnen, lesen, klicken, tippen, taste, zurueck oder schliessen"},
          "url": {"type": "STRING"}, "nr": {"type": "INTEGER", "description": "Nummer des Elements aus lesen"},
          "text": {"type": "STRING", "description": "Text zum Eintippen"}, "taste": {"type": "STRING"}}, "required": ["aktion"]}},
+    {"name": "spiel_coach", "description": "Spiele-Coach: Klaus schaut beim Zocken zu (nur Bildschirmfotos, drueckt nichts) und gibt "
+     "kurze Tipps. aktion=start ('Coach an', 'schau mir beim Spielen zu'), stop ('Coach aus'), tipp ('was soll ich jetzt machen', "
+     "'gib mir einen Tipp' - sofort ein Tipp zum aktuellen Bild; Ergebnis kurz vorlesen).",
+     "parameters": {"type": "OBJECT", "properties": {"aktion": {"type": "STRING", "description": "start, stop oder tipp"},
+                                                     "spiel": {"type": "STRING", "description": "z. B. TFT, Skyrim, CS2"},
+                                                     "frage": {"type": "STRING", "description": "konkrete Frage zum Bild, oder leer"},
+                                                     "takt_min": {"type": "NUMBER", "description": "Minuten zwischen Tipps (Standard 3)"}},
+                    "required": ["aktion"]}},
     {"name": "bildschirm_sehen", "description": "Schaut auf Nikolas Bildschirm (Bildschirmfoto, Gemini beschreibt es oder beantwortet "
      "eine Frage dazu). an_telegram=true schickt ihm das Foto aufs Handy. Fuer 'was ist auf meinem Bildschirm', 'schick mir einen Screenshot'.",
      "parameters": {"type": "OBJECT", "properties": {"frage": {"type": "STRING", "description": "was er wissen will, oder leer"},
@@ -461,6 +469,14 @@ class GeminiGespraech:
                 import pc_zugriff
                 return pc_zugriff.browser(args.get("aktion", ""), args.get("url", ""), args.get("nr"), args.get("text", ""),
                                           args.get("taste", ""))
+            if name == "spiel_coach":
+                import spiel_coach
+                aktion = (args.get("aktion") or "tipp").lower()
+                if aktion.startswith("start"):
+                    return spiel_coach.starten(args.get("spiel", ""), args.get("takt_min"))
+                if aktion.startswith("stop") or aktion == "aus":
+                    return spiel_coach.stoppen()
+                return spiel_coach.tipp_jetzt(args.get("spiel", ""), args.get("frage", ""))
             if name == "bildschirm_sehen":
                 import pc_zugriff
                 return pc_zugriff.bildschirm(args.get("frage", ""), bool(args.get("an_telegram")), args.get("monitor", "alle"))
