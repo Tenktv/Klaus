@@ -86,6 +86,9 @@ def _handler(assistent):
                 if self.path == "/gedaechtnis":
                     import gehirn
                     return self._antwort(200, {"text": gehirn.gedaechtnis_text()})
+                if self.path == "/pc_zugriff":   # /status, /timer, /stop von deinem Telegram (nicht ueber /tool: die KI kommt nie hierher)
+                    import pc_zugriff
+                    return self._antwort(200, {"text": pc_zugriff.telegram_befehl(str(d.get("befehl", ""))[:100])})
                 if self.path == "/entscheide":
                     ok = freigabe.entscheide(d.get("id"), bool(d.get("ok")), str(d.get("wie", "Server"))[:60])
                     return self._antwort(200, {"ok": ok})
@@ -131,7 +134,11 @@ class FernProxy:
         return time.time() - self.zuletzt < AKTIV_MIN * 60
 
     def senden(self, text: str, **extra) -> None:
-        server_senden("/senden", {"text": text})
+        server_senden("/senden", {"text": text, **({"reply_markup": extra["reply_markup"]} if extra.get("reply_markup") else {})})
+
+    def foto(self, bild: bytes, text: str = "") -> None:
+        import base64
+        server_senden("/foto", {"bild": base64.b64encode(bild).decode(), "text": text}, frist=60)
 
     def hinweis(self, text: str) -> None:
         pass   # Erinnerungen schickt der Server selbst, sonst kaemen sie doppelt

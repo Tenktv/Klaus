@@ -564,6 +564,44 @@ class ZweitFenster(QWidget):
 
 
 # ------------------------------------------------------------------ Orb-Overlay
+class PcNutzungHinweis(QWidget):
+    """Leiste oben auf dem Hauptbildschirm, solange Klaus Shell/Browser/Bildschirm benutzt (pc_zugriff.py).
+    Immer im Vordergrund, klick-durchlaessig, ohne WebView (kaum CPU)."""
+
+    def __init__(self) -> None:
+        from PySide6.QtWidgets import QLabel, QHBoxLayout
+
+        super().__init__()
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnTopHint | Qt.WindowTransparentForInput)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.label = QLabel(self)
+        self.label.setStyleSheet("QLabel { background: rgba(140, 18, 18, 248); color: white; border: 2px solid #ff6b6b;"
+                                 " border-radius: 14px; padding: 8px 20px; font: 600 15px 'Segoe UI'; }")
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(self.label)
+
+    @Slot(str)
+    def setze(self, roh: str) -> None:
+        d = json.loads(roh)
+        if not d.get("aktiv"):
+            self.hide()
+            return
+        teile = ["●  Klaus benutzt gerade den PC"]
+        if d.get("arten"):
+            teile.append(" · ".join(d["arten"]))
+        if d.get("rest") is not None:
+            teile.append(f"noch {d['rest'] // 60}:{d['rest'] % 60:02d}")
+        self.label.setText("   ·   ".join(teile) + "   ·   /stop beendet alles")
+        self.adjustSize()
+        bild = QApplication.primaryScreen().geometry()
+        self.move(bild.center().x() - self.width() // 2, bild.top() + 6)
+        if not self.isVisible():
+            self.show()
+        self.raise_()
+
+
 class OrbOverlay(QWebEngineView):
     """Der Orb in der Bildschirmmitte, wenn du in einer anderen App bist: durchsichtig, klick-durchlaessig.
     Gleicher Orb wie im Panel (web/klaus.js), damit beide gleich aussehen."""

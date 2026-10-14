@@ -5,6 +5,7 @@ __pycache__/
 *.pyc
 .venv/
 data/browser/
+data/klaus_edge/
 data/briefe/
 data/*.bak
 *.log

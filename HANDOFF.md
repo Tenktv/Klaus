@@ -208,9 +208,16 @@ Konkurrenz-Check am 05.10.2026 live geprüft (Bäckerei in Göppingen: 36 Mitbew
   nachinstallieren.
 - Gesicherte Werkzeuge (PC): `claude_remote_starten` (Terminal mit `claude --remote-control` in „Neuer Ordner (5)“) und
   `pc_ausschalten` (herunterfahren/neustart mit 60 s Vorlauf, `abbrechen` ohne Freigabe) - beide nur mit Knopf + PIN.
-- **Nicht gebaut:** Bildschirm sehen, Maus/Tastatur/Browser bedienen, freie Shell, Claude Code auf dem Server mit Zugriff auf
-  PCs. Zwei Anläufe am 06.10.2026 wurden vom Sicherheitsfilter gestoppt; Nikola hat Einspruch bei Anthropic eingereicht.
-  Erst nach dessen Antwort einen einzigen neuen Versuch, sonst nicht wieder anfangen.
+- **PC-Zugriff** (`src/pc_zugriff.py`, 15.10.2026, auf Nikolas ausdrücklichen Wunsch): Werkzeuge `shell` (PowerShell; nur reine
+  Lese-Befehle frei, alles andere Freigabe-Art `shell`), `browser` (Playwright + installiertes Edge, eigenes Profil `data/klaus_edge`,
+  sichtbar, Downloads aus; Elemente nummeriert; Freigabe `browser` vor Absenden/Kaufen/Löschen/Anmelden/Enter, `passwort` vor
+  Passwort-/Zahlungsfeldern), `bildschirm_sehen` (JPEG → Gemini, optional Foto an Telegram über `/foto`). Jede Aktion läuft durch
+  `benutze()`: Sperre prüfen, Overlay `PcNutzungHinweis` (fenster.py, Signal `pc_nutzung`), Telegram „benutzt gerade den PC“ /
+  nach 20 s „fertig, PC wieder frei“, Log im Vault `Aktionen/`. Telegram `/status`, `/timer N|aus`, `/stop` gehen über den eigenen
+  PC-Endpunkt `/pc_zugriff` (nicht `/tool` → die KI kann Timer/Stop nicht selbst ändern). Zeitablauf und `/stop`: Shell-Prozessbaum
+  per taskkill, Edge-Prozesse mit `klaus_edge` abgeschossen, offene Freigaben abgelehnt; Ablauf sperrt bis `/timer N`/`aus`
+  (Knöpfe `cmd:/timer 15`), `/stop` sperrt 30 s und bricht auf dem Server die laufende Antwort ab. Aus Gemini Live blockiert die
+  Freigabe nicht (`LIVE.an`). Maus/Tastatur frei steuern ist NICHT gebaut. Server braucht nach dem Push „Update dich“.
 - Gegen „bei Claude abgemeldet“: `claude setup-token` (langlebiger Token) als Umgebungsvariable `CLAUDE_CODE_OAUTH_TOKEN`.
 - **Morgen-Briefing** (`src/briefing.py`, Server): täglich 07:00 (deutsche Zeit) Wetter, Termine heute, 5 Schlagzeilen –
   ohne Gemini (spart Kontingent). `/briefing` jetzt, `/briefing 7:30`, `/briefing aus|an`; Einstellung `data/briefing.json`.

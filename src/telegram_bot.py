@@ -149,6 +149,8 @@ STATUS_TEXTE = {
     "update_einspielen": "⬇️ Ich schaue nach Updates …", "depot_status": "💼 Ich rechne dein Depot durch …",
     "papier_order": "💼 Ich bearbeite die Papier-Order …", "oeffne": "🖥️ Ich öffne das am PC …",
     "lagebericht": "🌍 Ich hole den Lagebericht …", "globus_zeigen": "🌍 Ich zeige das auf dem Globus …",
+    "shell": "🖥 Ich arbeite in der Shell am PC …", "browser": "🌐 Ich bediene den Browser am PC …",
+    "bildschirm_sehen": "👀 Ich schaue auf deinen Bildschirm …",
 }
 
 
@@ -251,6 +253,14 @@ class TelegramKlaus:
             print(f"[Telegram] senden: {str(e)[:100]}")
             return None
 
+    def foto(self, bild: bytes, text: str = "") -> None:
+        if not self.nutzer or not bild:
+            return
+        try:
+            self._api("sendPhoto", frist=60, chat_id=self.nutzer, caption=text[:1000], files={"photo": ("bild.jpg", bild, "image/jpeg")})
+        except Exception as e:
+            print(f"[Telegram] Foto senden: {str(e)[:100]}")
+
     def aktiv(self) -> bool:
         return bool(self.nutzer) and time.time() - self.zuletzt < AKTIV_MIN * 60
 
@@ -287,6 +297,11 @@ class TelegramKlaus:
         except Exception:
             pass
         art, _, fid = (q.get("data") or "").partition(":")
+        if art == "cmd":   # Knopf, der einen deiner Befehle ausloest (z. B. "Zeitlimit +15 min" -> /timer 15)
+            befehl = fid.split()[0].lower() if fid.strip() else ""
+            if befehl in self.befehle:
+                self.senden(self.befehle[befehl](fid))
+            return
         if art == "nein":
             self.entscheider(fid, False, "Telegram")
         elif art == "ja":
@@ -595,6 +610,9 @@ class TelegramKlaus:
         (r"öffne|oeffne|start|app|programm|spiel|steam|browser|website|youtube|installier", ["oeffne", "google_suche", "website_im_panel", "programm_suchen", "programm_aktion"]),
         (r"datei|ordner|kopier|verschieb|l(ö|oe)sch|papierkorb|download", ["datei_suchen", "datei_kopieren", "datei_verschieben", "in_papierkorb"]),
         (r"fenster|schlie(ß|ss)", ["fenster_liste", "fenster_steuern"]),
+        (r"shell|powershell|befehl|terminal|konsole|cmd|prozess|ipconfig|festplatte|speicherplatz", ["shell"]),
+        (r"browser|website|webseite|seite|klick|formular|ausf(ü|ue)ll|eintipp|google|edge|online|bestell|login|anmeld", ["browser"]),
+        (r"bildschirm|screenshot|monitor|siehst|schau|was ist (offen|auf)", ["bildschirm_sehen"]),
         (r"brief|lead|konkurrenz|kunde|firma|hochlad|druck", ["leads_suchen", "briefe_erstellen", "entwuerfe_hochladen", "briefe_drucken", "konkurrenz_check"]),
         (r"plan|widget|box|liste|notiz", ["plan_zeigen", "plan_oeffnen", "plan_anheften", "widget", "widget_erstellen", "widget_aendern"]),
         (r"protokoll|meeting|mitschrift", ["protokoll_starten", "protokoll_beenden"]),

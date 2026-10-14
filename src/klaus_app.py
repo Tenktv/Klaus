@@ -74,7 +74,7 @@ import daten
 import gehirn
 from assistent import Assistent, Bruecke
 from daten import lade_einstellungen, speichere_einstellung
-from fenster import (ChatFenster, DesktopPanel, OrbOverlay, WebBruecke, ZweitFenster, setze_thema, taskleiste_verstecken,
+from fenster import (ChatFenster, DesktopPanel, OrbOverlay, PcNutzungHinweis, WebBruecke, ZweitFenster, setze_thema, taskleiste_verstecken,
                      taskleiste_versteckt)
 
 AUTOSTART_LNK = Path(os.environ["APPDATA"]) / r"Microsoft\Windows\Start Menu\Programs\Startup\Klaus.lnk"
@@ -334,6 +334,8 @@ def main() -> None:
     bruecke.thema.connect(zweit_bruecke.thema)
     bruecke.panel.connect(panel_bruecke.panelBefehl)
     bruecke.holo.connect(panel_bruecke.holo)
+    pc_hinweis = PcNutzungHinweis()   # "Klaus benutzt gerade den PC" (pc_zugriff.py)
+    bruecke.pc_nutzung.connect(pc_hinweis.setze)
     steuerung.panel_bruecke = panel_bruecke
     bruecke.nachricht.connect(gehirn.protokolliere)  # Tagesnotiz im Obsidian-Vault
     bruecke.gedaechtnis.connect(lambda: panel_bruecke.lade("gedaechtnis", ""))  # nur Thread-Start, kein Fenster
@@ -442,6 +444,9 @@ def main() -> None:
         fernlink.starte(assistent)
     if assistent.fern is None and telegram_bot.bereit():   # Chat von unterwegs (nur dein Konto, Freigaben mit PIN)
         assistent.fern = telegram_bot.TelegramKlaus(assistent)
+        import pc_zugriff
+        for befehl in ("/status", "/timer", "/stop"):   # Bot laeuft lokal: PC-Zugriff direkt steuern
+            assistent.fern.befehle[befehl] = pc_zugriff.telegram_befehl
         threading.Thread(target=assistent.fern.run, daemon=True).start()
     app.exec()
     os._exit(0)  # Audio-Thread nicht abwarten

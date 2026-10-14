@@ -17,3 +17,5 @@ ddgs
 pycaw>=20240210
 caldav>=3.0
 pyrage
+soundcard
+playwright

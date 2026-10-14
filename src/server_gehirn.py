@@ -189,7 +189,25 @@ def bauen(innen: bool = True):
                              "parameters": {"type": "OBJECT", "properties": {"einstellung": {"type": "STRING",
                                             "description": "leer = jetzt; '7:30' = Uhrzeit; 'aus' oder 'an'"}}}})
 
+    # PC-Zugriff (Shell/Browser/Bildschirm): /status, /timer, /stop gehen direkt an den PC - nie ueber die KI
+    abbruch = {"bis": 0.0}
+
+    def pc_zugriff_befehl(eingabe: str) -> str:
+        if eingabe.strip().lower().startswith("/stop"):
+            abbruch["bis"] = time.time() + 30   # laufende Antwort darf keine Werkzeuge mehr aufrufen
+        try:
+            return pc_post("/pc_zugriff", {"befehl": eingabe.strip()[:100]}, frist=30)["text"]
+        except Exception:
+            if eingabe.strip().lower().startswith("/stop"):
+                return "🛑 Gestoppt (hier auf dem Server). Der PC ist gerade nicht erreichbar – dort läuft also auch nichts."
+            return ("🖥 PC-Zugriff\n• Shell: getrennt\n• Browser: getrennt\n• Bildschirm: getrennt\n"
+                    "Der PC ist gerade nicht erreichbar (aus oder nicht verbunden).")
+    for b in ("/status", "/timer", "/stop"):
+        tg.befehle[b] = pc_zugriff_befehl
+
     def werkzeug(name, args):
+        if time.time() < abbruch["bis"]:
+            return "Abgebrochen: Nikola hat /stop geschickt. Mach nichts weiter, sag nur kurz, dass du gestoppt hast."
         if name == "update_einspielen":
             return update_werkzeug()
         if name == "briefing":
@@ -264,7 +282,10 @@ def bauen(innen: bool = True):
                 return
             d = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))) or b"{}")
             if self.path == "/senden":
-                tg.senden(str(d.get("text", ""))[:4000])
+                tg.senden(str(d.get("text", ""))[:4000], **({"reply_markup": d["reply_markup"]} if d.get("reply_markup") else {}))
+            elif self.path == "/foto":   # Bildschirmfoto vom PC (pc_zugriff.bildschirm)
+                import base64
+                tg.foto(base64.b64decode(d.get("bild", "")), str(d.get("text", ""))[:1000])
             elif self.path == "/freigabe":
                 if d["ereignis"] == "auf":
                     remote_ids.add(d["id"])

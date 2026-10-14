@@ -9,6 +9,8 @@ POPUP_ARTEN.protokoll = function (box) {
   box.classList.add("p-protokoll");
   box.innerHTML = `<div class="pr-kopf"><span class="pr-rec"><i></i>REC</span><b class="pr-zeit">00:00</b>
       <span class="pr-status">MITSCHRIFT LÄUFT</span></div>
+    <div class="pr-tipp" hidden><div class="lbl">Frage an dich</div><p class="pr-frage"></p>
+      <div class="lbl">Vorschlag</div><p class="pr-vorschlag"></p></div>
     <div class="pr-text"></div><div class="pr-ergebnis"></div>
     <div class="pr-fuss">TON BLEIBT IM SPEICHER · NUR TEXT WIRD GESPEICHERT</div>`;
   const q = (s) => box.querySelector(s), text = q(".pr-text");
@@ -22,6 +24,12 @@ POPUP_ARTEN.protokoll = function (box) {
     update(d) {
       if (d.start) { start = d.start; uhr(); }
       if (d.status) q(".pr-status").textContent = d.status;
+      if (d.tipp) {   // stiller Spickzettel: Antwortvorschlag, ohne dass Klaus spricht
+        q(".pr-frage").textContent = d.frage || "";
+        q(".pr-vorschlag").textContent = d.tipp;
+        q(".pr-tipp").hidden = false;
+      }
+      if (d.fertig) q(".pr-tipp").hidden = true;
       if (d.zeile) {
         const z = el("div", "pr-zeile");
         z.append(el("small", "", mmss(d.t || 0)), el("span", "", d.zeile));

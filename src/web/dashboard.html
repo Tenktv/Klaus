@@ -464,6 +464,10 @@
   .pr-zeile small { font-family: var(--mono); font-size: 10.5px; color: var(--leise); padding-top: 2px; }
   .pr-zeile span { color: var(--text); }
   .p-protokoll.fertig .pr-text { flex: 0 0 22%; opacity: .55; }
+  .pr-tipp { flex: 0 0 auto; padding: 8px 10px; border: 1px solid var(--akzent, #fff); border-radius: 6px; animation: log-rein .35s var(--ease) both; }
+  .pr-tipp[hidden] { display: none; }
+  .pr-tipp p { margin: 2px 0 6px; font-size: 13.5px; line-height: 1.4; color: var(--text); }
+  .pr-tipp .pr-vorschlag { font-size: 15px; color: #fff; font-weight: 500; }
   .pr-ergebnis { display: none; flex-direction: column; gap: 5px; min-height: 0; overflow-y: auto; }
   .p-protokoll.fertig .pr-ergebnis { display: flex; flex: 1; }
   .pr-ergebnis p { margin: 0 0 4px; font-size: 13.5px; line-height: 1.45; color: var(--text); }
