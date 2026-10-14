@@ -72,25 +72,37 @@ def saetze(kennung: str, text: str):
     yield from _piper_saetze(pfad, text)
 
 
-def sprich(kennung: str, text: str, on_pegel=None) -> None:
+def sprich(kennung: str, text: str, on_pegel=None, abbruch=None) -> None:
     """Spielt den Text ab. on_pegel bekommt waehrenddessen die Lautstaerke 0..1."""
     import time
 
     import sounddevice as sd
 
+    if abbruch is None:
+        import betrieb
+        abbruch = betrieb.ruhe
+
     for audio, rate in saetze(kennung, text):
+        import betrieb
+        if betrieb.ruhe() or (abbruch and abbruch()):
+            raise InterruptedError('Sprachausgabe gestoppt.')
         sd.play(audio, rate)
-        if on_pegel:
+        if on_pegel or abbruch:
             schritt = int(rate * 0.03)
             start = time.perf_counter()
             while True:
+                if betrieb.ruhe() or (abbruch and abbruch()):
+                    sd.stop()
+                    raise InterruptedError('Sprachausgabe gestoppt.')
                 i = int((time.perf_counter() - start) * rate)
                 if i >= len(audio):
                     break
                 stueck = audio[i : i + schritt]
-                on_pegel(min(1.0, float(np.sqrt((stueck ** 2).mean())) * 6))
+                if on_pegel:
+                    on_pegel(min(1.0, float(np.sqrt((stueck ** 2).mean())) * 6))
                 time.sleep(0.03)
-            on_pegel(0.0)
+            if on_pegel:
+                on_pegel(0.0)
         sd.wait()
 
 

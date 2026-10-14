@@ -1,0 +1,14 @@
+{
+  "aktiv": false,
+  "tageslimit_usd": 1,
+  "monatslimit_usd": 10,
+  "modelle": [
+    {
+      "anbieter": "openrouter1",
+      "modell": "EXAKTE-MODELL-ID-EINTRAGEN",
+      "eingabe_usd_million": null,
+      "ausgabe_usd_million": null,
+      "max_ausgabe_tokens": 1024
+    }
+  ]
+}

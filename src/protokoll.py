@@ -59,7 +59,8 @@ def _leise_stelle(audio: np.ndarray) -> int:
 class Protokoll:
     def __init__(self, titel: str, modell, geraet=None, zeile: Callable[[float, str], None] | None = None,
                  pc_ton: bool = True, klaus_spricht: Callable[[], bool] | None = None,
-                 tipp: Callable[[str, str], None] | None = None) -> None:
+                 tipp: Callable[[str, str], None] | None = None,
+                 warnung: Callable[[str], None] | None = None) -> None:
         self.titel = (titel or "").strip()[:60] or "Besprechung"
         self.modell = modell
         self.geraet = geraet
@@ -67,7 +68,7 @@ class Protokoll:
         self.start = dt.datetime.now()
         self.saetze: list[tuple[float, str]] = []
         self.datei: Path = gehirn.VAULT / "Meetings" / f"{self.start:%Y-%m-%d %H%M} {_dateiname(self.titel)}.md"
-        self._q: queue.Queue = queue.Queue()
+        self._q: queue.Queue = queue.Queue(maxsize=1200)
         self._halt = threading.Event()
         self._strom = None
         self._faden: threading.Thread | None = None
@@ -78,6 +79,50 @@ class Protokoll:
         self.tipp = tipp                     # stiller Spickzettel: (frage, antwortvorschlag) -> Panel
         self._tipp_zuletzt = 0.0
         self._tipp_laeuft = False
+        self.warnung = warnung or (lambda text: None)
+        self._letztes_audio = self._letzter_text = self._worker_tick = time.monotonic()
+        self._fehler = ''
+        self._pc_fehler = ''
+
+    def _audio(self, daten, n, zeit, status):
+        self._letztes_audio = time.monotonic()
+        if status:
+            self._fehler = 'Audiogeraet meldet Datenverlust; Mitschrift pruefen.'
+        try:
+            self._q.put_nowait(daten[:, 0].copy())
+        except queue.Full:
+            self._fehler = 'Audio-Puffer voll; Teile der Aufnahme fehlen.'
+
+    def gesundheit(self) -> dict:
+        jetzt = time.monotonic()
+        grund = ''
+        if self.laeuft:
+            if self._fehler:
+                grund = self._fehler
+            elif self._pc_fehler:
+                grund = self._pc_fehler
+            elif self._faden and not self._faden.is_alive():
+                grund = 'Mitschrift-Thread ist beendet.'
+            elif jetzt - self._letztes_audio > 30:
+                grund = 'Seit 30 Sekunden keine Audiodaten vom Mikrofon.'
+            elif jetzt - self._worker_tick > 120:
+                grund = 'Spracherkennung reagiert seit zwei Minuten nicht.'
+            elif jetzt - self._letzter_text > 600:
+                grund = 'Seit zehn Minuten kein neuer Text. Bitte Ton pruefen; es kann auch eine Pause sein.'
+        return {'warnung': bool(grund), 'grund': grund,
+                'sekunden_ohne_text': max(0, int(jetzt - self._letzter_text))}
+
+    def _waechter(self):
+        zuletzt = ''
+        while not self._halt.wait(10):
+            grund = self.gesundheit()['grund']
+            if grund != zuletzt:
+                if grund or zuletzt:
+                    try:
+                        self.warnung(grund or 'Mitschrift liefert wieder Daten.')
+                    except Exception as e:
+                        print(f'[Protokoll] Warnung nicht zugestellt: {type(e).__name__}')
+                zuletzt = grund
 
     # ---------------------------------------------------------------- Aufnahme
     def starten(self, token: str | None) -> None:
@@ -85,12 +130,13 @@ class Protokoll:
         import sounddevice as sd
 
         self._strom = sd.InputStream(samplerate=RATE, channels=1, dtype="float32", device=self.geraet, blocksize=RATE // 10,
-                                     callback=lambda daten, n, zeit, status: self._q.put(daten[:, 0].copy()))
+                                     callback=self._audio)
         self._strom.start()
         if self.pc_ton:
             threading.Thread(target=self._pc_mithoeren, daemon=True).start()
         self._faden = threading.Thread(target=self._mitschreiben, daemon=True)
         self._faden.start()
+        threading.Thread(target=self._waechter, daemon=True).start()
         self._sichern()
 
     def _pc_mithoeren(self) -> None:
@@ -111,6 +157,7 @@ class Protokoll:
                         while sum(len(x) for x in self._pc) > 2 * RATE:   # nie mehr als 2 s Rueckstand
                             self._pc.pop(0)
         except Exception as e:
+            self._pc_fehler = 'PC-Ton ausgefallen; nur das Mikrofon wird mitgeschrieben.'
             print(f"[Protokoll] PC-Ton nicht verfuegbar, nur Mikrofon: {e}")
 
     def _mische(self, mikro: np.ndarray) -> np.ndarray:
@@ -135,6 +182,7 @@ class Protokoll:
         puffer: list[np.ndarray] = []
         laenge, versatz = 0, 0.0
         while True:
+            self._worker_tick = time.monotonic()
             try:
                 b = self._mische(self._q.get(timeout=0.5))
                 puffer.append(b)
@@ -161,14 +209,17 @@ class Protokoll:
             segmente, _ = self.modell.transcribe(audio, language="de", vad_filter=True, beam_size=2,
                                                  condition_on_previous_text=False,
                                                  initial_prompt=f"Besprechung: {self.titel}.")   # Namen richtig schreiben
+            self._fehler = ''
             frage = False
             for s in segmente:
                 text = s.text.strip()
                 if text and not re.fullmatch(r"(untertitel|vielen dank)[\w .,!-]*", text, re.I):   # typische Whisper-Phantome
                     self.saetze.append((versatz + s.start, text))
+                    self._letzter_text = time.monotonic()
                     self.zeile(versatz + s.start, text)
                     frage = frage or "?" in text
         except Exception as e:
+            self._fehler = 'Spracherkennung meldet einen Fehler; Mitschrift pruefen.'
             print(f"[Protokoll] Mitschrift-Fehler: {e}")
             frage = False
         self._sichern()
@@ -253,4 +304,6 @@ class Protokoll:
                                                 + (f" (bis {a['bis']})" if a["bis"] else "") for a in ergebnis["aufgaben"]], ""]
         teile += ["## Mitschrift", "", self.mitschrift() or "–", ""]
         self.datei.parent.mkdir(parents=True, exist_ok=True)
-        self.datei.write_text("\n".join(teile), encoding="utf-8")
+        tmp = self.datei.with_suffix('.md.tmp')
+        tmp.write_text("\n".join(teile), encoding="utf-8")
+        tmp.replace(self.datei)

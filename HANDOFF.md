@@ -308,6 +308,7 @@ Konkurrenz-Check am 05.10.2026 live geprüft (Bäckerei in Göppingen: 36 Mitbew
 ## Design-Erweiterung 14.10.2026
 
 Aktueller Stand zum Kontrollzentrum und zur freigegebenen Maus-/Tastatursteuerung: siehe `DESIGN_HANDOFF.md`.
+Ruhemodus, gemeinsame Starter-Sperre, Protokoll-Waechter und Premium-Textmodell-Kostenrahmen: `STABILITAET_UND_KI.md`.
 
 ## 6. Offene Fragen an Nikola
 - Fish Audio: Schlüssel (Plus-Abo wegen kommerzieller Nutzung) eintragen, dann Stimme gemeinsam entwerfen.

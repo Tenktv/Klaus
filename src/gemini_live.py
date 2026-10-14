@@ -128,6 +128,9 @@ WERKZEUGE = [
      "parameters": {"type": "OBJECT", "properties": {"aktion": {"type": "STRING", "description": "herunterfahren, neustart oder abbrechen"}},
                     "required": ["aktion"]}},
     {"name": "bildschirmfoto", "description": "Speichert ein Bildschirmfoto in Bilder/Klaus.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "ruhemodus", "description": "Nur auf Nikolas ausdruecklichen Wunsch: Ruhemodus an = alle gesprochenen Antworten aus, "
+     "Text bleibt. Aus = direkte Antworten duerfen sprechen. Ruhe niemals eigenstaendig ausschalten.",
+     "parameters": {"type": "OBJECT", "properties": {"an": {"type": "BOOLEAN"}}, "required": ["an"]}},
     {"name": "pc_eingabe", "description": "Bedient Nikolas eigenen PC. JEDE einzelne Aktion braucht seine ausdrueckliche Freigabe, auch Bewegung und Scrollen. "
      "Nur Hauptmonitor: bewegen/klicken mit x,y in PHYSISCHEN Bildschirm-Pixeln, Ursprung (0,0) oben links. "
      "Bei verkleinerten Screenshots Koordinaten auf die echte Hauptmonitor-Aufloesung umrechnen, niemals Bildpixel ungeprueft verwenden. "
@@ -482,6 +485,11 @@ class GeminiGespraech:
                 return self.a.protokoll_starten(args.get("titel", ""))
             if name == "protokoll_beenden":
                 return self.a.protokoll_beenden()
+            if name == 'ruhemodus':
+                if type(args.get('an')) is not bool:
+                    return 'Bitte Ruhemodus an oder aus angeben.'
+                self.a.setze_ruhe(args['an'])
+                return 'Ruhemodus ' + ('an; Antworten nur als Text.' if args['an'] else 'aus; direkte Antworten duerfen sprechen.')
             if name == "pc_eingabe":
                 import pc_steuerung
                 return pc_steuerung.ausfuehren(args.get("aktion", ""), x=args.get("x"), y=args.get("y"),
@@ -578,21 +586,30 @@ class GeminiGespraech:
                 stueck = self.wiedergabe.get()
                 if stueck is None:
                     return
+                if not self.a.darf_sprechen('antwort'):
+                    continue
+                import betrieb
+                betrieb.melden('gemini-live', True)
                 self.spricht_bis = time.time() + len(stueck) / 2 / LAUTSPRECHER_RATE + 0.25
                 werte = np.frombuffer(stueck, dtype=np.int16).astype(np.float32) / 32768
                 self.a.b.pegel.emit(min(1.0, float(np.sqrt((werte ** 2).mean())) * 6))
-                aus.write(stueck)
+                schritt = LAUTSPRECHER_RATE // 10 * 2
+                for offset in range(0, len(stueck), schritt):
+                    if not self.a.darf_sprechen('antwort'):
+                        self.spricht_bis = 0
+                        break
+                    aus.write(stueck[offset:offset + schritt])
 
     def _fish_sprecher(self) -> None:
         """Eigener Thread: Saetze nacheinander von Fish sprechen lassen, Audio in dieselbe Wiedergabe wie Gemini."""
         while True:
             runde, satz = self.fish_saetze.get()
-            if runde != self.fish_runde or not self.fish_an:
+            if runde != self.fish_runde or not self.fish_an or not self.a.darf_sprechen('antwort'):
                 continue
             self.fish_arbeitet = True
             try:
                 for stueck in fish.pcm_strom(satz):
-                    if runde != self.fish_runde:
+                    if runde != self.fish_runde or not self.a.darf_sprechen('antwort'):
                         break  # unterbrochen
                     self._setze_zustand("sprechen")
                     self.wiedergabe.put(stueck)
@@ -701,7 +718,7 @@ class GeminiGespraech:
                                 self.letzte_aktivitaet = time.time()
                             if inhalt.output_transcription and inhalt.output_transcription.text:
                                 klaus.append(inhalt.output_transcription.text)
-                                if self.fish_an:
+                                if self.fish_an and self.a.darf_sprechen('antwort'):
                                     self._fish_text(inhalt.output_transcription.text)
                             if inhalt.model_turn:
                                 for teil in inhalt.model_turn.parts or []:
@@ -709,8 +726,9 @@ class GeminiGespraech:
                                         self.letzte_aktivitaet = time.time()
                                         if self.fish_an:
                                             continue  # Fish spricht - Geminis eigenes Audio nicht abspielen
-                                        self._setze_zustand("sprechen")
-                                        self.wiedergabe.put(teil.inline_data.data)
+                                        if self.a.darf_sprechen('antwort'):
+                                            self._setze_zustand("sprechen")
+                                            self.wiedergabe.put(teil.inline_data.data)
                             if inhalt.turn_complete:
                                 if self.fish_an:
                                     self._fish_text("", alles=True)  # letzten (ggf. unvollstaendigen) Satz auch sprechen

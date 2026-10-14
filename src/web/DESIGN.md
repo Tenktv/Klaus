@@ -27,3 +27,11 @@ Screenshots: `C:/Users/Nikola/.codex/visualizations/2026/10/14/01a13c17-8caa-70a
 `klaus-dashboard-populated-testdata.png` is prominently labeled **ISOLIERTE VORSCHAU · TESTDATEN**. Sample weather, markets, calendar, projects and news exist only in the temporary test harness, never in application files. Other captures cover empty/unavailable data, control center, chat, overlay, second screen and long approval content.
 
 Native Qt stacking, live CPU consumption and real second-monitor interaction require later integration verification by the parent. They were not claimed as live-tested here.
+
+## Stability follow-up
+
+Quiet mode uses `ruheUmschalten()` and the actual `ruhe` boolean. Missing status/method disables the toggle. The control center shows the last speech source/time and whether speech occurred, recording health warnings and duration without text, and premium-AI status plus daily/monthly budget occupancy, limits and separate reservations. No premium activation control or keys are exposed. Budget occupancy may include reservations; the UI explicitly says reservations are not yet billed and does not claim occupancy is a confirmed invoice amount. Missing optional fields are labeled unavailable/not reported, never fabricated as zero.
+
+Confirmed backend semantics: quiet mode blocks all spoken answers (UI: “Aktiv · Antworten nur als Text”); when off, direct answers may speak, while automatic/calendar output remains text by default. Speech is explicitly labeled as the last output attempt, not active speech; Unix seconds are formatted as local time. Daily/monthly budget occupancy includes reservations (“davon reserviert”), not settled invoice amounts. Budget errors (`fehlers`/`fehler`) show unavailable/blocked status and hide potentially stale amounts. Offline assertions cover these meanings.
+
+Only `command-center.js`, `command-center.css` and this document changed for the follow-up. The temporary offline harness verifies absent fields/method, quiet toggle dispatch, speech suppression details, recording warning and separate reservation labels, in addition to the existing input/status smoke tests. `klaus-quiet-budget-testdata.png` is an isolated stub preview, not live data.

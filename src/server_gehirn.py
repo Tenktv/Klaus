@@ -91,7 +91,7 @@ class ServerAssistent(A.Assistent):
         super().__init__(A.Bruecke(), dry_run=False)
         self.ohr = LazyOhr()
 
-    def sage(self, text: str, zustand: str = "sprechen") -> None:
+    def sage(self, text: str, zustand: str = "sprechen", quelle: str = "antwort") -> None:
         if self.telegram:
             self.telegram.senden(text)
 
@@ -204,6 +204,16 @@ def bauen(innen: bool = True):
                     "Der PC ist gerade nicht erreichbar (aus oder nicht verbunden).")
     for b in ("/status", "/timer", "/stop"):
         tg.befehle[b] = pc_zugriff_befehl
+    def ruhe_befehl(text):
+        try:
+            return pc_post('/betrieb', {'befehl': text}, frist=8)['text']
+        except Exception:
+            return 'PC nicht erreichbar. Ruhemodus konnte dort nicht geaendert werden.'
+    tg.befehle['/ruhe'] = ruhe_befehl
+    def ki_befehl(text):
+        import ki_kosten
+        return ki_kosten.status_text()
+    tg.befehle['/ki'] = ki_befehl
 
     def werkzeug(name, args):
         if time.time() < abbruch["bis"]:

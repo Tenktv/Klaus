@@ -99,33 +99,22 @@ JA = re.compile(r"\b(ja|jawohl|genau|mach|los|ok|okay|passt)\b", re.I)
 
 
 # ---------------------------------------------------------------- Stimme raus
-def sprich(text: str, stumm: bool, on_pegel=None) -> None:
+def sprich(text: str, stumm: bool, on_pegel=None, abbruch=None) -> None:
     print(f"\nKlaus: {text}\n")
-    if stumm:
+    import betrieb
+    if stumm or betrieb.ruhe() or (abbruch and abbruch()):
         return
     text = re.sub(r"[*#_`>]", "", text)
-    # Gewaehlte Stimme, sonst lokale Piper-Ersatzstimme (z.B. wenn offline), sonst Windows
+    # Gewaehlte Stimme, sonst lokale Piper-Ersatzstimme. Keine ununterbrechbare Windows-TTS.
     for kennung in dict.fromkeys([KLAUS_STIMME, ERSATZ_STIMME]):
         try:
-            stimme.sprich(kennung, text, on_pegel=on_pegel)
+            stimme.sprich(kennung, text, on_pegel=on_pegel, abbruch=abbruch)
+            return
+        except InterruptedError:
             return
         except Exception as e:
             print(f"  (Stimme {stimme.name(kennung)} fehlgeschlagen: {str(e)[:80]})")
-    try:
-        import pyttsx3
-
-        # Pro Satz neue Engine: verhindert das bekannte Haengen von pyttsx3 unter Windows.
-        engine = pyttsx3.init()
-        for v in engine.getProperty("voices"):
-            if "german" in v.name.lower() or "deutsch" in v.name.lower():
-                engine.setProperty("voice", v.id)
-                break
-        engine.setProperty("rate", 185)
-        engine.say(text)
-        engine.runAndWait()
-        engine.stop()
-    except Exception as e:
-        print(f"  (Sprachausgabe fehlgeschlagen: {e})")
+    print('  (Keine unterbrechbare Stimme verfuegbar; Antwort bleibt als Text.)')
 
 
 # ----------------------------------------------------------------- Stimme rein
@@ -416,6 +405,10 @@ def ist_ja(antwort: str) -> bool:
 
 # ------------------------------------------------------------------ Hauptloop
 def main() -> None:
+    import instanz
+    if not instanz.sperren():
+        print('Klaus laeuft bereits (Desktop oder Voice).')
+        return
     ap = argparse.ArgumentParser()
     ap.add_argument("--text", action="store_true", help="tippen statt sprechen")
     ap.add_argument("--ptt", action="store_true", help="mit Enter-Taste aufnehmen statt freihaendig")

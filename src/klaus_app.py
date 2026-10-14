@@ -295,6 +295,10 @@ class Anwesenheit(QObject):
 
 
 def main() -> None:
+    import instanz
+    if not instanz.sperren():
+        print('Klaus laeuft bereits (Desktop oder Voice).')
+        return
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
@@ -447,6 +451,9 @@ def main() -> None:
         fernlink.starte(assistent)
     if assistent.fern is None and telegram_bot.bereit():   # Chat von unterwegs (nur dein Konto, Freigaben mit PIN)
         assistent.fern = telegram_bot.TelegramKlaus(assistent)
+        assistent.fern.befehle['/ruhe'] = assistent.betrieb_befehl
+        import ki_kosten
+        assistent.fern.befehle['/ki'] = lambda text: ki_kosten.status_text()
         import pc_zugriff
         for befehl in ("/status", "/timer", "/stop"):   # Bot laeuft lokal: PC-Zugriff direkt steuern
             assistent.fern.befehle[befehl] = pc_zugriff.telegram_befehl

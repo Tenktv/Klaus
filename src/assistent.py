@@ -194,7 +194,7 @@ class Assistent:
         pc_zugriff.mit_freigabe = self._mit_freigabe
         pc_zugriff.melder = lambda text: self.fern.senden(text) if self.fern else None
         import spiel_coach   # Tipps beim Zocken: lokal vorlesen (Headset), bzw. Telegram, wenn du dort schreibst
-        spiel_coach.sagen = lambda text: self.sage(text, zustand="sprechen")
+        spiel_coach.sagen = lambda text: self.sage(text, zustand="sprechen", quelle="coach")
         import datei_senden   # Dateien aufs Handy (Telegram)
         datei_senden.datei_melder = lambda inhalt, name, text: (self.fern.datei(inhalt, name, text)
                                                                 if self.fern and hasattr(self.fern, "datei") else None)
@@ -370,7 +370,8 @@ class Assistent:
         p = protokoll.Protokoll(titel, self.ohr.model, self.ohr.geraet,
                                 zeile=lambda t, text: self.holo("update", "protokoll", daten={"zeile": text, "t": t}),
                                 klaus_spricht=lambda: bool(self.gemini) and time.time() < self.gemini.spricht_bis,
-                                tipp=lambda frage, antwort: self.holo("update", "protokoll", daten={"frage": frage, "tipp": antwort}))
+                                tipp=lambda frage, antwort: self.holo("update", "protokoll", daten={"frage": frage, "tipp": antwort}),
+                                warnung=self._protokoll_warnung)
         p.starten(token)
         self.protokoll = p
         self.holo("oeffne", "protokoll", art="protokoll", titel=f"PROTOKOLL · {titel.upper()[:30]}",
@@ -381,7 +382,7 @@ class Assistent:
             while p.laeuft:
                 time.sleep(5)
             if self.protokoll is p:
-                self.sage(self.protokoll_beenden(), zustand="aktion")
+                self.sage(self.protokoll_beenden(), zustand="aktion", quelle="automatisch")
         threading.Thread(target=waechter, daemon=True).start()
         return ("Hinweis an alle: Ab jetzt schreibe ich dieses Gespräch für ein Protokoll mit. Der Ton bleibt auf diesem Rechner "
                 "und wird nicht gespeichert, nur der Text. Wer nicht einverstanden ist, sagt es bitte jetzt. "
@@ -408,9 +409,26 @@ class Assistent:
             self.log(f"protokoll/fertig {e['minuten']} min · {len(e['aufgaben'])} aufgaben")
             n = len(e["aufgaben"])
             self.sage(f"Das Protokoll ist fertig: {e['minuten']} Minuten, {n} Aufgabe{'' if n == 1 else 'n'}. "
-                      f"Es liegt im Gedächtnis unter Meetings. {e['zusammenfassung'][:400]}", zustand="aktion")
+                      f"Es liegt im Gedächtnis unter Meetings. {e['zusammenfassung'][:400]}", zustand="aktion", quelle="automatisch")
         threading.Thread(target=los, daemon=True).start()
         return "Aufnahme beendet. Ich fasse kurz zusammen."
+
+    def _protokoll_warnung(self, text: str) -> None:
+        self.log('protokoll/gesundheit ' + text)
+        self.holo('update', 'protokoll', daten={'status': text})
+        self.b.meldung.emit('Protokoll: ' + text)
+        if self.fern:
+            self.fern.senden('📝 Protokoll: ' + text)
+
+    def betrieb_befehl(self, text: str) -> str:
+        import betrieb
+        arg = text.strip().split(maxsplit=1)
+        wert = arg[1].strip().lower() if len(arg) == 2 else ''
+        if wert in ('an', 'aus'):
+            self.setze_ruhe(wert == 'an')
+        elif wert:
+            return 'Bitte /ruhe an, /ruhe aus oder /ruhe.'
+        return 'Ruhemodus ' + ('an (nur Text).' if betrieb.ruhe() else 'aus (Antworten duerfen sprechen).')
 
     # ---------------------------------------------------------------- Markt-Analyse + Papier-Depot (markt.py, Phase I)
     def markt_analyse(self, name: str) -> str:
@@ -512,7 +530,7 @@ class Assistent:
                     if self.fern and not self.per_telegram():
                         self.fern.hinweis(f"⏰ {text}")
                     if not self.ist_stumm:
-                        self.sage(text, zustand="aktion")
+                        self.sage(text, zustand="aktion", quelle="kalender")
                         self.verschwinde(nach=1.0)
             except Exception as e:
                 print(f"[Kalender] Erinnerung: {str(e)[:80]}")
@@ -878,16 +896,45 @@ class Assistent:
         """Du hast zuletzt per Telegram geschrieben (nicht per Stimme) -> Klaus' Meldungen gehen dorthin."""
         return bool(self.fern and self.fern.aktiv() and self.fern.zuletzt > self.zuletzt_aktiv)
 
-    def sage(self, text: str, zustand: str = "sprechen") -> None:
+    def darf_sprechen(self, quelle: str = "antwort") -> bool:
+        import betrieb
+        return betrieb.erlaubt(self.ist_stumm, quelle)
+
+    def setze_ruhe(self, an: bool) -> None:
+        import betrieb
+        betrieb.setze_ruhe(an)
+        if an:
+            if self.gemini:
+                self.gemini._unterbrochen()
+            try:
+                import sounddevice as sd
+                sd.stop()
+            except Exception:
+                pass
+        self.b.nachricht.emit("info", "Ruhemodus an: Antworten nur als Text." if an else "Ruhemodus aus: Antworten dürfen sprechen.")
+
+    def sage(self, text: str, zustand: str = "sprechen", quelle: str = "antwort") -> None:
+        import betrieb
         if self.per_telegram():
             self.fern.senden(text)
             self.b.nachricht.emit("klaus", f"[Telegram] {text}")
             return
         self.b.nachricht.emit("klaus", text)
-        self.zeige(zustand, text)
+        erlaubt = self.darf_sprechen(quelle)
+        betrieb.melden(quelle, False)
+        self.log(f"sprache/{quelle} {'laut' if erlaubt else 'nur text'}")
+        if not erlaubt:
+            return
         with self.sprech_sperre:
-            voice.sprich(text, False, on_pegel=self.b.pegel.emit)
-        self.b.pegel.emit(0.0)
+            if not self.darf_sprechen(quelle):
+                return
+            self.zeige(zustand, text)
+            betrieb.melden(quelle, True)
+            try:
+                voice.sprich(text, False, on_pegel=self.b.pegel.emit, abbruch=lambda: not self.darf_sprechen(quelle))
+            finally:
+                self.b.pegel.emit(0.0)
+                self.b.zustand.emit("aus")
 
     def hoere(self, timeout: float) -> str:
         """Wartet auf Sprache (ohne Weckwort) oder eine getippte Eingabe."""
@@ -1140,6 +1187,10 @@ class Assistent:
 
     def bearbeite(self, befehl: str) -> None:
         self.zuletzt_aktiv = time.time()
+        ruhe = re.search(r'\bruhemodus\s+(an|aus)\b', befehl, re.I)
+        if ruhe:
+            self.setze_ruhe(ruhe.group(1).lower() == 'an')
+            return
         if STUMM.search(befehl):
             self.sage("Okay, ich bin still. Sag Klaus, wieder an, wenn du mich brauchst.")
             self.setze_stumm(True)

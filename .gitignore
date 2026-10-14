@@ -21,3 +21,6 @@ data/layout*.json
 data/einstellungen.json
 data/depot.json
 data/mikro_aus
+data/betrieb.json
+data/ki_modelle.json
+data/ki_kosten.sqlite*

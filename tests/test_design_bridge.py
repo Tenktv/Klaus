@@ -29,7 +29,7 @@ class DesignBridgeTests(unittest.TestCase):
             self.assertFalse(status["protokoll"]["aktiv"])
             self.a.protokoll = SimpleNamespace(laeuft=True, titel="Seminar", dauer=lambda: 65.7, saetze=[(1, "Text")])
             status = json.loads(self.b.ladeBetrieb())
-            self.assertEqual(status["protokoll"], {"aktiv": True, "titel": "Seminar", "sekunden": 65, "zeilen": 1})
+            self.assertEqual(status["protokoll"], {"aktiv": True, "titel": "Seminar", "sekunden": 65, "zeilen": 1, "gesundheit": {}})
 
     def test_timer_validation_and_off(self):
         with patch("pc_zugriff.timer", return_value="OK") as timer, patch("fenster.threading.Thread", side_effect=lambda target, **kw: SimpleNamespace(start=target)):

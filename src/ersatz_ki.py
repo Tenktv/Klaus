@@ -5,7 +5,7 @@ Mehrere Anbieter im "OpenAI-Format" (Chat Completions mit Werkzeug-Aufrufen), de
 sein Tageslimit erreicht, kommt der naechste:
 
     GROQ_API_KEY            Groq (schnell, kostenlos, ~8000 Token/Min je Modell)
-    OPENROUTER_API_KEY      OpenRouter, nur kostenlose Modelle (":free"), es sei denn OPENROUTER_BEZAHLT=1
+    OPENROUTER_API_KEY      OpenRouter, Gratis-Modelle; Premium nur explizit ueber data/ki_modelle.json mit Kostenrahmen
     OPENROUTER_API_KEY_2    zweiter OpenRouter-Schluessel (eigenes Tageslimit)
     ERSATZ_KI_URL/_KEY      beliebiger weiterer Anbieter im OpenAI-Format (kommt zuerst)
     ERSATZ_KI_MODELLE       feste Modelle fuer ERSATZ_KI_URL, kommagetrennt
@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import requests
+import ki_kosten
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -67,8 +68,6 @@ class Anbieter:
                 mid = m.get("id") or ""
                 if not mid or KEIN_CHAT.search(mid):
                     continue
-                if self.nur_kostenlos and not mid.endswith(":free"):
-                    continue
                 param = m.get("supported_parameters")
                 modal = (m.get("architecture") or {}).get("input_modalities")
                 liste.append({"id": mid, "tools": param is None or "tools" in param,
@@ -77,11 +76,14 @@ class Anbieter:
         return self._modelle
 
     def reihenfolge(self, tools: bool, bild: bool) -> list[str]:
-        ids = [m["id"] for m in self.modelle() if (m["tools"] or not tools) and (m["bild"] or not bild)]
+        erlaubt = ki_kosten.modelle(self.name)
+        ids = [m["id"] for m in self.modelle() if (m["tools"] or not tools) and (m["bild"] or not bild)
+               and (not self.name.startswith('openrouter') or m['id'].endswith(':free') or m['id'] in erlaubt)]
         vorlieben = self.vorliebe_bild if bild else self.vorliebe_chat
         gewaehlt = [m for v in vorlieben for m in ids if v in m.lower()]
         rest = [] if bild else ids   # Bilder nur mit bekannten Bild-Modellen
-        return list(dict.fromkeys(gewaehlt + rest))
+        premium = [m for m in ki_kosten.modelle(self.name) if m in ids] if not bild else []
+        return list(dict.fromkeys(premium + gewaehlt + rest))
 
 
 def _anbieter() -> list[Anbieter]:
@@ -96,6 +98,10 @@ def _anbieter() -> list[Anbieter]:
         aus.append(Anbieter("groq", "https://api.groq.com/openai/v1", groq,
                             ["gpt-oss-120b", "llama-3.3-70b", "llama-4-maverick", "qwen3-32b", "llama-4-scout", "gpt-oss-20b"],
                             ["llama-4-maverick", "llama-4-scout", "vision"]))
+    openai = os.getenv('OPENAI_API_KEY', '').strip()
+    if openai:
+        aus.append(Anbieter('openai', 'https://api.openai.com/v1', openai, [], [],
+                            feste_modelle=ki_kosten.modelle('openai')))
     bezahlt = os.getenv("OPENROUTER_BEZAHLT", "").strip() == "1"
     for nr, var in enumerate(("OPENROUTER_API_KEY", "OPENROUTER_API_KEY_2"), 1):
         key = os.getenv(var, "").strip()
@@ -155,7 +161,11 @@ def chat(nachrichten: list[dict], tools: list[dict] | None = None, bild: bool = 
         raise ErsatzFehler("Kein Schluessel fuer die Ersatz-KI (GROQ_API_KEY / OPENROUTER_API_KEY)")
     ende = time.time() + frist
     fehler = []
-    for a in ANBIETER:
+    # Explizit freigegebene Premium-Anbieter zuerst; ohne Opt-in bleibt die alte Gratis-Reihenfolge.
+    anbieter = sorted(ANBIETER, key=lambda a: 0 if ki_kosten.modelle(a.name) else 1)
+    for a in anbieter:
+        if a.name in ('eigen', 'openai') and not ki_kosten.modelle(a.name):
+            continue
         if time.time() < a.pause_bis:
             fehler.append(f"{a.name}: Limit-Pause")
             continue
@@ -170,6 +180,20 @@ def chat(nachrichten: list[dict], tools: list[dict] | None = None, bild: bool = 
             body = {"model": modell, "messages": nachrichten, "temperature": 0.4}
             if tools:
                 body.update(tools=tools, tool_choice="auto")
+            ticket = None
+            bezahlt = (a.name in ('eigen', 'openai') or
+                       (a.name.startswith('openrouter') and not modell.endswith(':free')) or
+                       modell in ki_kosten.modelle(a.name))
+            if bezahlt:
+                try:
+                    ticket = ki_kosten.reservieren(a.name, modell, nachrichten, tools, bild)
+                    body['max_tokens'] = ticket['max_tokens']
+                    if a.name == 'openai':
+                        body['max_completion_tokens'] = body.pop('max_tokens')
+                        body.pop('temperature', None)
+                except ki_kosten.BudgetFehler as e:
+                    fehler.append(f'{a.name}/{modell}: {e}')
+                    continue
             try:
                 r = requests.post(f"{a.url}/chat/completions", json=body, headers=a.kopf(), timeout=min(timeout, max(5, ende - time.time())))
             except requests.RequestException as e:
@@ -178,11 +202,13 @@ def chat(nachrichten: list[dict], tools: list[dict] | None = None, bild: bool = 
             if r.status_code == 200:
                 try:
                     j = r.json()
+                    if ticket:
+                        ki_kosten.abrechnen(ticket, j.get('usage'))
                     nachricht = j["choices"][0]["message"]
                     if nachricht.get("content") or nachricht.get("tool_calls"):
                         return {"message": nachricht, "modell": f"{a.name}/{modell}"}
                     fehler.append(f"{a.name}/{modell}: leer")
-                except (KeyError, IndexError, ValueError):
+                except (KeyError, IndexError, ValueError, ki_kosten.BudgetFehler):
                     fehler.append(f"{a.name}/{modell}: leere Antwort")
                 continue
             fehler.append(f"{a.name}/{modell}: {r.status_code} {r.text[:60]}")

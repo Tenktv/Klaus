@@ -49,6 +49,8 @@ body[data-core="IDLE"] *{animation:none!important}
 @container(min-height:120px){.fc{display:grid;margin-top:10px}.fc>div{padding-top:6px}.fc svg{width:18px;height:18px;margin:4px 0 0}.fc .t{font-size:13px}}
 .popup-auth .auth-was{user-select:text}.popup-auth .auth-zeile::-webkit-scrollbar{width:4px}.popup-auth .auth-zeile::-webkit-scrollbar-thumb{background:#d5ba8566;border-radius:2px}
 /* Kleine Fenster zeigen den Kern und echte Kontrollen, ohne gespeicherte Widget-Lage zu aendern. */
+.cc-warning{padding:10px 12px;border-left:2px solid var(--amber);background:#e2b8770b;color:var(--amber)!important;font-size:14px!important;overflow-wrap:anywhere}
+.cc-budget{padding:16px 0;border-bottom:1px solid var(--haar)}.cc-budget strong{font-size:17px;font-weight:500}.cc-budget small{display:block;margin-top:6px;color:var(--leise);font-size:13px;line-height:1.5}.cc-budget p{font-size:14px;line-height:1.6;margin-top:8px;overflow-wrap:anywhere}#cc-quiet-toggle[aria-pressed="true"]{border-color:#d5ba8555;color:var(--cyan);background:#d5ba8510}
 @media(max-width:799px){
   #raster>.fenster:not(.popup):not(:has(.klaus)){display:none}
   #raster>.fenster:not(.popup):has(.klaus){left:0!important;top:0!important;width:100%!important;height:100%!important}

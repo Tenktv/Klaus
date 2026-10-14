@@ -86,6 +86,8 @@ def _handler(assistent):
                 if self.path == "/gedaechtnis":
                     import gehirn
                     return self._antwort(200, {"text": gehirn.gedaechtnis_text()})
+                if self.path == '/betrieb':
+                    return self._antwort(200, {'text': assistent.betrieb_befehl(str(d.get('befehl', ''))[:80])})
                 if self.path == "/pc_zugriff":   # /status, /timer, /stop von deinem Telegram (nicht ueber /tool: die KI kommt nie hierher)
                     import pc_zugriff
                     return self._antwort(200, {"text": pc_zugriff.telegram_befehl(str(d.get("befehl", ""))[:100])})

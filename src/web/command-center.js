@@ -18,10 +18,13 @@
     <header><h2 id="cc-control-title">Kontrollzentrum</h2><button class="cc-close" aria-label="Schließen">×</button></header>
     <p id="cc-freshness">Betriebsstatus wird geladen …</p>
     <div class="cc-row"><div><strong>Stimme & Mikrofon</strong><small id="cc-audio-detail">Status ausstehend</small></div><div class="quick-actions"><button class="hud-knopf" data-bridge="stummUmschalten">Stumm</button><button class="hud-knopf" data-bridge="mikroUmschalten">Mikro aus</button></div></div>
+    <div class="cc-row"><div><strong>Ruhemodus</strong><small id="cc-quiet-detail">Status ausstehend</small><small id="cc-speech-detail"></small></div><button class="hud-knopf" data-bridge="ruheUmschalten" id="cc-quiet-toggle" aria-pressed="false" disabled>Umschalten</button></div>
     <div class="cc-row"><div><strong>Meeting-Protokoll</strong><small id="cc-record-detail">Status ausstehend</small></div><button class="hud-knopf" data-bridge="protokollBeenden" id="cc-end-record" disabled>Beenden</button></div>
+    <p id="cc-record-warning" class="cc-warning" hidden></p>
     <div class="cc-row"><div><strong>Spiel-Coach</strong><small id="cc-coach-detail">Status ausstehend</small></div><button class="hud-knopf" data-bridge="coachBeenden" id="cc-end-coach" disabled>Beenden</button></div>
     <div class="cc-row"><div><strong>PC-Zugriff</strong><small id="cc-pc-detail">Status ausstehend</small></div><button class="hud-knopf cc-danger" data-bridge="pcStopp">PC stoppen</button></div>
     <div class="cc-row"><div><strong>Freigabe</strong><small id="cc-auth-detail">Status ausstehend</small></div><span class="lbl">Einmal pro Aktion</span></div>
+    <section class="cc-budget" aria-label="KI-Budget"><strong>KI-Budget</strong><small id="cc-ai-mode">Status ausstehend</small><p id="cc-ai-day"></p><p id="cc-ai-month"></p><small>Reservierungen belegen Budget; sie sind noch nicht abgerechnet.</small></section>
     <form id="cc-timer-form"><label for="cc-timer" style="margin-top:20px">PC-Zeitlimit in Minuten (1–240)</label><div class="cc-timer"><input id="cc-timer" type="number" min="1" max="240" step="1" value="15" required><button class="hud-knopf" type="submit">Limit setzen</button><button class="hud-knopf" id="cc-timer-off" type="button">Limit aus</button></div></form>
     <p class="cc-footer">PC stoppen beendet laufende PC-Aktionen und den Coach direkt. Status wird alle 5 Sekunden abgefragt, solange dieses Panel sichtbar ist.</p>
   </section>`;
@@ -92,13 +95,19 @@
       { title: "Kompakt umschalten", info: "Mehr Inhalt im gleichen Raum", run: () => toggle("compact") },
       { title: "Widget hinzufügen", info: "Arbeitsbereich erweitern", run: () => katalogZeigen() },
       { title: "Stumm umschalten", info: "Sprachausgabe steuern", method: "stummUmschalten", args: [] },
+      { title: "Ruhemodus umschalten", info: "Antworten nur als Text oder direkte Sprachantworten erlauben", method: "ruheUmschalten", args: [] },
       { title: "Mikrofon umschalten", info: "Mikrofon vollständig an oder aus", method: "mikroUmschalten", args: [] },
       { title: "PC stoppen", info: "Laufende PC-Aktionen und Coach direkt stoppen", method: "pcStopp", args: [] },
       ...(fresh && state.protokoll?.aktiv ? [{ title: "Protokoll beenden", info: state.protokoll.titel || "Laufende Mitschrift beenden", method: "protokollBeenden", args: [] }] : []),
       ...(fresh && state.coach?.aktiv ? [{ title: "Coach beenden", info: "Laufenden Coach stoppen", method: "coachBeenden", args: [] }] : []),
     ];
   }
+  function actionAvailable(action) {
+    return (!action.method || available(action.method)) && (action.method !== "ruheUmschalten"
+      || (state && typeof state.ruhe === "boolean" && Date.now() - lastGood < 12000));
+  }
   function runAction(action) {
+    if (!actionAvailable(action)) { notify("Diese Aktion ist mit dem aktuellen Status nicht verfügbar."); return; }
     close();
     if (action.run) action.run();
     else if (call(action.method, action.args)) notify(action.method === "eingabe" ? "Auftrag an Klaus übergeben." : "Aktion an Klaus übergeben.");
@@ -113,7 +122,7 @@
       const b = el("button", "cc-result" + (i === selected ? " selected" : ""));
       const label = el("span"); label.append(el("b", "", a.title), el("small", "", a.info));
       b.append(label, el("span", "", a.method === "eingabe" ? "SENDEN" : "↵"));
-      b.disabled = !!a.method && !available(a.method); b.onclick = () => runAction(a);
+      b.disabled = !actionAvailable(a); b.onclick = () => runAction(a);
       b.onfocus = () => { selected = i; list.querySelectorAll(".cc-result").forEach((row, n) => row.classList.toggle("selected", n === i)); };
       list.append(b);
     });
@@ -151,15 +160,41 @@
     $("cc-timer-form").querySelector('[type="submit"]').disabled = !available("pcTimer");
     $("cc-end-record").disabled = !fresh || !state?.protokoll?.aktiv || !available("protokollBeenden");
     $("cc-end-coach").disabled = !fresh || !state?.coach?.aktiv || !available("coachBeenden");
+    const quietKnown = fresh && typeof state.ruhe === "boolean";
+    $("cc-quiet-toggle").disabled = !quietKnown || !available("ruheUmschalten");
+    $("cc-quiet-toggle").setAttribute("aria-pressed", String(quietKnown && state.ruhe));
+    $("cc-quiet-toggle").textContent = quietKnown ? state.ruhe ? "Ruhe aus" : "Ruhe an" : "Umschalten";
+    $("cc-record-warning").hidden = true;
+    $("cc-record-warning").textContent = "";
+    $("cc-ai-day").textContent = $("cc-ai-month").textContent = $("cc-speech-detail").textContent = "";
     if (!fresh) {
       ["cc-audio", "cc-recording", "cc-pc"].forEach((id) => strip(id, "Status ausstehend"));
-      ["cc-audio-detail", "cc-record-detail", "cc-coach-detail", "cc-pc-detail", "cc-auth-detail"].forEach((id) => { $(id).textContent = "Kein aktueller Status"; });
+      ["cc-audio-detail", "cc-record-detail", "cc-coach-detail", "cc-pc-detail", "cc-auth-detail", "cc-quiet-detail", "cc-ai-mode"].forEach((id) => { $(id).textContent = "Kein aktueller Status"; });
       return;
     }
     const p = state.protokoll || {}, pc = state.pc || {};
     const audio = state.mikroAus ? "Mikrofon aus" : state.stumm ? "Klaus stumm" : "Mikrofon an";
     strip("cc-audio", audio, state.mikroAus || state.stumm ? "attention" : "");
     $("cc-audio-detail").textContent = audio;
+    $("cc-quiet-detail").textContent = quietKnown ? state.ruhe ? "Aktiv · Antworten nur als Text" : "Aus · direkte Antworten dürfen sprechen" : "Ruhemodus-Status nicht verfügbar";
+    if (quietKnown && state.ruhe) strip("cc-audio", `${audio} · Ruhe`, "attention");
+    const speech = state.sprachausgabe;
+    if (speech && typeof speech.gesprochen === "boolean") {
+      const timestamp = typeof speech.zeit === "number" && Number.isFinite(speech.zeit) ? new Date(speech.zeit * 1000) : null;
+      const time = timestamp && Number.isFinite(timestamp.getTime()) ? timestamp.toLocaleTimeString("de-DE") : "";
+      $("cc-speech-detail").textContent = [speech.gesprochen ? "Letzte Ausgabe: gesprochen" : "Letzte Ausgabe: Versuch unterdrückt", speech.quelle ? `Anlass: ${speech.quelle}` : "", time ? `Zeit: ${time}` : ""].filter(Boolean).join(" · ");
+    }
+    const money = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0 ? `${v.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 4 })} USD` : "nicht gemeldet";
+    const ai = state.ki;
+    const errors = ai?.fehlers || ai?.fehler;
+    const blocked = Array.isArray(errors) ? errors.length > 0 : !!errors;
+    $("cc-ai-mode").textContent = blocked ? "KI-Budget nicht verfügbar · blockiert" : ai && typeof ai.premium_aktiv === "boolean" ? ai.premium_aktiv ? "Premium-KI aktiv" : "Premium-KI deaktiviert" : "KI-Budget nicht verfügbar";
+    if (ai && !blocked) {
+      // Budgetwerte koennen Reservierungen enthalten: ohne getrennte Buchung keine Rechnung behaupten.
+      const summary = (label, used, limit, reserved) => `${label}: Budgetbelegung ${money(used)} / Limit ${money(limit)} · davon reserviert ${money(reserved)}`;
+      $("cc-ai-day").textContent = summary("Heute", ai.tag_usd, ai.tageslimit_usd, ai.tag_reserviert);
+      $("cc-ai-month").textContent = summary("Monat", ai.monat_usd, ai.monatslimit_usd, ai.monat_reserviert);
+    }
     // Schaltertexte folgen dem echten Zustand statt dem letzten Klick.
     control.querySelector('[data-bridge="stummUmschalten"]').textContent = state.stumm ? "Ton an" : "Stumm";
     control.querySelector('[data-bridge="mikroUmschalten"]').textContent = state.mikroAus ? "Mikro an" : "Mikro aus";
@@ -167,6 +202,12 @@
     const duration = `${Math.floor((p.sekunden || 0) / 60)} min`;
     strip("cc-recording", p.aktiv ? `Aufnahme · ${duration}` : "Keine Aufnahme", p.aktiv ? "attention" : "");
     $("cc-record-detail").textContent = p.aktiv ? `${p.titel || "Meeting"} · ${duration} · ${p.zeilen || 0} Zeilen` : "Keine Aufnahme aktiv";
+    if (p.aktiv && p.gesundheit?.warnung) {
+      const seconds = p.gesundheit.sekunden_ohne_text;
+      $("cc-record-warning").hidden = false;
+      $("cc-record-warning").textContent = ["Mitschrift prüfen", p.gesundheit.grund || "Aufnahme meldet eine Warnung", typeof seconds === "number" && Number.isFinite(seconds) ? `${Math.max(0, Math.floor(seconds))} s ohne Text` : ""].filter(Boolean).join(" · ");
+      strip("cc-recording", "Aufnahme · Warnung", "attention");
+    }
     $("cc-coach-detail").textContent = state.coach?.aktiv ? "Coach aktiv" : "Coach beendet";
     strip("cc-pc", pc.gesperrt ? "Gesperrt" : pc.aktiv ? "Wird benutzt" : "Frei", pc.aktiv ? "attention" : pc.gesperrt ? "danger" : "");
     $("cc-pc-detail").textContent = [pc.gesperrt ? "Gesperrt" : pc.aktiv ? "Aktiv" : "PC ist frei", (pc.arten || []).join(", "), pc.aktiv ? pc.was : "", pc.restzeit ? `Zeitlimit: ${pc.restzeit}` : ""].filter(Boolean).join(" · ");

@@ -323,16 +323,26 @@ class WebBruecke(QObject):
         import freigabe
         import pc_zugriff
         import spiel_coach
+        import betrieb
+        import ki_kosten
+        try:
+            ki_status = ki_kosten.status()
+        except Exception:
+            ki_status = {'premium_aktiv': False, 'fehler': 'KI-Kostenstatus nicht verfuegbar.'}
 
         a = self.assistent
         p = getattr(a, "protokoll", None)
         return json.dumps({
             "mikroAus": bool(getattr(a, "pausiert", True)),
             "stumm": bool(getattr(a, "ist_stumm", False)),
+            "ruhe": betrieb.ruhe(),
+            "sprachausgabe": betrieb.status(),
+            "ki": ki_status,
             "protokoll": {"aktiv": bool(p and p.laeuft),
                           "titel": p.titel if p else "",
                           "sekunden": int(p.dauer()) if p else 0,
-                          "zeilen": len(p.saetze) if p else 0},
+                          "zeilen": len(p.saetze) if p else 0,
+                          "gesundheit": p.gesundheit() if p and hasattr(p, 'gesundheit') else {}},
             "coach": {"aktiv": spiel_coach.laeuft()},
             "pc": pc_zugriff.status(),
             "freigabe": freigabe.offen(),
@@ -343,6 +353,11 @@ class WebBruecke(QObject):
         """Manuelle Eingabe nutzt dieselbe Queue und Freigaben wie Sprache."""
         if self.assistent and text.strip():
             self.assistent.eingabe(text.strip()[:4000])
+
+    @Slot()
+    def ruheUmschalten(self) -> None:
+        import betrieb
+        self.assistent.setze_ruhe(not betrieb.ruhe())
 
     @Slot()
     def pcStopp(self) -> None:

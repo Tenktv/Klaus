@@ -627,6 +627,7 @@ class TelegramKlaus:
         (r"fenster|schlie(ß|ss)", ["fenster_liste", "fenster_steuern"]),
         (r"shell|powershell|befehl|terminal|konsole|cmd|prozess|ipconfig|festplatte|speicherplatz", ["shell"]),
         (r"maus|tastatur|scroll|taste|tippe|klicke|desktop|pc bedienen", ["pc_eingabe", "bildschirm_sehen"]),
+        (r"ruhemodus|ruhe an|ruhe aus|nur text|nicht (vorlesen|sprechen)", ["ruhemodus"]),
         (r"browser|website|webseite|seite|klick|formular|ausf(ü|ue)ll|eintipp|google|edge|online|bestell|login|anmeld", ["browser"]),
         (r"bildschirm|screenshot|monitor|siehst|schau|was ist (offen|auf)", ["bildschirm_sehen"]),
         (r"coach|zock|gameplay|spiel|tipp|skyrim|tft|league|cs2|valorant|minecraft", ["spiel_coach", "oeffne"]),
