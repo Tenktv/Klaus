@@ -9,16 +9,16 @@ const CORE_AUS_PYTHON = {
 };
 // orb: Zustand fuer KlausOrb, modus: Kopfzeile, label: grosser Zustandstext; auge: Farbe fuer Halo/Buehne (CSS --eye)
 const CORE_ZUSTAENDE = {
-  IDLE:          { orb: "aus",      modus: "normal", label: "STANDBY" },
-  LISTENING:     { orb: "hoeren",   modus: "normal", label: "LISTENING" },
-  THINKING:      { orb: "denken",   modus: "klaus",  label: "THINKING" },
-  SPEAKING:      { orb: "sprechen", modus: "klaus",  label: "RESPONDING" },
-  EXECUTING:     { orb: "aktion",   modus: "klaus",  label: "EXECUTING" },
-  AWAITING_AUTH: { orb: "freigabe", modus: "klaus",  label: "AWAITING AUTH" },
-  DONE:          { orb: "fertig",   modus: "klaus",  label: "COMPLETE" },
-  ERROR:         { orb: "fehler",   modus: "normal", label: "FAULT" },
+  IDLE:          { orb: "aus",      modus: "normal", label: "Ich bin bereit." },
+  LISTENING:     { orb: "hoeren",   modus: "normal", label: "Ich höre dir zu." },
+  THINKING:      { orb: "denken",   modus: "klaus",  label: "Ich denke nach." },
+  SPEAKING:      { orb: "sprechen", modus: "klaus",  label: "Hier ist meine Antwort." },
+  EXECUTING:     { orb: "aktion",   modus: "klaus",  label: "Ich kümmere mich darum." },
+  AWAITING_AUTH: { orb: "freigabe", modus: "klaus",  label: "Du entscheidest." },
+  DONE:          { orb: "fertig",   modus: "klaus",  label: "Erledigt." },
+  ERROR:         { orb: "fehler",   modus: "normal", label: "Etwas ist schiefgegangen." },
 };
-const DENK_PHASEN = ["PARSING INTENT", "QUERYING", "SYNTHESIZING"];
+const DENK_PHASEN = ["Anfrage wird verarbeitet"];
 const PHASE_MS = 1100;
 const MIN_AUSFUEHREN_MS = 900;   // "EXECUTING" bleibt mindestens so lange sichtbar
 const FERTIG_MS = 1400;          // danach "COMPLETE" mit Ring-Burst
@@ -126,7 +126,7 @@ class KlausCore {
     document.body.dataset.eye = { EXECUTING: "ok", DONE: "ok", AWAITING_AUTH: "auth", ERROR: "fehler" }[name] || "basis";
     document.body.classList.toggle("core-auth", name === "AWAITING_AUTH");
     this.orb.setZustand(def.orb);
-    const modus = def.modus === "klaus" ? "KLAUS MODE ACTIVE" : "NORMAL MODE";
+    const modus = def.modus === "klaus" ? "Für dich im Einsatz" : "Dein persönlicher Assistent";
     if (this.modusEl.dataset.text !== modus) this.glitch(modus);
     this.phase = -1;
     this.phasenEl.classList.toggle("an", name === "THINKING");
@@ -140,17 +140,7 @@ class KlausCore {
   glitch(text) {
     const m = this.modusEl;
     m.dataset.text = text;
-    if (this.ruhig) { m.textContent = text; return; }
-    m.classList.remove("glitch"); void m.offsetWidth; m.classList.add("glitch");
-    // waehrend des Glitches flackern Zufallszeichen, dann steht der neue Text
-    let n = 0;
-    clearInterval(this._glitchTimer);
-    this._glitchTimer = setInterval(() => {
-      n++;
-      m.textContent = n < 7 ? text.replace(/[A-Z]/g, (c) => (Math.random() < 0.45 ? "█▓▒░#%&@"[Math.random() * 8 | 0] : c)) : text;
-      if (n >= 7) clearInterval(this._glitchTimer);
-    }, 55);
-    setTimeout(() => m.classList.remove("glitch"), 650);
+    m.textContent = text; // Ruhiger, sofort lesbarer Moduswechsel.
   }
 
   tippe(ziel, text) {
@@ -198,6 +188,7 @@ class KlausCore {
 
   // ------------------------------------------------------------------ Animation
   tick(jetzt) {
+    if (!this.buehne.isConnected) return;
     if (window.klausPause || document.hidden) {
       this.letzte = jetzt;
       setTimeout(() => requestAnimationFrame((t) => this.tick(t)), 500);

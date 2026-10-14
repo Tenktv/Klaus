@@ -17,15 +17,16 @@ const THEMEN = {
 
 const ORB_FARBEN = {
   aus: [0, 229, 255], start: [0, 229, 255], hoeren: [0, 229, 255], denken: [0, 229, 255],
-  sprechen: [0, 200, 255], aktion: [61, 255, 168], fehler: [255, 61, 90],
-  freigabe: [255, 150, 0], fertig: [61, 255, 168],   // Freigabe immer Bernstein, Ausfuehren/Fertig immer Gruen
+  sprechen: [0, 200, 255], aktion: [157, 197, 170], fehler: [237, 156, 145],
+  freigabe: [226, 184, 119], fertig: [157, 197, 170],   // Freigabe immer Bernstein, Ausfuehren/Fertig immer Gruen
 };
 
 let aktuellesThema = "jarvis";
 
 // Setzt die CSS-Variablen (--rgb, --rgb2, --bg, --glow, --text) und die Orb-Farben
 function wendeThemaAn(name) {
-  const t = THEMEN[name] || THEMEN.jarvis;
+  const accent = { jarvis: [189, 199, 190], ironman: [217, 166, 148], matrix: [171, 194, 164], synthwave: [193, 179, 199], gold: [213, 186, 133], arktis: [188, 200, 208] };
+  const t = { ...(THEMEN[name] || THEMEN.jarvis), haupt: accent[name] || accent.gold, zweit: [226, 184, 119], bg: "#191918", glow: "#35302a", text: "#f1ede4" };
   aktuellesThema = THEMEN[name] ? name : "jarvis";
   const s = document.documentElement.style;
   const hex = (rgb) => "#" + rgb.map((w) => w.toString(16).padStart(2, "0")).join("");
@@ -84,12 +85,24 @@ class KlausOrb {
 
   tick(jetzt) {
     // Panel verdeckt (Spiel im Vollbild): nichts zeichnen, nur selten nachschauen
+    if (!this.c.isConnected) return;
     if (window.klausPause || document.hidden) {
       this.letzte = jetzt;
-      setTimeout(() => requestAnimationFrame((z) => this.tick(z)), 500);
+      setTimeout(() => this.tick(performance.now()), 500);
       return;
     }
     const aktiv = this.zustand !== "aus" || this.burst >= 0 || this.pegelZiel > 0.02;
+    // Ruhe und reduzierte Bewegung: nur bei Groesse, Farbe, Zustand oder Pegel neu zeichnen.
+    if (!aktiv || this.ruhig) {
+      const ziel = ORB_FARBEN[this.zustand] || ORB_FARBEN.aus;
+      const bild = `${this.c.clientWidth}x${this.c.clientHeight}|${devicePixelRatio}|${this.zustand}|${ziel}|${this.ruhig ? this.pegelZiel.toFixed(1) : 0}`;
+      this.farbe = [...ziel]; this.pegel = this.pegelZiel; this.letzte = jetzt;
+      if (this.ruheBild !== bild) { this.ruheBild = bild; this.zeichne(jetzt); }
+      if (this.ruhig) this.burst = -1;
+      setTimeout(() => this.tick(performance.now()), 150);
+      return;
+    }
+    this.ruheBild = null;
     if (jetzt - this.letzte < (this.ruhig ? 110 : aktiv ? 15 : 48)) {  // Ruhe: ~20 Bilder/s reichen fuers Atmen
       requestAnimationFrame((z) => this.tick(z));
       return;

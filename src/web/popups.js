@@ -5,7 +5,7 @@
 const holoPopups = {};   // id -> { item, m, art, ansicht, linie, zuletzt, dauer, angefasst }
 const POPUP_GROESSE = { log: [0.27, 0.3], pipeline: [0.27, 0.38], karte: [0.33, 0.46], entwurf: [0.3, 0.44], auth: [0.25, 0.24], strategie: [0.3, 0.62] };
 const POPUP_DAUER = { log: 25, pipeline: 90, karte: 120, entwurf: 120 };  // Sekunden ohne Neuigkeit -> schliesst sich
-const POPUP_TITEL = { log: "LIVE LOG", pipeline: "PIPELINE", karte: "LEAD MAP", entwurf: "BRIEF-ENTWURF", auth: "AUTHORIZATION REQUIRED", strategie: "STRATEGIE" };
+const POPUP_TITEL = { log: "Aktivität", pipeline: "Ablauf", karte: "Betriebe in der Region", entwurf: "Brief-Entwurf", auth: "Deine Freigabe", strategie: "Strategie" };
 let popupSchleifeLaeuft = false;
 let fokusAn = false;
 
@@ -90,7 +90,10 @@ function popupPlatz(art, flaeche) {
     const n = Object.keys(holoPopups).length;
     return { x: Math.min(1 - gross[0], (1 - gross[0]) / 2 + n * 0.03), y: Math.min(1 - gross[1], 0.04 + n * 0.03), w: gross[0], h: gross[1] };
   }
-  if (art === "auth") return { x: (1 - w) / 2, y: 0.985 - h, w, h };
+  if (art === "auth") {
+    const breite = Math.min(.95, Math.max(w, 440 / F.width)), hoehe = Math.min(.95, Math.max(h, 340 / F.height));
+    return { x: (1 - breite) / 2, y: Math.max(.01, .985 - hoehe), w: breite, h: hoehe };
+  }
   if (art === "lage") return { x: (1 - w) / 2, y: 0.02, w, h };   // grosse Buehne mittig, ueber dem Reaktor
   const offen = Object.values(holoPopups).map((p) => p.m);
   const links = Math.max(0.005, kx - kr - luecke - w), rechts = Math.min(0.995 - w, kx + kr + luecke);
@@ -276,10 +279,11 @@ const POPUP_ARTEN = {
         <path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div><div class="auth-was"><b></b><small></small></div></div>
       <div class="auth-knoepfe"><button class="hud-knopf auth-ja">Freigeben</button><button class="hud-knopf auth-nein">Abbrechen</button></div>
       <div class="auth-hinweis">oder sag <b>„Freigeben“</b> · <span class="auth-rest"></span></div><div class="auth-zeit"><i></i></div>`;
-    let id = "", ende = 0, takt;
+    let id = "", ende = 0, takt, entschieden = false;
     const rest = box.querySelector(".auth-rest"), balken = box.querySelector(".auth-zeit i");
     const entscheiden = (ok) => {
-      if (!id || typeof klaus === "undefined") return;
+      if (!id || entschieden || Date.now() >= ende || typeof klaus === "undefined") return;
+      entschieden = true;
       box.querySelectorAll("button").forEach((k) => { k.disabled = true; });
       klaus.freigabe(id, ok);
     };
@@ -287,6 +291,7 @@ const POPUP_ARTEN = {
     box.querySelector(".auth-nein").onclick = () => entscheiden(false);
     return {
       update(d) {
+        if (d.id && d.id !== id) entschieden = false;
         id = d.id || id;
         box.dataset.id = id;
         box.querySelector(".auth-was b").textContent = d.was || "";
@@ -295,7 +300,8 @@ const POPUP_ARTEN = {
         clearInterval(takt);
         const zeigen = () => {
           const s = Math.max(0, Math.round((ende - Date.now()) / 1000));
-          rest.textContent = `${s} s`;
+          rest.textContent = s ? `${s} s` : "Abgelaufen";
+          box.querySelectorAll("button").forEach((k) => { k.disabled = entschieden || !s; });
           balken.style.transform = `scaleX(${(s / (d.sekunden || 90)).toFixed(3)})`;
           if (!s || !box.isConnected) clearInterval(takt);
         };

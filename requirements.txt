@@ -20,3 +20,4 @@ pyrage
 soundcard
 playwright
 Pillow
+PyAutoGUI>=0.9.54

@@ -54,12 +54,14 @@ class _Zustand:
         self.timer_min = 0
         self.gesperrt_bis = 0.0            # /stop
         self.zeit_abgelaufen = False       # Zeitlimit: gesperrt bis /timer N oder /timer aus
+        self.abbruch_generation = 0       # alte Eingaben bleiben auch nach Entsperren verworfen
         self.prozesse: set[subprocess.Popen] = set()
         self.verlauf: list[str] = []       # letzte Aktionen fuer /status
 
 
 Z = _Zustand()
 _waechter: threading.Thread | None = None
+_timer_lock = threading.RLock()  # Ablauf und Verlaengerung seriell; Status-Abfragen bleiben frei.
 
 
 def _log(text: str) -> None:
@@ -159,10 +161,11 @@ def _waechter_lauf() -> None:
         time.sleep(1)
         with Z.lock:
             abgelaufen = bool(Z.timer_ende) and time.time() >= Z.timer_ende and not Z.zeit_abgelaufen
+            frist = Z.timer_ende
             fertig = Z.aktiv and Z.laufend == 0 and time.time() - Z.letzte_zeit > FERTIG_NACH
             aktiv = Z.aktiv
         if abgelaufen:
-            _zeit_ablaufen()
+            _zeit_ablaufen(frist)
         elif fertig:
             _sitzung_beenden()
         elif aktiv and time.time() - letzte_anzeige >= 1:   # Restzeit im Overlay mitzaehlen
@@ -193,6 +196,7 @@ def _alles_abbrechen() -> int:
 
 def stoppen(grund: str = "/stop") -> str:
     with Z.lock:
+        Z.abbruch_generation += 1
         Z.gesperrt_bis = time.time() + STOP_SPERRE
     n = _alles_abbrechen()
     _log(f"GESTOPPT ({grund}), {n} Prozess(e) beendet")
@@ -200,14 +204,23 @@ def stoppen(grund: str = "/stop") -> str:
     return f"🛑 Gestoppt. {n} laufende(r) Befehl(e) beendet, Browser zu, offene Freigaben abgelehnt. PC ist wieder frei."
 
 
-def _zeit_ablaufen() -> None:
+def _zeit_ablaufen(erwartetes_ende: float | None = None) -> None:
+    with _timer_lock:
+        with Z.lock:
+            # Ein bereits erneuertes Limit darf nicht von einem alten Waechter-Tick beendet werden.
+            if erwartetes_ende is not None and Z.timer_ende != erwartetes_ende:
+                return
+            Z.abbruch_generation += 1
+            minuten = Z.timer_min
+            Z.zeit_abgelaufen, Z.timer_ende = True, None
+        n = _alles_abbrechen()
+        _sitzung_beenden(meldung=None)
+    _log(f"Zeitlimit ({minuten} min) abgelaufen - harter Stopp, {n} Prozess(e) beendet")
     with Z.lock:
-        Z.zeit_abgelaufen, Z.timer_ende = True, None
-    n = _alles_abbrechen()
-    _log(f"Zeitlimit ({Z.timer_min} min) abgelaufen - harter Stopp, {n} Prozess(e) beendet")
-    _sitzung_beenden(meldung=None)
+        if not Z.zeit_abgelaufen:
+            return
     try:
-        frage_verlaengern(f"⏱ Zeitlimit ({Z.timer_min} min) abgelaufen – ich habe alles am PC gestoppt. Soll ich verlängern?")
+        frage_verlaengern(f"⏱ Zeitlimit ({minuten} min) abgelaufen – ich habe alles am PC gestoppt. Soll ich verlängern?")
     except Exception:
         _melden(f"⏱ Zeitlimit abgelaufen – alles gestoppt. Verlängern mit /timer <Minuten>, ohne Limit: /timer aus.")
 
@@ -241,13 +254,23 @@ def telegram_befehl(text: str) -> str:
 
 
 def timer(minuten: float | None) -> str:
-    with Z.lock:
-        Z.zeit_abgelaufen = False
-        if not minuten:
-            Z.timer_ende, Z.timer_min = None, 0
-        else:
-            Z.timer_min = int(minuten)
-            Z.timer_ende = time.time() + float(minuten) * 60
+    with _timer_lock:
+        with Z.lock:
+            abgelaufen = Z.timer_ende is not None and time.time() >= Z.timer_ende
+            if abgelaufen:
+                # Auch vor dem naechsten Waechter-Tick ist diese Sitzung unwiderruflich abgelaufen.
+                Z.abbruch_generation += 1
+                Z.zeit_abgelaufen, Z.timer_ende = True, None
+        if abgelaufen:
+            _alles_abbrechen()
+            _sitzung_beenden(meldung=None)
+        with Z.lock:
+            Z.zeit_abgelaufen = False
+            if not minuten:
+                Z.timer_ende, Z.timer_min = None, 0
+            else:
+                Z.timer_min = int(minuten)
+                Z.timer_ende = time.time() + float(minuten) * 60
     _starte_waechter()
     _anzeige_senden()
     _log(f"Zeitlimit: {f'{int(minuten)} min' if minuten else 'aus'}")

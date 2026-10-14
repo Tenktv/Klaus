@@ -128,6 +128,19 @@ WERKZEUGE = [
      "parameters": {"type": "OBJECT", "properties": {"aktion": {"type": "STRING", "description": "herunterfahren, neustart oder abbrechen"}},
                     "required": ["aktion"]}},
     {"name": "bildschirmfoto", "description": "Speichert ein Bildschirmfoto in Bilder/Klaus.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "pc_eingabe", "description": "Bedient Nikolas eigenen PC. JEDE einzelne Aktion braucht seine ausdrueckliche Freigabe, auch Bewegung und Scrollen. "
+     "Nur Hauptmonitor: bewegen/klicken mit x,y in PHYSISCHEN Bildschirm-Pixeln, Ursprung (0,0) oben links. "
+     "Bei verkleinerten Screenshots Koordinaten auf die echte Hauptmonitor-Aufloesung umrechnen, niemals Bildpixel ungeprueft verwenden. "
+     "scrollen mit -10 bis 10 Schritten; taste mit einer erlaubten Taste oder einem Akkord; "
+     "text mit maximal 200 druckbaren Unicode-Zeichen. Keine Passwoerter, Geheimnisse, Shell-/Skriptbefehle, Drags oder gehaltenen Tasten. "
+     "Text nur in ein vom Nutzer bezeichnetes normales Textfeld, niemals in Terminal, Konsole oder Passwortfeld. "
+     "Erlaubte Tasten: enter, tab, esc, space, backspace, delete, left, right, up, down, home, end, pageup, pagedown; "
+     "Akkorde: ctrl+a/c/v/x/z/y/s/f, shift+tab. Bildschirm lesen bleibt beim Werkzeug bildschirm_sehen.",
+     "parameters": {"type": "OBJECT", "properties": {
+         "aktion": {"type": "STRING", "enum": ["bewegen", "klicken", "scrollen", "taste", "text"]},
+         "x": {"type": "INTEGER"}, "y": {"type": "INTEGER"}, "schritte": {"type": "INTEGER"},
+         "knopf": {"type": "STRING", "enum": ["left", "right", "middle"]},
+         "taste": {"type": "STRING"}, "text": {"type": "STRING"}}, "required": ["aktion"]}},
     {"name": "shell", "description": "Fuehrt einen PowerShell-Befehl auf Nikolas PC aus und gibt die Ausgabe zurueck. Reine Lese-Befehle "
      "(Get-ChildItem, Get-Process, ipconfig, git status ...) laufen sofort; alles andere braucht seine Freigabe (Knopf + PIN). "
      "Nur wenn er etwas am PC erledigt haben will. Ein Befehl pro Aufruf, keine Passwoerter, keine Geheimnisse auslesen.",
@@ -469,6 +482,11 @@ class GeminiGespraech:
                 return self.a.protokoll_starten(args.get("titel", ""))
             if name == "protokoll_beenden":
                 return self.a.protokoll_beenden()
+            if name == "pc_eingabe":
+                import pc_steuerung
+                return pc_steuerung.ausfuehren(args.get("aktion", ""), x=args.get("x"), y=args.get("y"),
+                    taste=args.get("taste", ""), text=args.get("text", ""), schritte=args.get("schritte"),
+                    knopf=args.get("knopf", "left"))
             if name == "shell":
                 import pc_zugriff
                 return pc_zugriff.shell(args.get("befehl", ""))
@@ -709,8 +727,11 @@ class GeminiGespraech:
                             self.werkzeug_laeuft += 1  # waehrenddessen nie auflegen (Claude kann 30 s brauchen)
                             try:
                                 for aufruf in nachricht.tool_call.function_calls:
-                                    print(f"[Gemini] Werkzeug {aufruf.name} {aufruf.args}")
-                                    werte = " ".join(f"{k}={str(v)[:40]}" for k, v in (aufruf.args or {}).items())
+                                    protokoll_args = dict(aufruf.args or {})
+                                    if aufruf.name == "pc_eingabe" and "text" in protokoll_args:
+                                        protokoll_args["text"] = "[Inhalt verborgen]"
+                                    print(f"[Gemini] Werkzeug {aufruf.name} {protokoll_args}")
+                                    werte = " ".join(f"{k}={str(v)[:40]}" for k, v in protokoll_args.items())
                                     self.a.log(f"intent/{aufruf.name} {werte}".strip())
                                     ergebnis = await asyncio.to_thread(self._werkzeug_live, aufruf.name, dict(aufruf.args or {}))
                                     self.a.log(f"ack/{aufruf.name} {str(ergebnis)[:90]}")

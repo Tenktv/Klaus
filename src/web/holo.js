@@ -12,17 +12,9 @@ function holoVorne(fenster) {
   return holoOben;
 }
 
-// Titel kurz verschluesselt einblenden (Glitch-Reveal)
+// Bestehende API: Titel sofort lesbar setzen.
 function holoTitel(ziel, text, dauer = 520) {
-  if (HOLO_RUHIG || !ziel) { if (ziel) ziel.textContent = text; return; }
-  const zeichen = "█▓▒░<>/\\#%&@01";
-  const start = performance.now();
-  const schritt = (jetzt) => {
-    const k = Math.min(1, (jetzt - start) / dauer), fest = Math.floor(text.length * k);
-    ziel.textContent = text.slice(0, fest) + [...text.slice(fest)].map((c) => (c === " " ? " " : zeichen[Math.random() * zeichen.length | 0])).join("");
-    if (k < 1) requestAnimationFrame(schritt); else ziel.textContent = text;
-  };
-  requestAnimationFrame(schritt);
+  if (ziel) ziel.textContent = text;
 }
 
 // Rahmen (Stark Holo-Tech): abgeschraegte Ecken, Leuchtkante mit Glow, Lichtreflex oben links, zwei Eck-Ticks.

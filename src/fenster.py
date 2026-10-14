@@ -317,6 +317,62 @@ class WebBruecke(QObject):
     def chat(self) -> None:
         self.zeige_chat()
 
+    @Slot(result=str)
+    def ladeBetrieb(self) -> str:
+        """Lokaler Live-Zustand fuer das Kontrollzentrum, ohne Netz-/KI-Aufruf."""
+        import freigabe
+        import pc_zugriff
+        import spiel_coach
+
+        a = self.assistent
+        p = getattr(a, "protokoll", None)
+        return json.dumps({
+            "mikroAus": bool(getattr(a, "pausiert", True)),
+            "stumm": bool(getattr(a, "ist_stumm", False)),
+            "protokoll": {"aktiv": bool(p and p.laeuft),
+                          "titel": p.titel if p else "",
+                          "sekunden": int(p.dauer()) if p else 0,
+                          "zeilen": len(p.saetze) if p else 0},
+            "coach": {"aktiv": spiel_coach.laeuft()},
+            "pc": pc_zugriff.status(),
+            "freigabe": freigabe.offen(),
+        }, ensure_ascii=False)
+
+    @Slot(str)
+    def eingabe(self, text: str) -> None:
+        """Manuelle Eingabe nutzt dieselbe Queue und Freigaben wie Sprache."""
+        if self.assistent and text.strip():
+            self.assistent.eingabe(text.strip()[:4000])
+
+    @Slot()
+    def pcStopp(self) -> None:
+        """Not-Aus ohne KI; blockierende Prozessbeendigung ausserhalb der GUI."""
+        def stoppen() -> None:
+            import pc_zugriff
+            import spiel_coach
+            spiel_coach.stoppen()
+            self.nachricht.emit("info", pc_zugriff.stoppen())
+        threading.Thread(target=stoppen, daemon=True).start()
+
+    @Slot(int)
+    def pcTimer(self, minuten: int) -> None:
+        if not 0 <= minuten <= 240:
+            self.nachricht.emit("info", "Zeitlimit: 1 bis 240 Minuten oder aus.")
+            return
+        import pc_zugriff
+        threading.Thread(target=lambda: self.nachricht.emit("info", pc_zugriff.timer(minuten or None)), daemon=True).start()
+
+    @Slot()
+    def protokollBeenden(self) -> None:
+        a = self.assistent
+        if a and getattr(a, "protokoll", None):
+            threading.Thread(target=lambda: self.nachricht.emit("info", a.protokoll_beenden()), daemon=True).start()
+
+    @Slot()
+    def coachBeenden(self) -> None:
+        import spiel_coach
+        self.nachricht.emit("info", spiel_coach.stoppen())
+
 
 # Design-Varianten: (Hauptfarbe, Zweitfarbe beim Nachdenken). Die vollen Paletten stehen in web/klaus.js.
 THEMEN = {
@@ -576,8 +632,8 @@ class PcNutzungHinweis(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.label = QLabel(self)
-        self.label.setStyleSheet("QLabel { background: rgba(140, 18, 18, 248); color: white; border: 2px solid #ff6b6b;"
-                                 " border-radius: 14px; padding: 8px 20px; font: 600 15px 'Segoe UI'; }")
+        self.label.setStyleSheet("QLabel { background: rgba(24, 25, 28, 250); color: #f4ede1; border: 1px solid #bd805a;"
+                                 " border-radius: 10px; padding: 10px 18px; font: 600 13px 'Segoe UI'; }")
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.addWidget(self.label)
@@ -606,7 +662,7 @@ class OrbOverlay(QWebEngineView):
     """Der Orb in der Bildschirmmitte, wenn du in einer anderen App bist: durchsichtig, klick-durchlaessig.
     Gleicher Orb wie im Panel (web/klaus.js), damit beide gleich aussehen."""
 
-    BREITE, HOEHE = 640, 660
+    BREITE, HOEHE = 360, 390
 
     def __init__(self, bruecke: WebBruecke) -> None:
         super().__init__()
@@ -624,7 +680,7 @@ class OrbOverlay(QWebEngineView):
             self.ausblenden.stop()
             if not self.isVisible():
                 bild = QApplication.primaryScreen().availableGeometry()
-                self.move(bild.center().x() - self.BREITE // 2, bild.center().y() - self.HOEHE // 2)
+                self.move(bild.right() - self.BREITE - 24, bild.bottom() - self.HOEHE - 24)
                 self.show()
         elif self.isVisible():
             self.ausblenden.start()

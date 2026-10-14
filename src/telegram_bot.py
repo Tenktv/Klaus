@@ -589,7 +589,10 @@ class TelegramKlaus:
                         return ergebnis
                     teile = []
                     for f in aufrufe:
-                        print(f"[Telegram] Werkzeug {f.name} {dict(f.args or {})}")
+                        log_args = dict(f.args or {})
+                        if f.name == "pc_eingabe" and "text" in log_args:
+                            log_args["text"] = "[Inhalt verborgen]"
+                        print(f"[Telegram] Werkzeug {f.name} {log_args}")
                         schluessel = f"{f.name}|{json.dumps(dict(f.args or {}), sort_keys=True, default=str)}"
                         if schluessel not in ergebnisse:
                             self._melde("log", f"telegram/{f.name}")
@@ -623,6 +626,7 @@ class TelegramKlaus:
         (r"schick|send|pdf|protokoll|datei|dokument|screenshot|bildschirmfoto", ["datei_senden", "datei_suchen"]),
         (r"fenster|schlie(ß|ss)", ["fenster_liste", "fenster_steuern"]),
         (r"shell|powershell|befehl|terminal|konsole|cmd|prozess|ipconfig|festplatte|speicherplatz", ["shell"]),
+        (r"maus|tastatur|scroll|taste|tippe|klicke|desktop|pc bedienen", ["pc_eingabe", "bildschirm_sehen"]),
         (r"browser|website|webseite|seite|klick|formular|ausf(ü|ue)ll|eintipp|google|edge|online|bestell|login|anmeld", ["browser"]),
         (r"bildschirm|screenshot|monitor|siehst|schau|was ist (offen|auf)", ["bildschirm_sehen"]),
         (r"coach|zock|gameplay|spiel|tipp|skyrim|tft|league|cs2|valorant|minecraft", ["spiel_coach", "oeffne"]),
@@ -696,7 +700,10 @@ class TelegramKlaus:
                     args = json.loads(aufruf["function"].get("arguments") or "{}")
                 except ValueError:
                     args = {}
-                print(f"[Telegram] Werkzeug {name} {args} (Ersatz-KI)")
+                log_args = dict(args)
+                if name == "pc_eingabe" and "text" in log_args:
+                    log_args["text"] = "[Inhalt verborgen]"
+                print(f"[Telegram] Werkzeug {name} {log_args} (Ersatz-KI)")
                 schluessel = f"{name}|{json.dumps(args, sort_keys=True, default=str)}"
                 if schluessel not in ergebnisse:
                     self._melde("log", f"telegram/{name}")

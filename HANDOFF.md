@@ -305,6 +305,10 @@ Konkurrenz-Check am 05.10.2026 live geprüft (Bäckerei in Göppingen: 36 Mitbew
   Proxy, Support-Prozess.
 - Kostenlose KI-Kontingente nur zum Testen, nie im verkauften Produkt.
 
+## Design-Erweiterung 14.10.2026
+
+Aktueller Stand zum Kontrollzentrum und zur freigegebenen Maus-/Tastatursteuerung: siehe `DESIGN_HANDOFF.md`.
+
 ## 6. Offene Fragen an Nikola
 - Fish Audio: Schlüssel (Plus-Abo wegen kommerzieller Nutzung) eintragen, dann Stimme gemeinsam entwerfen.
 - Apple Kalender: Apple-ID + App-spezifisches Passwort in die .env (nicht in den Chat schreiben).

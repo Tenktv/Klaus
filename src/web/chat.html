@@ -64,15 +64,18 @@
   .auftrag .antwort { padding: 0 12px 10px; font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--bernstein); }
   @media (prefers-reduced-motion: reduce) { .blase { animation: none; } }
 </style>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="command-center.css">
 </head>
-<body>
+<body class="chat-view">
 <header id="kopf" title="Ziehen zum Verschieben">
   <canvas id="orb"></canvas>
   <div class="name"><b translate="no">KLAUS</b><span id="status">BEREIT</span></div>
   <button class="zu" id="zu" aria-label="Schließen" title="Schließen">✕</button>
 </header>
 <div id="verlauf"></div>
-<div class="tipp">Sprich einfach weiter. „Danke“ beendet das Gespräch.</div>
+<form class="chat-compose" id="chat-compose"><input class="feld" id="chat-input" maxlength="4000" aria-label="Nachricht an Klaus" placeholder="Schreib Klaus …" autocomplete="off"><button class="hud-knopf primaer" type="submit" id="chat-send" disabled>Senden</button></form>
+<div class="tipp" id="chat-hint">Sprich einfach weiter. „Danke“ beendet das Gespräch.</div>
 <script>
 const STATUS = { aus: "BEREIT · SAG „KLAUS“", start: "INITIALISIERE …", hoeren: "HÖRE ZU …", denken: "VERARBEITE …",
                  sprechen: "ANTWORTE …", aktion: "AUSGEFÜHRT", fehler: "FEHLER · SIEHE LOG" };
@@ -94,10 +97,20 @@ function auftrag(text) {
 }
 
 klausBereit.then((klaus) => {
+  const eingabe = document.getElementById("chat-input"), senden = document.getElementById("chat-send");
+  const verfuegbar = typeof klaus.eingabe === "function";
+  eingabe.disabled = !verfuegbar;
+  eingabe.oninput = () => { senden.disabled = !verfuegbar || !eingabe.value.trim(); };
+  document.getElementById("chat-compose").onsubmit = (e) => {
+    e.preventDefault();
+    if (!verfuegbar || !eingabe.value.trim()) return;
+    klaus.eingabe(eingabe.value.trim()); eingabe.value = ""; senden.disabled = true;
+    document.getElementById("chat-hint").textContent = "An Klaus übergeben. Die Antwort erscheint im Gespräch.";
+  };
   klaus.ladeThema(wendeThemaAn);
   klaus.thema.connect(wendeThemaAn);
   // Kein Windows-Rahmen: am Kopf ziehen verschiebt das Fenster
-  document.getElementById("kopf").onmousedown = (e) => { if (e.button === 0 && e.target.id !== "zu") klaus.fensterZiehen(); };
+  document.getElementById("kopf").onmousedown = (e) => { if (e.button === 0 && !e.target.closest("button")) klaus.fensterZiehen(); };
   document.getElementById("zu").onclick = () => klaus.fensterZu();
   klaus.nachricht.connect(blase);
   klaus.zustand.connect((z) => { orb.setZustand(z); document.getElementById("status").textContent = STATUS[z] || ""; });
