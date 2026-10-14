@@ -253,6 +253,15 @@ class TelegramKlaus:
             print(f"[Telegram] senden: {str(e)[:100]}")
             return None
 
+    def datei(self, inhalt: bytes, name: str, text: str = "") -> None:
+        if not self.nutzer or not inhalt:
+            return
+        try:
+            self._api("sendDocument", frist=120, chat_id=self.nutzer, caption=text[:1000],
+                      files={"document": (name, inhalt, "application/octet-stream")})
+        except Exception as e:
+            print(f"[Telegram] Datei senden: {str(e)[:100]}")
+
     def foto(self, bild: bytes, text: str = "") -> None:
         if not self.nutzer or not bild:
             return
@@ -611,6 +620,7 @@ class TelegramKlaus:
         (r"herunterfahr|neustart|ausschalt|pc aus|remote", ["pc_ausschalten", "claude_remote_starten"]),
         (r"öffne|oeffne|start|app|programm|spiel|steam|browser|website|youtube|installier", ["oeffne", "google_suche", "website_im_panel", "programm_suchen", "programm_aktion"]),
         (r"datei|ordner|kopier|verschieb|l(ö|oe)sch|papierkorb|download", ["datei_suchen", "datei_kopieren", "datei_verschieben", "in_papierkorb"]),
+        (r"schick|send|pdf|protokoll|datei|dokument|screenshot|bildschirmfoto", ["datei_senden", "datei_suchen"]),
         (r"fenster|schlie(ß|ss)", ["fenster_liste", "fenster_steuern"]),
         (r"shell|powershell|befehl|terminal|konsole|cmd|prozess|ipconfig|festplatte|speicherplatz", ["shell"]),
         (r"browser|website|webseite|seite|klick|formular|ausf(ü|ue)ll|eintipp|google|edge|online|bestell|login|anmeld", ["browser"]),

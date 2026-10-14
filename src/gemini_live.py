@@ -94,6 +94,10 @@ WERKZEUGE = [
      "Videos, Musik, Klaus-Projekte) nach Namen. Gibt die vollstaendigen Pfade zurueck.",
      "parameters": {"type": "OBJECT", "properties": {"name": {"type": "STRING", "description": "Name oder Teil davon"}},
                     "required": ["name"]}},
+    {"name": "datei_senden", "description": "Schickt Nikola eine Datei auf Telegram. 'letztes protokoll' = neuestes Meeting-Protokoll, "
+     "'letztes bildschirmfoto' = neuestes Bildschirmfoto, sonst ein vollstaendiger Pfad aus datei_suchen (erst suchen!).",
+     "parameters": {"type": "OBJECT", "properties": {"was": {"type": "STRING", "description": "'letztes protokoll', 'letztes bildschirmfoto' oder Pfad"}},
+                    "required": ["was"]}},
     {"name": "in_papierkorb", "description": "Verschiebt eine Datei oder einen Ordner in den Papierkorb (wiederherstellbar). "
      "NUR mit einem Pfad aus datei_suchen, und NUR nachdem du dem Nutzer Namen und Ort genannt und er ausdruecklich ja gesagt hat.",
      "parameters": {"type": "OBJECT", "properties": {"pfad": {"type": "STRING", "description": "Vollstaendiger Pfad aus datei_suchen"}},
@@ -447,6 +451,9 @@ class GeminiGespraech:
                 if not treffer:
                     return "Nichts gefunden."
                 return "Gefunden: " + "; ".join(f"{t['art']} {t['pfad']}" for t in treffer)
+            if name == "datei_senden":
+                import datei_senden
+                return datei_senden.senden(args.get("was", ""), self.gefunden)
             if name == "in_papierkorb":
                 pfad = args.get("pfad", "")
                 if pfad not in self.gefunden:

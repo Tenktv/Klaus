@@ -195,9 +195,12 @@ class Assistent:
         pc_zugriff.melder = lambda text: self.fern.senden(text) if self.fern else None
         import spiel_coach   # Tipps beim Zocken: lokal vorlesen (Headset), bzw. Telegram, wenn du dort schreibst
         spiel_coach.sagen = lambda text: self.sage(text, zustand="sprechen")
-        pc_zugriff.anzeige =lambda zustand: self.b.pc_nutzung.emit(json.dumps(zustand))
+        import datei_senden   # Dateien aufs Handy (Telegram)
+        datei_senden.datei_melder = lambda inhalt, name, text: (self.fern.datei(inhalt, name, text)
+                                                                if self.fern and hasattr(self.fern, "datei") else None)
+        pc_zugriff.anzeige = lambda zustand: self.b.pc_nutzung.emit(json.dumps(zustand))
         pc_zugriff.frage_verlaengern = lambda text: self.fern.senden(text, reply_markup=pc_zugriff.VERLAENGERN_KNOEPFE) if self.fern else None
-        pc_zugriff.foto_melder =lambda bild, text: self.fern.foto(bild, text) if self.fern and hasattr(self.fern, "foto") else None
+        pc_zugriff.foto_melder = lambda bild, text: self.fern.foto(bild, text) if self.fern and hasattr(self.fern, "foto") else None
         threading.Thread(target=self._kalender_erinnern, daemon=True).start()
 
     # ---------------------------------------------------------------- von aussen

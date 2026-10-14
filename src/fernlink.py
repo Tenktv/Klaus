@@ -136,6 +136,10 @@ class FernProxy:
     def senden(self, text: str, **extra) -> None:
         server_senden("/senden", {"text": text, **({"reply_markup": extra["reply_markup"]} if extra.get("reply_markup") else {})})
 
+    def datei(self, inhalt: bytes, name: str, text: str = "") -> None:
+        import base64
+        server_senden("/datei", {"inhalt": base64.b64encode(inhalt).decode(), "name": name, "text": text}, frist=180)
+
     def foto(self, bild: bytes, text: str = "") -> None:
         import base64
         server_senden("/foto", {"bild": base64.b64encode(bild).decode(), "text": text}, frist=60)

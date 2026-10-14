@@ -283,6 +283,9 @@ def bauen(innen: bool = True):
             d = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))) or b"{}")
             if self.path == "/senden":
                 tg.senden(str(d.get("text", ""))[:4000], **({"reply_markup": d["reply_markup"]} if d.get("reply_markup") else {}))
+            elif self.path == "/datei":   # Datei vom PC (datei_senden.py)
+                import base64
+                tg.datei(base64.b64decode(d.get("inhalt", "")), str(d.get("name", "datei"))[:120], str(d.get("text", ""))[:1000])
             elif self.path == "/foto":   # Bildschirmfoto vom PC (pc_zugriff.bildschirm)
                 import base64
                 tg.foto(base64.b64decode(d.get("bild", "")), str(d.get("text", ""))[:1000])
