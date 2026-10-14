@@ -153,6 +153,9 @@ class Steuerung(QObject):
         chat_vorne = ctypes.windll.user32.GetForegroundWindow() == int(self.chat.winId())
         if zustand != "aus" and (chat_vorne or self._panel_in_mitte()):
             zustand = "aus"
+        # Wunsch Nikola (14.10.2026, Meetings): der Orb nur, solange Klaus spricht - nicht beim Zuhoeren/Denken/Stummsein
+        if zustand not in ("sprechen", "aktion"):
+            zustand = "aus"
         self.orb.setze_zustand(zustand)
 
     @Slot(str, str)
