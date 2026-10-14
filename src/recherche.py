@@ -88,7 +88,7 @@ def gemini(prompt: str, system: str = "", google: bool = False) -> str:
         except Exception as e:  # 429 RESOURCE_EXHAUSTED, 404, 503 ...
             fehler.append(f"{modell}: {str(e)[:40]}")
     if len(fehler) >= len(TEXT_MODELLE):
-        gemini_ausgefallen()   # alle Modelle fielen aus
+        gemini_ausgefallen(2 * 3600 if any("PerDay" in f or "429" in f for f in fehler) else 180)   # alle Modelle fielen aus
     if not google:   # Ersatz-KI (Groq o. a.), wenn Gemini nicht erreichbar ist - nur fuer reine Textfragen (ohne Google-Suche)
         try:
             import ersatz_ki

@@ -527,7 +527,8 @@ class TelegramKlaus:
                 return antwort
             except RuntimeError as e:
                 if "Gemini antwortet nicht" in str(e) and runde == 0:
-                    recherche.gemini_ausgefallen()
+                    # Tageslimit: 2 Stunden gleich die Ersatz-KI (sonst wartet jede Nachricht erst auf Gemini)
+                    recherche.gemini_ausgefallen(2 * 3600 if "[Tageslimit]" in str(e) else 180)
                     if ersatz_ki.bereit():   # Google streikt: nicht warten, sondern gleich die Ersatz-KI fragen
                         try:
                             antwort = self._antworten_ersatz(text)
@@ -595,7 +596,8 @@ class TelegramKlaus:
                 if not re.search(r"429|404|RESOURCE_EXHAUSTED|NOT_FOUND|503|504|UNAVAILABLE|DEADLINE|Timeout|timed out", str(e)):
                     break
         self.verlauf.pop() if self.verlauf else None
-        raise RuntimeError(f"Gemini antwortet nicht ({str(letzter_fehler)[:80]})")
+        tageslimit = " [Tageslimit]" if re.search(r"PerDay", str(letzter_fehler)) else ""
+        raise RuntimeError(f"Gemini antwortet nicht{tageslimit} ({str(letzter_fehler)[:80]})")
 
     # Stichworte -> Werkzeuge. Die Ersatz-KI hat ein kleines Minutenbudget; mehr als das Passende zu schicken waere Verschwendung.
     WERKZEUG_GRUPPEN = [
