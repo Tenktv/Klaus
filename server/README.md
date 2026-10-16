@@ -25,3 +25,12 @@ Einrichten: Verzeichnis `/var/lib/klaus-sicherheit` (root, 755), darin leere Dat
 `/etc/fail2ban/jail.d/klaus.local` (`bantime 24h`, `maxretry 4`, `findtime 10m`, `backend systemd`, `[sshd] enabled`); Swapfile 2 GB.
 Danach `systemctl enable --now klaus-waechter.timer klaus-scan.timer klaus-freshclam.timer klaus-auftrag.path` und einmal
 `klaus-waechter.py pruefen` (legt die Basis an).
+
+## Alpaca-Handel (16.10.2026)
+`src/alpaca_handel.py`, verdrahtet in `src/server_gehirn.py` (Werkzeuge `alpaca_konto`, `alpaca_order`, Befehl `/alpaca`).
+In die `.env` des Servers: `ALPACA_API_KEY`, `ALPACA_SECRET_KEY` (zuerst Paper-Schluessel), optional `ALPACA_MAX_ORDER_USD`
+(Standard 1000). Echtgeld nur mit `ALPACA_LIVE=1` plus Live-Schluessel - bewusst von Hand, Klaus aendert das nicht.
+Jede Order und jedes Storno laeuft ueber das Freigabe-Gate (Art `handeln`: Telegram-Knopf + PIN, 90 s); kein Leerverkauf.
+Ohne SSH: in Telegram `/alpaca_schluessel <Key> <Secret>` - nur Paper-Schluessel (PK...), Klaus loescht die Nachricht
+sofort, prueft die Schluessel bei Alpaca und schreibt sie erst dann in die `.env` (geht nicht an die KI).
+Danach in Telegram `/alpaca` schicken.

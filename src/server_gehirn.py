@@ -183,6 +183,43 @@ def bauen(innen: bool = True):
     tg.deklarationen.append({"name": "sicherheit_gesamt", "description": "Sicherheitszustand von Server UND PC (Abweichungen, Angriffe, "
                              "Updates, Virenscan). Fuer 'wie sicher ist alles', 'Sicherheitscheck'. Scan starten: einstellung=scan.",
                              "parameters": {"type": "OBJECT", "properties": {"einstellung": {"type": "STRING", "description": "leer = Bericht; scan = Virenscan starten"}}}})
+    # Alpaca (US-Aktien/ETFs/Krypto): Lesen frei, jede Order nur mit Freigabe (Knopf + PIN). Papier, ausser ALPACA_LIVE=1
+    import alpaca_handel as alpaca
+
+    def alpaca_lesen(_eingabe: str = "") -> str:
+        """/alpaca - Kontostand, Positionen, offene Orders"""
+        try:
+            return alpaca.konto_text()
+        except alpaca.HandelFehler as e:
+            return str(e)
+
+    def alpaca_order(args: dict) -> str:
+        try:
+            auftrag = alpaca.vorbereiten(args.get("aktion") or "", args.get("name") or "", args.get("stueck"),
+                                         args.get("betrag_usd"), args.get("limit"), args.get("order_nr") or "")
+        except (alpaca.HandelFehler, ValueError, TypeError) as e:
+            return f"Die Order geht so nicht: {str(e)[:200]}"
+        return a._mit_freigabe(alpaca.ART, auftrag.text, lambda token: alpaca.ausfuehren(token, auftrag),
+                               an=f"Alpaca {alpaca.modus()}-Konto")
+
+    tg.befehle["/alpaca"] = alpaca_lesen
+    tg.befehle["/alpaca_schluessel"] = lambda eingabe: alpaca.schluessel_setzen(eingabe, TB._env_setzen)
+    tg.geheime_befehle.add("/alpaca_schluessel")
+    tg.deklarationen += [
+        {"name": "alpaca_konto", "description": "Echtes Broker-Konto bei Alpaca (Standard: Papier-Konto von Alpaca): Kontostand, "
+         "Positionen, offene Orders mit Nummer. Fuer 'wie steht mein Alpaca-Depot', 'was habe ich bei Alpaca'.",
+         "parameters": {"type": "OBJECT", "properties": {}}},
+        {"name": "alpaca_order", "description": "Order bei Alpaca (US-Aktien, ETFs, Krypto in USD): kaufen, verkaufen oder stornieren. "
+         "NUR wenn Nikola ausdruecklich eine Alpaca-Order will. Jede Order braucht seine Freigabe (Knopf + PIN). Entweder stueck "
+         "ODER betrag_usd. Ohne limit = Marktpreis. Kein Leerverkauf. Stornieren braucht order_nr aus alpaca_konto.",
+         "parameters": {"type": "OBJECT", "properties": {
+             "aktion": {"type": "STRING", "description": "kaufen, verkaufen oder stornieren"},
+             "name": {"type": "STRING", "description": "Name oder US-Kuerzel, z. B. Nvidia, SPY, Bitcoin"},
+             "stueck": {"type": "NUMBER", "description": "Anzahl Stueck (Bruchteile moeglich)"},
+             "betrag_usd": {"type": "NUMBER", "description": "Betrag in US-Dollar statt Stueckzahl"},
+             "limit": {"type": "NUMBER", "description": "Limitpreis in USD (optional)"},
+             "order_nr": {"type": "STRING", "description": "Nummer der Order beim Stornieren"}}, "required": ["aktion"]}}]
+
     tg.befehle["/briefing"] = briefing.befehl
     tg.deklarationen.append({"name": "briefing", "description": "Morgen-Briefing jetzt (Wetter, Termine heute, Nachrichten) oder "
                              "Uhrzeit/an/aus einstellen. Fuer 'Briefing', 'was steht heute an und wie ist das Wetter'.",
@@ -220,6 +257,10 @@ def bauen(innen: bool = True):
             return "Abgebrochen: Nikola hat /stop geschickt. Mach nichts weiter, sag nur kurz, dass du gestoppt hast."
         if name == "update_einspielen":
             return update_werkzeug()
+        if name == "alpaca_konto":
+            return alpaca_lesen()
+        if name == "alpaca_order":
+            return alpaca_order(args)
         if name == "briefing":
             return briefing.befehl(f"/briefing {args.get('einstellung') or ''}")
         if name == "sicherheit_gesamt":
