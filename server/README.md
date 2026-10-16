@@ -34,3 +34,9 @@ Jede Order und jedes Storno laeuft ueber das Freigabe-Gate (Art `handeln`: Teleg
 Ohne SSH: in Telegram `/alpaca_schluessel <Key> <Secret>` - nur Paper-Schluessel (PK...), Klaus loescht die Nachricht
 sofort, prueft die Schluessel bei Alpaca und schreibt sie erst dann in die `.env` (geht nicht an die KI).
 Danach in Telegram `/alpaca` schicken.
+
+## Eigene Strategien (16.10.2026)
+`src/strategien.py`, Schleife alle 5 Minuten (startet mit `klaus-gehirn`), Daten in `data/strategien.json`.
+Klaus entwirft und testet Strategien (trend, rsi, sparplan; 2 Jahre Tageskurse von Yahoo). Einschalten und Fortsetzen nur mit
+Freigabe (Art `strategie`), danach handeln sie selbst - ausschliesslich auf dem Alpaca-Papier-Konto; bei `ALPACA_LIVE=1` ruhen sie.
+Grenzen: 5 aktive, zusammen `STRATEGIE_GESAMT_USD` (Std. 5000), 4 Orders je Strategie und Tag. Notstopp: `/strategien stop`.
