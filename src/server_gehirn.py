@@ -203,6 +203,9 @@ def bauen(innen: bool = True):
                                an=f"Alpaca {alpaca.modus()}-Konto")
 
     tg.befehle["/alpaca"] = alpaca_lesen
+    # Mit Alpaca ersetzt das Papier-Konto von Alpaca das alte Spielgeld-Depot des PCs (das ging nur bei laufendem PC)
+    if alpaca.konfiguriert():
+        tg.deklarationen[:] = [d for d in tg.deklarationen if d["name"] not in ("papier_order", "depot_status")]
     tg.befehle["/alpaca_schluessel"] = lambda eingabe: alpaca.schluessel_setzen(eingabe, TB._env_setzen)
     tg.geheime_befehle.add("/alpaca_schluessel")
     tg.deklarationen += [
@@ -328,6 +331,10 @@ def bauen(innen: bool = True):
             return "Abgebrochen: Nikola hat /stop geschickt. Mach nichts weiter, sag nur kurz, dass du gestoppt hast."
         if name == "update_einspielen":
             return update_werkzeug()
+        if name in ("papier_order", "depot_status") and alpaca.konfiguriert():   # alte Namen -> Alpaca-Papier-Konto
+            name = "alpaca_order" if name == "papier_order" else "alpaca_konto"
+            if args.get("betrag_eur") and not args.get("betrag_usd"):
+                args = {**args, "betrag_usd": args["betrag_eur"]}
         if name == "alpaca_konto":
             return alpaca_lesen()
         if name == "alpaca_order":

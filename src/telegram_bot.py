@@ -57,9 +57,11 @@ Markdown-Sternchen. Du kannst trotzdem alles am PC erledigen - nutze dafuer IMME
 Was im Panel erscheint (Fenster, Charts, Globus), sieht er gerade nicht: sag ihm das Ergebnis in Worten.
 Freigaben: Hochladen, Drucken, Loeschen, Termine usw. schicken ihm einen Freigabe-Knopf mit PIN-Abfrage in den Chat -
 sag ihm kurz, dass er dort bestaetigen soll. Du selbst kannst nichts freigeben.
-frage_claude NUR, wenn er ausdruecklich Claude sagt. Boerse: Analyse, Papier-Depot und Alpaca (alpaca_order NUR wenn er
-ausdruecklich eine Order will, nie von dir aus vorschlagen oder ausloesen). Strategien (Werkzeug strategie) darfst du
-selbst entwerfen und testen; einschalten nur, wenn er es will. Sei bei Backtests ehrlich (auch wenn Kaufen+Halten besser war).
+frage_claude NUR, wenn er ausdruecklich Claude sagt. Boerse: Handel laeuft ueber Alpaca (alpaca_konto, alpaca_order, strategie) - standardmaessig
+das Papier-Konto mit Spielgeld, da darfst du handeln. Bittet er dich zu traden, such selbst Werte aus (markt_scanner,
+markt_analyse) und loese die Orders aus - jede schickt ihm einen Freigabe-Knopf, du kannst nichts ohne ihn ausfuehren.
+Fuer dauerhaftes Selbst-Handeln: Strategie entwerfen, testen und mit strategie (aktion=anlegen) einschalten (eine Freigabe,
+danach handelt sie allein auf dem Papier-Konto). Lehne Paper-Trading nicht ab. Sei bei Backtests ehrlich.
 Keine Anlageberatung.
 Sag NIE, du haettest etwas getan, wenn kein Werkzeug es bestaetigt hat. Fehlt dir ein Werkzeug, sag das offen - tu nicht so,
 als waere etwas erledigt. Herunterfahren des PCs: weise darauf hin, dass er sich danach nicht aus der Ferne wecken laesst.
@@ -626,8 +628,10 @@ class TelegramKlaus:
     WERKZEUG_GRUPPEN = [
         (r"kalender|termin|morgen|heute|uhr|woche|frei|verabred|seminar", ["kalender_lesen", "termin_eintragen", "zeit_frei"]),
         (r"aktie|b(ö|oe)rse|kurs|depot|bitcoin|dax|nvidia|tesla|apple|analys|chart|markt|trading", ["markt_analyse", "papier_order", "depot_status"]),
-        (r"alpaca|broker|order|kauf|verkauf|storn|position", ["alpaca_konto", "alpaca_order", "markt_analyse"]),
-        (r"strategi|backtest|automatisch|bot|sparplan|rsi|trend|signal", ["strategie", "alpaca_konto", "markt_analyse"]),
+        (r"alpaca|broker|order|kauf|verkauf|storn|position|trade|trading|paper|papier|handel|spielgeld|investier|aktien?\b",
+         ["alpaca_konto", "alpaca_order", "strategie", "markt_analyse"]),
+        (r"strategi|backtest|automati|selbst(st(ä|ae)ndig)?|f(ü|ue)r mich|bot|sparplan|rsi|trend|signal|trade|trading|handel",
+         ["strategie", "alpaca_konto", "alpaca_order", "markt_scanner"]),
         (r"depot|portfolio|verteil|klumpen|risiko|runterzieh|aufgestellt", ["depot_analyse", "alpaca_konto"]),
         (r"scan|kandidat|chance|(ü|ue)berverkauft|(ü|ue)berkauft|52|ausbruch|tut sich|signal|such", ["markt_scanner", "markt_analyse", "strategie"]),
         (r"woche|bericht|bilanz|zusammenfass|performance|wie lief", ["wochenbericht", "depot_analyse"]),
@@ -659,13 +663,14 @@ class TelegramKlaus:
 
     def _passende_werkzeuge(self, text: str) -> list[dict]:
         t = text.lower()
-        namen = set(self.KERN)
+        namen = list(self.KERN)   # Reihenfolge = Vorrang (Gruppen weiter oben zuerst), falls mehr als 16 passen
         for muster, liste in self.WERKZEUG_GRUPPEN:
             if re.search(muster, t):
-                namen.update(liste)
+                namen += [n for n in liste if n not in namen]
         if len(namen) == len(self.KERN):   # nichts erkannt: die haeufigsten
-            namen.update(["kalender_lesen", "markt_analyse", "briefing", "sicherheit_gesamt", "oeffne"])
-        return [d for d in self.deklarationen if d["name"] in namen][:16]
+            namen += ["kalender_lesen", "markt_analyse", "briefing", "sicherheit_gesamt", "oeffne"]
+        nach_name = {d["name"]: d for d in self.deklarationen}
+        return [nach_name[n] for n in namen if n in nach_name][:16]
 
     def _werkzeug_sicher(self, name: str, args: dict, frist: int = 150) -> str:
         """Fuehrt ein Werkzeug mit Zeitlimit aus: haengt es, wartet der Chat nicht ewig (der Lauf selbst kann im Hintergrund enden)."""
