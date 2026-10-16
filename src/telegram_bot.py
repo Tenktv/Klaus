@@ -227,6 +227,7 @@ class TelegramKlaus:
         self.gedaechtnis_fn = gehirn.gedaechtnis_text
         self.ereignis_fn = None          # (art, text) -> Meldung ans Panel des PCs
         self.befehle: dict = {}          # "/name" -> fn(text) -> Antwort (z. B. /briefing auf dem Server)
+        self.geheime_befehle: set = set()   # Befehle mit Schluesseln: Nachricht wird sofort geloescht
 
     def _melde(self, art: str, text: str) -> None:
         if self.ereignis_fn:
@@ -415,6 +416,11 @@ class TelegramKlaus:
             if not text or text.startswith("/start"):
                 return
             befehl = text.strip().split()[0].lower() if text.strip().startswith("/") else ""
+            if befehl in self.geheime_befehle:   # enthaelt Schluessel: sofort aus dem Chatverlauf loeschen
+                try:
+                    self._api("deleteMessage", chat_id=self.nutzer, message_id=n["message_id"])
+                except Exception:
+                    pass
             if befehl in self.befehle:
                 self.senden(self.befehle[befehl](text))
                 return
