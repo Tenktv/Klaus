@@ -220,6 +220,77 @@ def bauen(innen: bool = True):
              "limit": {"type": "NUMBER", "description": "Limitpreis in USD (optional)"},
              "order_nr": {"type": "STRING", "description": "Nummer der Order beim Stornieren"}}, "required": ["aktion"]}}]
 
+    # Eigene Strategien (nur Papier-Konto): testen frei, einschalten/fortsetzen mit Freigabe, danach handeln sie selbst
+    import strategien
+
+    def strategie_params(args: dict) -> dict:
+        return {k: args.get(k) for k in ("kurz", "lang", "unter", "ueber", "tage", "tp_proz", "sl_proz")}
+
+    def strategie_werkzeug(args: dict) -> str:
+        akt = (args.get("aktion") or "zeigen").lower()
+        typ = (args.get("typ") or "").lower()
+        try:
+            if akt.startswith("test"):
+                return strategien.testen(typ, args.get("name") or "", strategie_params(args), args.get("betrag_usd"), args.get("budget_usd"))
+            if akt.startswith(("anleg", "start", "aktiv", "einschalt")):
+                e = strategien.vorbereiten(typ, args.get("name") or "", strategie_params(args), args.get("betrag_usd") or 0,
+                                           args.get("budget_usd"), args.get("titel") or "")
+                was = (f"Strategie einschalten (handelt danach SELBST auf dem Papier-Konto): {e['titel']} · "
+                       f"{strategien.beschreibung(e['typ'], e['p'])} · {e['betrag_usd']:.0f} $/Order, Budget {e['budget_usd']:.0f} $")
+                tg.senden(e["test"])
+                return a._mit_freigabe(strategien.ART, was, lambda token: strategien.anlegen(token, e), an="Alpaca Papier-Konto")
+            if akt.startswith("fortsetz"):
+                s = strategien.fortsetzen_pruefen(args.get("nummer") or "")
+                return a._mit_freigabe(strategien.ART, f"Strategie {s['id']} „{s['titel']}“ wieder einschalten",
+                                       lambda token: strategien.fortsetzen(token, s["id"]), an="Alpaca Papier-Konto")
+            if akt.startswith("paus"):
+                return strategien.pausieren(args.get("nummer") or "")
+            if akt.startswith(("stop", "alle")):
+                return strategien.alle_stoppen()
+            if akt.startswith(("loesch", "lösch")):
+                return strategien.loeschen(args.get("nummer") or "")
+            return strategien.liste()
+        except (strategien.StrategieFehler, alpaca.HandelFehler, LookupError, ValueError, TypeError) as e:
+            return f"Das geht so nicht: {str(e)[:200]}"
+
+    tg.befehle["/strategien"] = tg.befehle["/strategie"] = strategien.befehl
+
+    # Analysen: Depot-Analyse, Markt-Scanner, Wochenbericht (nur lesend)
+    import analysen
+
+    tg.befehle["/depotcheck"] = lambda _e: analysen.depot_analyse()
+    tg.befehle["/scanner"] = lambda e: analysen.scanner(e.split(maxsplit=1)[1] if len(e.split()) > 1 else "alle")
+    tg.befehle["/wochenbericht"] = lambda _e: analysen.wochenbericht()
+    tg.deklarationen += [
+        {"name": "depot_analyse", "description": "Analyse des Alpaca-Depots: Verteilung, Klumpenrisiko, Streuung, Gewinner/Verlierer, "
+         "was heute runterzieht, letzter Monat gegen den S&P 500. Fuer 'wie gut ist mein Depot aufgestellt', 'was zieht runter'.",
+         "parameters": {"type": "OBJECT", "properties": {}}},
+        {"name": "markt_scanner", "description": "Durchsucht ca. 50 grosse US-Werte, ETFs, Krypto und die Watchlist nach Signalen: "
+         "ueberverkauft/ueberkauft (RSI), frischer Auf-/Abwaertstrend (SMA20/50-Kreuz), 52-Wochen-Hoch/Tief. Fuer 'wo tut sich was', "
+         "'such mir Kandidaten'. Danach kannst du Treffer mit markt_analyse oder strategie (testen) vertiefen. Dauert ~20 s.",
+         "parameters": {"type": "OBJECT", "properties": {"art": {"type": "STRING", "description":
+                        "alle, ueberverkauft, ueberkauft, trend_auf, trend_ab, hoch oder tief"}}}},
+        {"name": "wochenbericht", "description": "Wochenbericht jetzt: Depot gegen S&P 500, Strategien (Trades, Gewinn/Verlust), "
+         "aktuelle Signale. Kommt sonst automatisch freitags nach Boersenschluss.", "parameters": {"type": "OBJECT", "properties": {}}}]
+    tg.deklarationen.append(
+        {"name": "strategie", "description": "Eigene Handelsstrategien fuer das Alpaca-PAPIER-Konto. Du darfst Strategien selbst "
+         "entwerfen: mit aktion=testen Varianten an 2 Jahren Kursdaten pruefen (mehrere Parameter ausprobieren, mit Kaufen+Halten "
+         "vergleichen) und Nikola die beste ehrlich vorschlagen. aktion=anlegen schaltet sie ein - nur wenn Nikola das will, braucht "
+         "seine Freigabe (Knopf + PIN); danach handelt sie selbst. Arten: trend (kurz/lang Tage, SMA), rsi (unter/ueber), sparplan "
+         "(tage). Optional tp_proz (Gewinnmitnahme), sl_proz (Stopp). Weitere Aktionen: zeigen, pausieren, fortsetzen, loeschen, stop "
+         "(alle anhalten). Backtests sind Vergangenheit, keine Garantie.",
+         "parameters": {"type": "OBJECT", "properties": {
+             "aktion": {"type": "STRING", "description": "testen, anlegen, zeigen, pausieren, fortsetzen, loeschen oder stop"},
+             "typ": {"type": "STRING", "description": "trend, rsi oder sparplan"},
+             "name": {"type": "STRING", "description": "Wert, z. B. Nvidia, SPY, Bitcoin"},
+             "kurz": {"type": "INTEGER"}, "lang": {"type": "INTEGER"},
+             "unter": {"type": "NUMBER"}, "ueber": {"type": "NUMBER"}, "tage": {"type": "INTEGER"},
+             "tp_proz": {"type": "NUMBER"}, "sl_proz": {"type": "NUMBER"},
+             "betrag_usd": {"type": "NUMBER", "description": "Dollar je Order"},
+             "budget_usd": {"type": "NUMBER", "description": "hoechstens so viel investiert (Sparplan: Summe aller Raten)"},
+             "titel": {"type": "STRING"}, "nummer": {"type": "STRING", "description": "Nummer der Strategie"}},
+             "required": ["aktion"]}})
+
     tg.befehle["/briefing"] = briefing.befehl
     tg.deklarationen.append({"name": "briefing", "description": "Morgen-Briefing jetzt (Wetter, Termine heute, Nachrichten) oder "
                              "Uhrzeit/an/aus einstellen. Fuer 'Briefing', 'was steht heute an und wie ist das Wetter'.",
@@ -261,6 +332,14 @@ def bauen(innen: bool = True):
             return alpaca_lesen()
         if name == "alpaca_order":
             return alpaca_order(args)
+        if name == "strategie":
+            return strategie_werkzeug(args)
+        if name == "depot_analyse":
+            return analysen.depot_analyse()
+        if name == "markt_scanner":
+            return analysen.scanner(args.get("art") or "alle")
+        if name == "wochenbericht":
+            return analysen.wochenbericht()
         if name == "briefing":
             return briefing.befehl(f"/briefing {args.get('einstellung') or ''}")
         if name == "sicherheit_gesamt":
@@ -362,6 +441,10 @@ def main() -> None:
     briefing.starte(tg.senden)
     import watchlist
     watchlist.starte(tg.senden)   # alle 10 Minuten Kurse pruefen: Alarme und starke Tagesbewegungen
+    import strategien
+    strategien.starte(tg.senden)   # alle 5 Minuten: eigene Strategien (nur Papier-Konto)
+    import analysen
+    analysen.starte(tg.senden)     # Wochenbericht freitags nach US-Boersenschluss
     try:
         import selbst_update
         meldung = selbst_update.nach_neustart()

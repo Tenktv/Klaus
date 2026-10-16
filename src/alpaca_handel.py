@@ -215,7 +215,7 @@ def vorbereiten(aktion: str, name: str = "", stueck: float | None = None, betrag
         if stueck < 1 and not _ist_krypto(sym):
             raise HandelFehler(f"Für den Betrag bekomme ich bei {_zahl(limit)} $ Limit nicht mal ein ganzes Stück {sym}.")
     schaetzung = stueck * preis if stueck is not None else betrag_usd
-    if schaetzung > max_order_usd():
+    if seite == "buy" and schaetzung > max_order_usd():   # Verkaufen (Risiko abbauen) ist nicht begrenzt
         raise HandelFehler(f"Die Order wäre etwa {_zahl(schaetzung)} $ groß – mehr als die Grenze von {_zahl(max_order_usd())} $ "
                            "je Order (ALPACA_MAX_ORDER_USD in der .env des Servers).")
     k = konto()
@@ -264,6 +264,17 @@ def ausfuehren(token: str | None, auftrag: Auftrag) -> str:
     menge = f"{o.get('qty')} Stück" if o.get("qty") else f"{o.get('notional')} $"
     return (f"✅ Order an Alpaca ({modus()}-Konto): {'Kauf' if auftrag.seite == 'buy' else 'Verkauf'} {auftrag.symbol} {menge}, "
             f"Status {o.get('status', '?')}, Nr. {str(o.get('id', ''))[:8]}.")
+
+
+def order(order_id: str) -> dict | None:
+    return _api("GET", f"/v2/orders/{order_id}")
+
+
+def papier_automatisch(auftrag: Auftrag) -> dict:
+    """Nur fuer Strategien (strategien.py): Order OHNE Freigabe - ausschliesslich auf dem Papier-Konto."""
+    if live() or auftrag.live or auftrag.seite == "cancel":
+        raise HandelFehler("Automatische Orders gibt es nur auf dem Papier-Konto.")
+    return _api("POST", "/v2/orders", json=auftrag.daten()) or {}
 
 
 # ------------------------------------------------------------------ Schluessel per Telegram (nur Papier)
