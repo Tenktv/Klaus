@@ -369,12 +369,16 @@ def _offene_order_abgleichen(s: dict, senden) -> None:
     if status not in ("filled", "canceled", "expired", "rejected", "done_for_day"):
         return
     menge, preis = float(o.get("filled_qty") or 0), float(o.get("filled_avg_price") or 0)
+    gewinn = (preis - s["einstand"]) * menge if s["offen"]["seite"] == "sell" and menge else 0.0
+    if menge:   # fuer den Wochenbericht
+        s["historie"] = (s.get("historie", []) + [{"datum": dt.date.today().isoformat(), "seite": s["offen"]["seite"],
+                                                    "menge": menge, "preis": preis, "gewinn": round(gewinn, 2)}])[-200:]
+        s["realisiert"] = round(s.get("realisiert", 0.0) + gewinn, 2)
     if s["offen"]["seite"] == "buy" and menge:
         s["einstand"] = (s["einstand"] * s["stueck"] + preis * menge) / (s["stueck"] + menge)
         s["stueck"] += menge
         s["investiert"] += menge * preis
     elif menge:
-        gewinn = (preis - s["einstand"]) * menge
         s["stueck"] = max(0.0, s["stueck"] - menge)
         s["investiert"] = s["einstand"] * s["stueck"]
         if not s["stueck"]:

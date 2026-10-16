@@ -254,6 +254,24 @@ def bauen(innen: bool = True):
             return f"Das geht so nicht: {str(e)[:200]}"
 
     tg.befehle["/strategien"] = tg.befehle["/strategie"] = strategien.befehl
+
+    # Analysen: Depot-Analyse, Markt-Scanner, Wochenbericht (nur lesend)
+    import analysen
+
+    tg.befehle["/depotcheck"] = lambda _e: analysen.depot_analyse()
+    tg.befehle["/scanner"] = lambda e: analysen.scanner(e.split(maxsplit=1)[1] if len(e.split()) > 1 else "alle")
+    tg.befehle["/wochenbericht"] = lambda _e: analysen.wochenbericht()
+    tg.deklarationen += [
+        {"name": "depot_analyse", "description": "Analyse des Alpaca-Depots: Verteilung, Klumpenrisiko, Streuung, Gewinner/Verlierer, "
+         "was heute runterzieht, letzter Monat gegen den S&P 500. Fuer 'wie gut ist mein Depot aufgestellt', 'was zieht runter'.",
+         "parameters": {"type": "OBJECT", "properties": {}}},
+        {"name": "markt_scanner", "description": "Durchsucht ca. 50 grosse US-Werte, ETFs, Krypto und die Watchlist nach Signalen: "
+         "ueberverkauft/ueberkauft (RSI), frischer Auf-/Abwaertstrend (SMA20/50-Kreuz), 52-Wochen-Hoch/Tief. Fuer 'wo tut sich was', "
+         "'such mir Kandidaten'. Danach kannst du Treffer mit markt_analyse oder strategie (testen) vertiefen. Dauert ~20 s.",
+         "parameters": {"type": "OBJECT", "properties": {"art": {"type": "STRING", "description":
+                        "alle, ueberverkauft, ueberkauft, trend_auf, trend_ab, hoch oder tief"}}}},
+        {"name": "wochenbericht", "description": "Wochenbericht jetzt: Depot gegen S&P 500, Strategien (Trades, Gewinn/Verlust), "
+         "aktuelle Signale. Kommt sonst automatisch freitags nach Boersenschluss.", "parameters": {"type": "OBJECT", "properties": {}}}]
     tg.deklarationen.append(
         {"name": "strategie", "description": "Eigene Handelsstrategien fuer das Alpaca-PAPIER-Konto. Du darfst Strategien selbst "
          "entwerfen: mit aktion=testen Varianten an 2 Jahren Kursdaten pruefen (mehrere Parameter ausprobieren, mit Kaufen+Halten "
@@ -316,6 +334,12 @@ def bauen(innen: bool = True):
             return alpaca_order(args)
         if name == "strategie":
             return strategie_werkzeug(args)
+        if name == "depot_analyse":
+            return analysen.depot_analyse()
+        if name == "markt_scanner":
+            return analysen.scanner(args.get("art") or "alle")
+        if name == "wochenbericht":
+            return analysen.wochenbericht()
         if name == "briefing":
             return briefing.befehl(f"/briefing {args.get('einstellung') or ''}")
         if name == "sicherheit_gesamt":
@@ -419,6 +443,8 @@ def main() -> None:
     watchlist.starte(tg.senden)   # alle 10 Minuten Kurse pruefen: Alarme und starke Tagesbewegungen
     import strategien
     strategien.starte(tg.senden)   # alle 5 Minuten: eigene Strategien (nur Papier-Konto)
+    import analysen
+    analysen.starte(tg.senden)     # Wochenbericht freitags nach US-Boersenschluss
     try:
         import selbst_update
         meldung = selbst_update.nach_neustart()
