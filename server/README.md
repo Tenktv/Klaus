@@ -31,4 +31,6 @@ Danach `systemctl enable --now klaus-waechter.timer klaus-scan.timer klaus-fresh
 In die `.env` des Servers: `ALPACA_API_KEY`, `ALPACA_SECRET_KEY` (zuerst Paper-Schluessel), optional `ALPACA_MAX_ORDER_USD`
 (Standard 1000). Echtgeld nur mit `ALPACA_LIVE=1` plus Live-Schluessel - bewusst von Hand, Klaus aendert das nicht.
 Jede Order und jedes Storno laeuft ueber das Freigabe-Gate (Art `handeln`: Telegram-Knopf + PIN, 90 s); kein Leerverkauf.
-Danach `sudo systemctl restart klaus-gehirn` und in Telegram `/alpaca` schicken.
+Ohne SSH: in Telegram `/alpaca_schluessel <Key> <Secret>` - nur Paper-Schluessel (PK...), Klaus loescht die Nachricht
+sofort, prueft die Schluessel bei Alpaca und schreibt sie erst dann in die `.env` (geht nicht an die KI).
+Danach in Telegram `/alpaca` schicken.

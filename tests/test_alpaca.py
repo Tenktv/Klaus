@@ -149,6 +149,23 @@ class AlpacaTests(unittest.TestCase):
                 al.konto_text()
         self.assertIn('ALPACA_API_KEY', str(f.exception))
 
+    def test_schluessel_per_telegram_nur_papier_und_geprueft(self):
+        gespeichert = {}
+        speichern = gespeichert.__setitem__
+        paper, secret = 'PK' + 'A1' * 9, 'x' * 40
+        self.assertIn('So:', al.schluessel_setzen('/alpaca_schluessel nurEins', speichern))
+        self.assertIn('Paper', al.schluessel_setzen(f'/alpaca_schluessel AK{"B2" * 9} {secret}', speichern))
+        with patch.dict(os.environ, {'ALPACA_LIVE': '1'}):
+            self.assertIn('ALPACA_LIVE=1', al.schluessel_setzen(f'/alpaca_schluessel {paper} {secret}', speichern))
+        with patch.object(al.requests, 'get', return_value=type('R', (), {'status_code': 401})()):
+            self.assertIn('nichts gespeichert', al.schluessel_setzen(f'/alpaca_schluessel {paper} {secret}', speichern))
+        self.assertEqual(gespeichert, {})
+        api, _ = falsche_api()
+        with patch.object(al.requests, 'get', return_value=type('R', (), {'status_code': 200})()), patch.object(al, '_api', api):
+            text = al.schluessel_setzen(f'/alpaca_schluessel {paper} {secret}', speichern)
+        self.assertIn('gespeichert', text)
+        self.assertEqual(gespeichert, {'ALPACA_API_KEY': paper, 'ALPACA_SECRET_KEY': secret})
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -264,3 +264,28 @@ def ausfuehren(token: str | None, auftrag: Auftrag) -> str:
     menge = f"{o.get('qty')} Stück" if o.get("qty") else f"{o.get('notional')} $"
     return (f"✅ Order an Alpaca ({modus()}-Konto): {'Kauf' if auftrag.seite == 'buy' else 'Verkauf'} {auftrag.symbol} {menge}, "
             f"Status {o.get('status', '?')}, Nr. {str(o.get('id', ''))[:8]}.")
+
+
+# ------------------------------------------------------------------ Schluessel per Telegram (nur Papier)
+def schluessel_setzen(eingabe: str, speichern) -> str:
+    """/alpaca_schluessel <KEY> <SECRET> - nur Paper-Schluessel (PK...), vorher gegen Alpaca geprueft.
+    speichern(name, wert) schreibt in die .env und os.environ. Echtgeld laesst sich so bewusst NICHT einschalten."""
+    teile = eingabe.split()
+    if len(teile) != 3:
+        return "So: /alpaca_schluessel <API-Key> <Secret> (Paper-Schlüssel von app.alpaca.markets). Die Nachricht lösche ich sofort."
+    key, secret = teile[1].strip(), teile[2].strip()
+    if not re.fullmatch(r"PK[A-Z0-9]{8,40}", key) or not re.fullmatch(r"[A-Za-z0-9/+=]{20,80}", secret):
+        return ("Das sehen nicht nach Paper-Schlüsseln aus (Key beginnt mit PK). Per Telegram nehme ich nur Paper-Schlüssel – "
+                "Echtgeld richtest du bewusst direkt auf dem Server ein.")
+    if live():
+        return "Auf dem Server ist ALPACA_LIVE=1 gesetzt – Schlüssel ändere ich dann nicht per Telegram."
+    try:
+        r = requests.get(TRADING[False] + "/v2/account", timeout=15,
+                         headers={"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret})
+    except requests.RequestException as e:
+        return f"Alpaca ist gerade nicht erreichbar ({type(e).__name__}) – nichts gespeichert."
+    if r.status_code != 200:
+        return f"Alpaca lehnt die Schlüssel ab (HTTP {r.status_code}) – nichts gespeichert. Tippfehler?"
+    speichern("ALPACA_API_KEY", key)
+    speichern("ALPACA_SECRET_KEY", secret)
+    return "🔑 Alpaca-Paper-Schlüssel gespeichert und geprüft. Deine Nachricht ist gelöscht.\n\n" + konto_text()

@@ -203,6 +203,8 @@ def bauen(innen: bool = True):
                                an=f"Alpaca {alpaca.modus()}-Konto")
 
     tg.befehle["/alpaca"] = alpaca_lesen
+    tg.befehle["/alpaca_schluessel"] = lambda eingabe: alpaca.schluessel_setzen(eingabe, TB._env_setzen)
+    tg.geheime_befehle.add("/alpaca_schluessel")
     tg.deklarationen += [
         {"name": "alpaca_konto", "description": "Echtes Broker-Konto bei Alpaca (Standard: Papier-Konto von Alpaca): Kontostand, "
          "Positionen, offene Orders mit Nummer. Fuer 'wie steht mein Alpaca-Depot', 'was habe ich bei Alpaca'.",
