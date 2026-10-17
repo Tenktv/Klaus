@@ -12,6 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 import freigabe
 import pc_update as pu
 
+ECHTE_SPIEL_ERKENNUNG = pu.spiel_laeuft   # vor dem Patchen in setUp merken
+
 TEST_OHNE_APP = ("import glob, py_compile; [py_compile.compile(f, doraise=True) for f in glob.glob('src/*.py')]; print('TEST_OK')")
 
 
@@ -46,6 +48,9 @@ class PcUpdateTests(unittest.TestCase):
                                          fern=SimpleNamespace(senden=self.gesendet.append))
         pu._zuletzt_gemeldet['text'] = ''
         pu._gefragt['stand'] = ''
+        p = patch.object(pu, 'spiel_laeuft', lambda: False)   # echte Spiele auf dem Testrechner nicht mitzaehlen
+        p.start()
+        self.addCleanup(p.stop)
         self.antworten = []   # simulierte Freigaben (Knopf + PIN): True = freigegeben
         self.gefragt = []
 
@@ -141,6 +146,19 @@ class PcUpdateTests(unittest.TestCase):
         self.commit('x = 2\n', 'Neu')
         self.assertTrue(pu.schritt(self.assistent))
         self.assertEqual((self.pc / 'src' / 'a.py').read_text(), 'x = 2\n')
+
+    def test_kein_update_waehrend_spiel(self):
+        self.commit('x = 2\n', 'Neu')
+        with patch.object(pu, 'spiel_laeuft', lambda: True):
+            self.assertFalse(pu.schritt(self.assistent))
+        self.assertEqual((self.pc / 'src' / 'a.py').read_text(), 'x = 1\n')
+        self.assertTrue(pu.schritt(self.assistent))
+
+    def test_spiel_erkennung(self):
+        with patch('psutil.process_iter', lambda attrs: [SimpleNamespace(info={'name': 'RobloxPlayerBeta.exe'})]):
+            self.assertTrue(ECHTE_SPIEL_ERKENNUNG())
+        with patch('psutil.process_iter', lambda attrs: [SimpleNamespace(info={'name': 'notepad.exe'})]):
+            self.assertFalse(ECHTE_SPIEL_ERKENNUNG())
 
     def test_abschaltbar(self):
         self.commit('x = 2\n', 'Neu')

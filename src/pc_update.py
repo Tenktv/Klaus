@@ -50,9 +50,25 @@ def neue_commits() -> list[str]:
     return [z for z in _git("log", "--oneline", "--no-decorate", "HEAD..origin/main").splitlines() if z.strip()]
 
 
+SPIELE = ("robloxplayerbeta", "league of legends", "valorant-win64-shipping", "cs2", "skyrimse", "tesv",
+          "minecraft", "javaw", "fortniteclient-win64-shipping", "gta5", "rocketleague")
+
+
+def spiel_laeuft() -> bool:
+    """Laeuft gerade ein Spiel? Dann nie neu starten (Ruckler/Absturz mitten im Spiel)."""
+    try:
+        import psutil
+        return any((p.info["name"] or "").lower().removesuffix(".exe") in SPIELE for p in psutil.process_iter(["name"]))
+    except Exception:
+        return False
+
+
 def ruhig(assistent) -> bool:
-    """Nur updaten, wenn Klaus gerade nichts fuer Nikola tut."""
+    """Nur updaten, wenn Klaus gerade nichts fuer Nikola tut - und niemand spielt."""
     import freigabe
+
+    if spiel_laeuft():
+        return False
 
     aktiv = max(getattr(assistent, "letzte_aktivitaet", 0.0), getattr(getattr(assistent, "gemini", None), "letzte_aktivitaet", 0.0) or 0.0)
     protokoll = getattr(assistent, "protokoll", None)
