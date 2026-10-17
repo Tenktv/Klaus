@@ -272,6 +272,61 @@ def bauen(innen: bool = True):
 
     tg.befehle["/strategien"] = tg.befehle["/strategie"] = strategien.befehl
 
+    # CFDs mit Hebel - NUR Demo-Konto von Capital.com (Spielgeld), autonom wie die Alpaca-Strategien
+    import cfd_demo
+
+    tg.befehle["/cfd"] = cfd_demo.befehl
+    tg.befehle["/cfd_schluessel"] = lambda eingabe: cfd_demo.schluessel_setzen(eingabe, TB._env_setzen)
+    tg.geheime_befehle.add("/cfd_schluessel")
+
+    def cfd_werkzeug(args: dict) -> str:
+        akt = (args.get("aktion") or "zeigen").lower()
+        p = {k: args.get(k) for k in ("kurz", "lang", "unter", "ueber", "fenster")}
+        weitere = {"richtung": args.get("richtung") or "beide", "aufloesung": args.get("aufloesung") or "HOUR",
+                   "sl_proz": args.get("sl_proz") or 2.0, "tp_proz": args.get("tp_proz") or 4.0}
+        try:
+            if akt.startswith("konto"):
+                return cfd_demo.konto_text()
+            if akt.startswith("such"):
+                treffer = cfd_demo.suchen(args.get("epic") or args.get("name") or "")
+                return "; ".join(f"{t['name']} (epic {t['epic']}, {t['typ']}, {t['status']})" for t in treffer) or "Nichts gefunden."
+            if akt.startswith("test"):
+                return cfd_demo.testen(args.get("typ") or "", args.get("epic") or "", p, **weitere)
+            if akt.startswith(("anleg", "start", "aktiv")):
+                return cfd_demo.anlegen(args.get("typ") or "", args.get("epic") or "", p, args.get("groesse") or 0,
+                                        titel=args.get("titel") or "", **weitere)
+            if akt.startswith("paus"):
+                return cfd_demo.pausieren(args.get("nummer") or "")
+            if akt.startswith("fortsetz"):
+                return cfd_demo.fortsetzen(args.get("nummer") or "")
+            if akt.startswith(("loesch", "lösch")):
+                return cfd_demo.loeschen(args.get("nummer") or "")
+            if akt.startswith("schliess"):
+                return cfd_demo.alles_schliessen()
+            if akt.startswith("stop"):
+                return cfd_demo.alle_stoppen()
+            return cfd_demo.liste()
+        except (cfd_demo.CfdFehler, ValueError, TypeError, KeyError) as e:
+            return f"CFD-Demo: {str(e)[:200]}"
+
+    tg.deklarationen.append(
+        {"name": "cfd_demo", "description": "CFD-Handel mit Hebel auf dem DEMO-Konto von Capital.com (nur Spielgeld). Du darfst "
+         "selbst Strategien entwerfen: erst aktion=suchen (epic finden, z. B. Gold, US100, EURUSD, Bitcoin), dann aktion=testen "
+         "(Backtest, mehrere Varianten vergleichen), dann aktion=anlegen - danach handelt sie autonom long/short mit Stop-Loss und "
+         "Gewinnziel. Arten: trend (kurz/lang Kerzen), rsi (unter/ueber), ausbruch (fenster). Weitere Aktionen: konto, zeigen, "
+         "pausieren, fortsetzen, loeschen, stop (alle anhalten), schliessen (alle Positionen zu). Backtests sind keine Garantie.",
+         "parameters": {"type": "OBJECT", "properties": {
+             "aktion": {"type": "STRING", "description": "konto, suchen, testen, anlegen, zeigen, pausieren, fortsetzen, loeschen, stop, schliessen"},
+             "epic": {"type": "STRING", "description": "Markt-Kennung aus suchen (bei suchen: Suchbegriff)"},
+             "typ": {"type": "STRING", "description": "trend, rsi oder ausbruch"},
+             "richtung": {"type": "STRING", "description": "beide, long oder short"},
+             "aufloesung": {"type": "STRING", "description": "MINUTE_15, MINUTE_30, HOUR (Standard), HOUR_4, DAY"},
+             "kurz": {"type": "NUMBER"}, "lang": {"type": "NUMBER"}, "unter": {"type": "NUMBER"}, "ueber": {"type": "NUMBER"},
+             "fenster": {"type": "NUMBER"}, "groesse": {"type": "NUMBER", "description": "Positionsgroesse in Kontrakten/Einheiten"},
+             "sl_proz": {"type": "NUMBER", "description": "Stop-Loss in % vom Kurs (Standard 2)"},
+             "tp_proz": {"type": "NUMBER", "description": "Gewinnziel in % vom Kurs (Standard 4)"},
+             "titel": {"type": "STRING"}, "nummer": {"type": "STRING"}}, "required": ["aktion"]}})
+
     # Analysen: Depot-Analyse, Markt-Scanner, Wochenbericht (nur lesend)
     import analysen
 
@@ -381,6 +436,8 @@ def bauen(innen: bool = True):
             name = "alpaca_order" if name == "papier_order" else "alpaca_konto"
             if args.get("betrag_eur") and not args.get("betrag_usd"):
                 args = {**args, "betrag_usd": args["betrag_eur"]}
+        if name == "cfd_demo":
+            return cfd_werkzeug(args)
         if name == "alpaca_konto":
             return alpaca_lesen()
         if name == "alpaca_order":
@@ -501,6 +558,7 @@ def main() -> None:
     watchlist.starte(tg.senden)   # alle 10 Minuten Kurse pruefen: Alarme und starke Tagesbewegungen
     import strategien
     strategien.starte(tg.senden)   # alle 5 Minuten: eigene Strategien (nur Papier-Konto)
+    cfd_demo.starte(tg.senden)     # alle 5 Minuten: CFD-Strategien (nur Capital.com-Demo)
     import analysen
     analysen.starte(tg.senden)     # Wochenbericht freitags nach US-Boersenschluss
     try:

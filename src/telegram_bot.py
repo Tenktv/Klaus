@@ -66,6 +66,8 @@ Es gibt keine Betragsgrenze: du darfst die ganze Kaufkraft nutzen, auch mit Hebe
 gehebelten ETFs (z. B. TQQQ, SOXL), wenn er das will - sag dann klar, dass Verluste mehrfach wirken.
 Fuer dauerhaftes Selbst-Handeln: Strategie entwerfen, testen und mit strategie (aktion=anlegen) einschalten (danach handelt
 sie allein auf dem Papier-Konto). Lehne Paper-Trading nicht ab. Sei bei Backtests ehrlich.
+CFDs mit Hebel (long UND short, Gold, Indizes, Devisen, Krypto): Werkzeug cfd_demo - NUR das Demo-Konto von Capital.com
+(Spielgeld), autonom: suchen -> testen -> anlegen. Echtgeld-CFDs gibt es in Klaus nicht.
 Keine Anlageberatung.
 Sag NIE, du haettest etwas getan, wenn kein Werkzeug es bestaetigt hat. Fehlt dir ein Werkzeug, sag das offen - tu nicht so,
 als waere etwas erledigt. Herunterfahren des PCs: weise darauf hin, dass er sich danach nicht aus der Ferne wecken laesst.
@@ -157,6 +159,7 @@ STATUS_TEXTE = {
     "sicherheit_gesamt": "🛡️ Ich prüfe Server und PC …", "briefing": "☀️ Ich stelle dein Briefing zusammen …",
     "update_einspielen": "⬇️ Ich schaue nach Updates …", "depot_status": "💼 Ich rechne dein Depot durch …",
     "papier_order": "💼 Ich bearbeite die Papier-Order …", "alpaca_konto": "📊 Ich schaue ins Alpaca-Konto …",
+    "cfd_demo": "📉 Ich arbeite am CFD-Demo-Konto …",
     "alpaca_order": "📊 Ich bereite die Alpaca-Order vor …", "alpaca_hebel": "⚖️ Ich stelle den Hebel ein …", "strategie": "🤖 Ich arbeite an der Strategie …", "pc_status": "💻 Ich prüfe deinen PC …",
     "frage_claude": "🧠 Ich frage Claude …", "projekt_bauen": "🛠 Ich gebe den Auftrag an Claude …", "depot_analyse": "🔍 Ich analysiere dein Depot …",
     "markt_scanner": "🛰 Ich scanne den Markt (ca. 20 s) …", "wochenbericht": "🗓 Ich schreibe den Wochenbericht …", "oeffne": "🖥️ Ich öffne das am PC …",
@@ -633,6 +636,7 @@ class TelegramKlaus:
     WERKZEUG_GRUPPEN = [
         (r"kalender|termin|morgen|heute|uhr|woche|frei|verabred|seminar", ["kalender_lesen", "termin_eintragen", "zeit_frei"]),
         (r"aktie|b(ö|oe)rse|kurs|depot|bitcoin|dax|nvidia|tesla|apple|analys|chart|markt|trading", ["markt_analyse", "papier_order", "depot_status"]),
+        (r"cfd|hebel|demo|capital|gold|forex|devisen|eurusd|short|leerverkauf|us100|nasdaq|dax", ["cfd_demo"]),
         (r"alpaca|broker|order|kauf|verkauf|storn|position|trade|trading|paper|papier|handel|spielgeld|investier|aktien?\b",
          ["alpaca_konto", "alpaca_order", "strategie", "markt_analyse"]),
         (r"hebel|margin|leverage|gehebelt|\d+ ?x\b", ["alpaca_hebel", "alpaca_konto", "alpaca_order"]),
