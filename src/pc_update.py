@@ -22,8 +22,14 @@ MARKER = BASE_DIR / "data" / "pc_update_marker.json"
 TAKT_S = 30 * 60
 ERSTE_PRUEFUNG_S = 3 * 60
 RUHE_S = 10 * 60
+# Undefinierte Namen (z. B. vergessener Import in main) - laden allein findet das nicht; ohne pyflakes wird es uebersprungen
+FLAKES = ("\ntry:\n    import io, pyflakes.api as pf, pyflakes.reporter as pr\nexcept ImportError:\n    pf = None\n"
+          "if pf:\n    out = io.StringIO()\n    for f in glob.glob('src/*.py'):\n        pf.checkPath(f, pr.Reporter(out, out))\n"
+          "    fehler = [z for z in out.getvalue().splitlines() if 'undefined name' in z]\n"
+          "    if fehler:\n        raise SystemExit('pyflakes: ' + fehler[0])\n")
 TEST = ("import glob, py_compile, sys; sys.path.insert(0, 'src'); "
-        "[py_compile.compile(f, doraise=True) for f in glob.glob('src/*.py')]; import assistent; print('TEST_OK')")
+        "[py_compile.compile(f, doraise=True) for f in glob.glob('src/*.py')]; ")
+TEST = TEST + FLAKES + "import assistent; print('TEST_OK')"
 _OHNE_FENSTER = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 

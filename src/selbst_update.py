@@ -21,8 +21,14 @@ import freigabe
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 MARKER = BASE_DIR / "data" / "update_marker.json"
+# Undefinierte Namen (z. B. vergessener Import in main) - laden allein findet das nicht; ohne pyflakes wird es uebersprungen
+FLAKES = ("\ntry:\n    import io, pyflakes.api as pf, pyflakes.reporter as pr\nexcept ImportError:\n    pf = None\n"
+          "if pf:\n    out = io.StringIO()\n    for f in glob.glob('src/*.py'):\n        pf.checkPath(f, pr.Reporter(out, out))\n"
+          "    fehler = [z for z in out.getvalue().splitlines() if 'undefined name' in z]\n"
+          "    if fehler:\n        raise SystemExit('pyflakes: ' + fehler[0])\n")
 TEST = ("import glob, py_compile, sys; sys.path.insert(0, 'src'); "
-        "[py_compile.compile(f, doraise=True) for f in glob.glob('src/*.py')]; import server_gehirn; print('TEST_OK')")
+        "[py_compile.compile(f, doraise=True) for f in glob.glob('src/*.py')]; ")
+TEST = TEST + FLAKES + "import server_gehirn; print('TEST_OK')"
 
 
 def _git(*args: str, frist: float = 120) -> str:

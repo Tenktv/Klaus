@@ -22,3 +22,4 @@ playwright
 Pillow
 PyAutoGUI>=0.9.54
 tzdata
+pyflakes
