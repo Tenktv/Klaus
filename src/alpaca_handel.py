@@ -7,7 +7,7 @@ Klaus - Handel ueber Alpaca (US-Aktien, ETFs, Krypto). Laeuft auf dem Server, Sc
 
 Standard ist das PAPIER-Konto von Alpaca (Spielgeld). Echtgeld nur, wenn in der .env des Servers ALPACA_LIVE=1 steht
 UND dort Live-Schluessel eingetragen sind - das kann Klaus nicht selbst umstellen.
-Schutz: jede Order einzeln freigeben, Hoechstbetrag je Order (ALPACA_MAX_ORDER_USD), kein Leerverkauf, nur Verkauf von
+Schutz: jede Order einzeln freigeben, Kaufkraft-Pruefung, optional Hoechstbetrag je Order (ALPACA_MAX_ORDER_USD), kein Leerverkauf, nur Verkauf von
 Stuecken, die im Depot liegen. Keine Anlageberatung.
 """
 from __future__ import annotations
@@ -41,11 +41,13 @@ def konfiguriert() -> bool:
     return bool(os.getenv("ALPACA_API_KEY", "").strip() and os.getenv("ALPACA_SECRET_KEY", "").strip())
 
 
-def max_order_usd() -> float:
+def max_order_usd() -> float | None:
+    """Hoechstbetrag je Kauf-Order in USD - None = keine Grenze (Standard; die Kaufkraft begrenzt trotzdem)."""
     try:
-        return max(1.0, float(os.getenv("ALPACA_MAX_ORDER_USD", "1000")))
+        wert = float(os.getenv("ALPACA_MAX_ORDER_USD", "").strip() or 0)
     except ValueError:
-        return 1000.0
+        return None
+    return wert if wert > 0 else None
 
 
 def modus() -> str:
@@ -215,7 +217,7 @@ def vorbereiten(aktion: str, name: str = "", stueck: float | None = None, betrag
         if stueck < 1 and not _ist_krypto(sym):
             raise HandelFehler(f"Für den Betrag bekomme ich bei {_zahl(limit)} $ Limit nicht mal ein ganzes Stück {sym}.")
     schaetzung = stueck * preis if stueck is not None else betrag_usd
-    if seite == "buy" and schaetzung > max_order_usd():   # Verkaufen (Risiko abbauen) ist nicht begrenzt
+    if seite == "buy" and max_order_usd() and schaetzung > max_order_usd():   # Verkaufen ist nie begrenzt
         raise HandelFehler(f"Die Order wäre etwa {_zahl(schaetzung)} $ groß – mehr als die Grenze von {_zahl(max_order_usd())} $ "
                            "je Order (ALPACA_MAX_ORDER_USD in der .env des Servers).")
     k = konto()

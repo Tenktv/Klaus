@@ -86,6 +86,14 @@ class AlpacaTests(unittest.TestCase):
         with patch.object(al, '_api', api), self.assertRaises(al.HandelFehler):
             al.vorbereiten('kaufen', 'NVDA', stueck=2)
 
+    def test_ohne_grenze_nur_kaufkraft(self):
+        api, _ = falsche_api(preis=600.0)
+        with patch.dict(os.environ, {'ALPACA_MAX_ORDER_USD': ''}), patch.object(al, '_api', api):
+            self.assertIsNone(al.max_order_usd())
+            self.assertEqual(al.vorbereiten('kaufen', 'NVDA', stueck=8).stueck, 8)   # 4.800 $ ohne Grenze ok
+            with self.assertRaises(al.HandelFehler):
+                al.vorbereiten('kaufen', 'NVDA', stueck=9)                           # 5.400 $ > Kaufkraft 5.000 $
+
     def test_kein_leerverkauf(self):
         api, _ = falsche_api()
         with patch.object(al, '_api', api), self.assertRaises(al.HandelFehler):

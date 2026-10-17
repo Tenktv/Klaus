@@ -13,7 +13,7 @@ Dazu optional Gewinnmitnahme (tp_proz) und Verlustbegrenzung (sl_proz) auf den E
 
 Sicherheit: handelt NUR, solange Alpaca im Papier-Modus ist (ALPACA_LIVE leer/0) - mit Echtgeld nie automatisch.
 Grenzen: hoechstens MAX_AKTIV aktive Strategien, Budgets zusammen hoechstens STRATEGIE_GESAMT_USD (.env, Std. 5000),
-je Order hoechstens ALPACA_MAX_ORDER_USD, MAX_ORDERS_TAG Orders je Strategie und Tag, kein Leerverkauf.
+je Order hoechstens ALPACA_MAX_ORDER_USD (falls gesetzt), MAX_ORDERS_TAG Orders je Strategie und Tag, kein Leerverkauf.
 `/strategien stop` haelt sofort alle an. Keine Anlageberatung. Daten: data/strategien.json (im Server-Backup).
 """
 from __future__ import annotations
@@ -222,8 +222,9 @@ def vorbereiten(typ: str, name: str, params: dict, betrag_usd: float, budget_usd
     sym = alpaca.symbol(name)
     p = regeln_pruefen(typ, params)
     betrag = float(betrag_usd or 0)
-    if not 1 <= betrag <= alpaca.max_order_usd():
-        raise StrategieFehler(f"Betrag je Order: 1 bis {_zahl(alpaca.max_order_usd(), 0)} $.")
+    grenze = alpaca.max_order_usd()
+    if betrag < 1 or (grenze and betrag > grenze):
+        raise StrategieFehler(f"Betrag je Order: ab 1 $" + (f" bis {_zahl(grenze, 0)} $ (ALPACA_MAX_ORDER_USD)." if grenze else "."))
     budget = float(budget_usd or (betrag * 10 if typ == "sparplan" else betrag))
     if budget < betrag:
         raise StrategieFehler("Das Budget muss mindestens so groß sein wie der Betrag je Order.")
