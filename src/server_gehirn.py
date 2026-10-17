@@ -558,6 +558,7 @@ def main() -> None:
     watchlist.starte(tg.senden)   # alle 10 Minuten Kurse pruefen: Alarme und starke Tagesbewegungen
     import strategien
     strategien.starte(tg.senden)   # alle 5 Minuten: eigene Strategien (nur Papier-Konto)
+    import cfd_demo
     cfd_demo.starte(tg.senden)     # alle 5 Minuten: CFD-Strategien (nur Capital.com-Demo)
     import analysen
     analysen.starte(tg.senden)     # Wochenbericht freitags nach US-Boersenschluss
