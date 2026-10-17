@@ -29,7 +29,7 @@ AB_AUF = np.concatenate([np.linspace(200, 100, 150), np.linspace(100, 220, 150)]
 
 
 @patch.dict(os.environ, {'ALPACA_API_KEY': 'k', 'ALPACA_SECRET_KEY': 's', 'ALPACA_LIVE': '', 'ALPACA_MAX_ORDER_USD': '1000',
-                         'STRATEGIE_GESAMT_USD': '5000'})
+                         'STRATEGIE_GESAMT_USD': '5000', 'STRATEGIE_MAX_ORDERS_TAG': '4', 'STRATEGIE_MAX_AKTIV': ''})
 class StrategieTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -106,6 +106,13 @@ class StrategieTests(unittest.TestCase):
         self.assertIn('1', st.befehl('/strategien stop'))
         self.assertFalse(st.laden()['strategien'][0]['aktiv'])
 
+    def test_ohne_env_keine_grenzen(self):
+        with patch.dict(os.environ, {'STRATEGIE_GESAMT_USD': '', 'STRATEGIE_MAX_ORDERS_TAG': '', 'ALPACA_MAX_ORDER_USD': ''}):
+            self.assertEqual((st.gesamt_usd(), st.max_aktiv(), st.max_orders_tag()), (None, None, None))
+            for i, sym in enumerate(['NVDA', 'AAPL', 'MSFT', 'TSLA', 'AMD', 'META', 'SPY']):   # mehr als frueher 5
+                st.anlegen(self._entwurf(name=sym, betrag=50000, budget=50000))
+            self.assertEqual(len(st.laden()['strategien']), 7)
+
     # ---------------------------------------------------------- Hintergrund-Schritte
     def _strategie(self, typ='trend', **kw):
         s = {'id': 'abc123', 'titel': 'Test', 'symbol': 'NVDA', 'typ': typ, 'p': st.regeln_pruefen(typ, kw.pop('p', {})),
@@ -158,7 +165,21 @@ class StrategieTests(unittest.TestCase):
         for _ in range(6):
             s['offen'] = None
             self._lauf(s, AUF)
-        self.assertEqual(len(self.orders), st.MAX_ORDERS_TAG)
+        self.assertEqual(len(self.orders), 4)
+
+    def test_fehlgeschlagene_order_pausiert_eine_stunde(self):
+        s = self._strategie()
+
+        def kaputt(*a, **k):
+            raise al.HandelFehler('Nicht genug Kaufkraft')
+        with patch.object(st, 'tageskurse', lambda sym, b='1y': (tage(len(AUF)), AUF)), patch.object(al, 'vorbereiten', kaputt):
+            st.schritt(s, self.senden, True)
+            st.schritt(s, self.senden, True)           # gleich danach: Pause, keine zweite Meldung
+        self.assertEqual(len(self.gesendet), 1)
+        self.assertIn('in einer Stunde', self.gesendet[0])
+        s['pause_bis'] = 0
+        self._lauf(s, AUF)
+        self.assertEqual(len(self.orders), 1)
 
     def test_sparplan_takt_und_budget(self):
         s = self._strategie('sparplan', p={'tage': 7}, betrag_usd=100.0, budget_usd=150.0)

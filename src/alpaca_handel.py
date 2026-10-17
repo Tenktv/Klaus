@@ -143,8 +143,9 @@ def konto_text() -> str:
     k = konto()
     wert, vortag = float(k.get("equity") or 0), float(k.get("last_equity") or 0)
     tag = wert - vortag
+    kraft = float(k.get("buying_power") or 0)
     zeilen = [f"📊 Alpaca ({modus()}-Konto): Wert {_zahl(wert)} $, Bargeld {_zahl(k.get('cash') or 0)} $, "
-              f"Kaufkraft {_zahl(k.get('buying_power') or 0)} $, heute {'+' if tag >= 0 else '−'}{_zahl(abs(tag))} $."]
+              f"Kaufkraft {_zahl(kraft)} $ (Hebel {k.get('multiplier', '1')}x), heute {'+' if tag >= 0 else '−'}{_zahl(abs(tag))} $."]
     if k.get("trading_blocked") or k.get("account_blocked"):
         zeilen.append("⚠️ Das Konto ist für Handel gesperrt.")
     pos = positionen()
@@ -277,6 +278,22 @@ def _senden(auftrag: Auftrag) -> str:
     menge = f"{o.get('qty')} Stück" if o.get("qty") else f"{o.get('notional')} $"
     return (f"✅ Order an Alpaca ({modus()}-Konto): {'Kauf' if auftrag.seite == 'buy' else 'Verkauf'} {auftrag.symbol} {menge}, "
             f"Status {o.get('status', '?')}, Nr. {str(o.get('id', ''))[:8]}.")
+
+
+def hebel_setzen(faktor) -> str:
+    """Margin-Hebel des Kontos: 1 (kein Hebel), 2 (ueber Nacht) oder 4 (Daytrading, ab 25.000 $). Nur Papier-Konto."""
+    if live():
+        return "Den Hebel beim Echtgeld-Konto stellst du bewusst selbst bei Alpaca ein, nicht über mich."
+    try:
+        f = int(float(faktor))
+    except (TypeError, ValueError):
+        f = 0
+    if f not in (1, 2, 4):
+        return "Hebel geht nur 1-, 2- oder 4-fach (4-fach nur fürs Daytrading ab 25.000 $ Kontowert)."
+    _api("PATCH", "/v2/account/configurations", json={"max_margin_multiplier": str(f)})
+    k = konto()
+    return (f"⚖️ Hebel auf {f}x gestellt (Papier-Konto). Kaufkraft jetzt {_zahl(k.get('buying_power') or 0)} $ "
+            f"bei {_zahl(k.get('equity') or 0)} $ Kontowert. Mit Hebel wirken Gewinne UND Verluste mehrfach.")
 
 
 def order(order_id: str) -> dict | None:

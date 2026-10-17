@@ -12,8 +12,9 @@ Strategie-Arten (feste Regeln, kein frei ausgefuehrter Code):
 Dazu optional Gewinnmitnahme (tp_proz) und Verlustbegrenzung (sl_proz) auf den Einstandspreis.
 
 Sicherheit: handelt NUR, solange Alpaca im Papier-Modus ist (ALPACA_LIVE leer/0) - mit Echtgeld nie automatisch.
-Grenzen: hoechstens MAX_AKTIV aktive Strategien, Budgets zusammen hoechstens STRATEGIE_GESAMT_USD (.env, Std. 5000),
-je Order hoechstens ALPACA_MAX_ORDER_USD (falls gesetzt), MAX_ORDERS_TAG Orders je Strategie und Tag, kein Leerverkauf.
+Grenzen (alle optional in der .env, Standard: keine): STRATEGIE_MAX_AKTIV, STRATEGIE_GESAMT_USD, STRATEGIE_MAX_ORDERS_TAG,
+ALPACA_MAX_ORDER_USD. Immer: Kaufkraft des Kontos (inkl. Hebel/Margin), kein Leerverkauf, nach einer fehlgeschlagenen
+Order 1 Stunde Pause fuer diese Strategie (kein Fehler-Spam).
 `/strategien stop` haelt sofort alle an. Keine Anlageberatung. Daten: data/strategien.json (im Server-Backup).
 """
 from __future__ import annotations
@@ -35,8 +36,7 @@ DATEI = BASE_DIR / "data" / "strategien.json"
 ART = "strategie"
 TYPEN = ("trend", "rsi", "sparplan")
 TAKT_S = 300
-MAX_AKTIV = 5
-MAX_ORDERS_TAG = 4
+FEHLER_PAUSE_S = 3600
 _sperre = threading.Lock()
 
 
@@ -44,11 +44,27 @@ class StrategieFehler(Exception):
     """Verstaendliche Meldung fuer Nikola."""
 
 
-def gesamt_usd() -> float:
+def _grenze(name: str) -> float | None:
+    """Optionale Grenze aus der .env - leer/0/ungueltig = keine Grenze."""
     try:
-        return max(0.0, float(os.getenv("STRATEGIE_GESAMT_USD", "5000")))
+        wert = float(os.getenv(name, "").strip() or 0)
     except ValueError:
-        return 5000.0
+        return None
+    return wert if wert > 0 else None
+
+
+def gesamt_usd() -> float | None:
+    return _grenze("STRATEGIE_GESAMT_USD")
+
+
+def max_aktiv() -> int | None:
+    g = _grenze("STRATEGIE_MAX_AKTIV")
+    return int(g) if g else None
+
+
+def max_orders_tag() -> int | None:
+    g = _grenze("STRATEGIE_MAX_ORDERS_TAG")
+    return int(g) if g else None
 
 
 # ------------------------------------------------------------------ Speicher
@@ -228,9 +244,9 @@ def vorbereiten(typ: str, name: str, params: dict, betrag_usd: float, budget_usd
     if budget < betrag:
         raise StrategieFehler("Das Budget muss mindestens so groß sein wie der Betrag je Order.")
     aktive = [s for s in laden()["strategien"] if s["aktiv"]]
-    if len(aktive) >= MAX_AKTIV:
-        raise StrategieFehler(f"Es laufen schon {MAX_AKTIV} Strategien – erst eine pausieren oder löschen.")
-    if sum(s["budget_usd"] for s in aktive) + budget > gesamt_usd():
+    if max_aktiv() and len(aktive) >= max_aktiv():
+        raise StrategieFehler(f"Es laufen schon {max_aktiv()} Strategien (STRATEGIE_MAX_AKTIV) – erst eine pausieren oder löschen.")
+    if gesamt_usd() and sum(s["budget_usd"] for s in aktive) + budget > gesamt_usd():
         raise StrategieFehler(f"Zusammen wären es mehr als {_zahl(gesamt_usd(), 0)} $ Strategie-Budget (STRATEGIE_GESAMT_USD).")
     if any(s["symbol"] == sym and s["aktiv"] for s in aktive):
         raise StrategieFehler(f"Für {sym} läuft schon eine Strategie – je Wert nur eine.")
@@ -288,7 +304,7 @@ def fortsetzen_pruefen(nummer: str) -> dict:
     if alpaca.live():
         raise StrategieFehler("Alpaca steht auf ECHTGELD – automatische Strategien nur mit Papier.")
     aktive = [x for x in d["strategien"] if x["aktiv"]]
-    if len(aktive) >= MAX_AKTIV or sum(x["budget_usd"] for x in aktive) + s["budget_usd"] > gesamt_usd():
+    if (max_aktiv() and len(aktive) >= max_aktiv()) or (gesamt_usd() and sum(x["budget_usd"] for x in aktive) + s["budget_usd"] > gesamt_usd()):
         raise StrategieFehler("Dann wären es zu viele Strategien oder zu viel Budget.")
     return s
 
@@ -345,15 +361,17 @@ def _order(s: dict, seite: str, senden, grund: str, **menge) -> None:
     heute = dt.date.today().isoformat()
     if s["orders_tag"][0] != heute:
         s["orders_tag"] = [heute, 0]
-    if s["orders_tag"][1] >= MAX_ORDERS_TAG:
+    if max_orders_tag() and s["orders_tag"][1] >= max_orders_tag():
         return
     s["orders_tag"][1] += 1
     try:
         auftrag = alpaca.vorbereiten("kaufen" if seite == "buy" else "verkaufen", s["symbol"], **menge)
         o = alpaca.papier_automatisch(auftrag)
     except alpaca.HandelFehler as e:
+        s["pause_bis"] = time.time() + FEHLER_PAUSE_S
         _log(s, f"Order ging nicht: {e}")
-        senden(f"🤖 Strategie {s['id']} ({s['symbol']}): {grund}, aber die Order ging nicht: {str(e)[:160]}")
+        senden(f"🤖 Strategie {s['id']} ({s['symbol']}): {grund}, aber die Order ging nicht: {str(e)[:160]} "
+               "– ich versuche es in einer Stunde wieder.")
         return
     s["offen"] = {"id": o["id"], "seite": seite}
     _log(s, f"{'Kauf' if seite == 'buy' else 'Verkauf'} gesendet ({grund})")
@@ -397,6 +415,8 @@ def schritt(s: dict, senden, markt_offen: bool, jetzt: float | None = None) -> N
         _offene_order_abgleichen(s, senden)
         if s["offen"]:
             return
+    if time.time() < s.get("pause_bis", 0):   # nach einer fehlgeschlagenen Order kurz Ruhe
+        return
     krypto = "/" in s["symbol"]
     if not (krypto or markt_offen):
         return

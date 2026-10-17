@@ -208,6 +208,8 @@ def bauen(innen: bool = True):
                                an=f"Alpaca {alpaca.modus()}-Konto")
 
     tg.befehle["/alpaca"] = alpaca_lesen
+    tg.befehle["/hebel"] = lambda e: (alpaca.hebel_setzen(e.split()[1]) if len(e.split()) > 1 else
+                                     "So: /hebel 1 (aus), /hebel 2 oder /hebel 4 (Daytrading). Aktuell siehst du ihn bei /alpaca.")
     # Mit Alpaca ersetzt das Papier-Konto von Alpaca das alte Spielgeld-Depot des PCs (das ging nur bei laufendem PC)
     if alpaca.konfiguriert():
         tg.deklarationen[:] = [d for d in tg.deklarationen if d["name"] not in ("papier_order", "depot_status")]
@@ -217,6 +219,9 @@ def bauen(innen: bool = True):
         {"name": "alpaca_konto", "description": "Echtes Broker-Konto bei Alpaca (Standard: Papier-Konto von Alpaca): Kontostand, "
          "Positionen, offene Orders mit Nummer. Fuer 'wie steht mein Alpaca-Depot', 'was habe ich bei Alpaca'.",
          "parameters": {"type": "OBJECT", "properties": {}}},
+        {"name": "alpaca_hebel", "description": "Margin-Hebel des Alpaca-Papier-Kontos einstellen: 1 (aus), 2 oder 4 (Daytrading, "
+         "ab 25.000 $). Bestimmt die Kaufkraft fuer gehebelte Orders. Nur wenn Nikola Hebel will.",
+         "parameters": {"type": "OBJECT", "properties": {"faktor": {"type": "INTEGER", "description": "1, 2 oder 4"}}, "required": ["faktor"]}},
         {"name": "alpaca_order", "description": "Order bei Alpaca (US-Aktien, ETFs, Krypto in USD): kaufen, verkaufen oder stornieren. "
          "Auf dem Papier-Konto (Spielgeld) wird sie sofort ausgefuehrt; nur bei Echtgeld braucht sie Nikolas Freigabe. Entweder stueck "
          "ODER betrag_usd. Ohne limit = Marktpreis. Kein Leerverkauf. Stornieren braucht order_nr aus alpaca_konto.",
@@ -339,6 +344,11 @@ def bauen(innen: bool = True):
             return alpaca_lesen()
         if name == "alpaca_order":
             return alpaca_order(args)
+        if name == "alpaca_hebel":
+            try:
+                return alpaca.hebel_setzen(args.get("faktor"))
+            except alpaca.HandelFehler as e:
+                return str(e)
         if name == "strategie":
             return strategie_werkzeug(args)
         if name == "depot_analyse":

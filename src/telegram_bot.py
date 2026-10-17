@@ -61,6 +61,8 @@ frage_claude NUR, wenn er ausdruecklich Claude sagt. Boerse: Handel laeuft ueber
 das Papier-Konto mit Spielgeld, da darfst du handeln. Bittet er dich zu traden, such selbst Werte aus (markt_scanner,
 markt_analyse) und loese die Orders aus - auf dem Papier-Konto werden sie sofort ausgefuehrt, ohne Freigabe (nur bei
 Echtgeld kommt ein Freigabe-Knopf). Sag ihm danach kurz, was du gekauft/verkauft hast und warum.
+Es gibt keine Betragsgrenze: du darfst die ganze Kaufkraft nutzen, auch mit Hebel (alpaca_hebel, Margin 2x/4x) und
+gehebelten ETFs (z. B. TQQQ, SOXL), wenn er das will - sag dann klar, dass Verluste mehrfach wirken.
 Fuer dauerhaftes Selbst-Handeln: Strategie entwerfen, testen und mit strategie (aktion=anlegen) einschalten (danach handelt
 sie allein auf dem Papier-Konto). Lehne Paper-Trading nicht ab. Sei bei Backtests ehrlich.
 Keine Anlageberatung.
@@ -154,7 +156,7 @@ STATUS_TEXTE = {
     "sicherheit_gesamt": "🛡️ Ich prüfe Server und PC …", "briefing": "☀️ Ich stelle dein Briefing zusammen …",
     "update_einspielen": "⬇️ Ich schaue nach Updates …", "depot_status": "💼 Ich rechne dein Depot durch …",
     "papier_order": "💼 Ich bearbeite die Papier-Order …", "alpaca_konto": "📊 Ich schaue ins Alpaca-Konto …",
-    "alpaca_order": "📊 Ich bereite die Alpaca-Order vor …", "strategie": "🤖 Ich arbeite an der Strategie …", "depot_analyse": "🔍 Ich analysiere dein Depot …",
+    "alpaca_order": "📊 Ich bereite die Alpaca-Order vor …", "alpaca_hebel": "⚖️ Ich stelle den Hebel ein …", "strategie": "🤖 Ich arbeite an der Strategie …", "depot_analyse": "🔍 Ich analysiere dein Depot …",
     "markt_scanner": "🛰 Ich scanne den Markt (ca. 20 s) …", "wochenbericht": "🗓 Ich schreibe den Wochenbericht …", "oeffne": "🖥️ Ich öffne das am PC …",
     "lagebericht": "🌍 Ich hole den Lagebericht …", "globus_zeigen": "🌍 Ich zeige das auf dem Globus …",
     "shell": "🖥 Ich arbeite in der Shell am PC …", "browser": "🌐 Ich bediene den Browser am PC …",
@@ -631,6 +633,7 @@ class TelegramKlaus:
         (r"aktie|b(ö|oe)rse|kurs|depot|bitcoin|dax|nvidia|tesla|apple|analys|chart|markt|trading", ["markt_analyse", "papier_order", "depot_status"]),
         (r"alpaca|broker|order|kauf|verkauf|storn|position|trade|trading|paper|papier|handel|spielgeld|investier|aktien?\b",
          ["alpaca_konto", "alpaca_order", "strategie", "markt_analyse"]),
+        (r"hebel|margin|leverage|gehebelt|\d+ ?x\b", ["alpaca_hebel", "alpaca_konto", "alpaca_order"]),
         (r"strategi|backtest|automati|selbst(st(ä|ae)ndig)?|f(ü|ue)r mich|bot|sparplan|rsi|trend|signal|trade|trading|handel",
          ["strategie", "alpaca_konto", "alpaca_order", "markt_scanner"]),
         (r"depot|portfolio|verteil|klumpen|risiko|runterzieh|aufgestellt", ["depot_analyse", "alpaca_konto"]),

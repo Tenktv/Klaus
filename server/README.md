@@ -39,7 +39,7 @@ Danach in Telegram `/alpaca` schicken.
 `src/strategien.py`, Schleife alle 5 Minuten (startet mit `klaus-gehirn`), Daten in `data/strategien.json`.
 Klaus entwirft und testet Strategien (trend, rsi, sparplan; 2 Jahre Tageskurse von Yahoo). Einschalten und Fortsetzen nur mit
 Freigabe (Art `strategie`), danach handeln sie selbst - ausschliesslich auf dem Alpaca-Papier-Konto; bei `ALPACA_LIVE=1` ruhen sie.
-Grenzen: 5 aktive, zusammen `STRATEGIE_GESAMT_USD` (Std. 5000), 4 Orders je Strategie und Tag; Order-Limit nur, wenn `ALPACA_MAX_ORDER_USD` gesetzt ist. Notstopp: `/strategien stop`.
+Grenzen nur, wenn gesetzt: `STRATEGIE_GESAMT_USD`, `STRATEGIE_MAX_AKTIV`, `STRATEGIE_MAX_ORDERS_TAG`, `ALPACA_MAX_ORDER_USD`; immer die Kaufkraft (inkl. Margin-Hebel, `/hebel 1|2|4`). Notstopp: `/strategien stop`.
 
 ## Analysen (16.10.2026)
 `src/analysen.py`, nur lesend: `/depotcheck` (Verteilung, Klumpenrisiko, Monat gegen S&P 500), `/scanner [art]`
