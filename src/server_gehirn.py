@@ -108,6 +108,15 @@ class ServerAssistent(A.Assistent):
         pc_werkzeug("mikrofon", {"an": not aus})
 
 
+def pc_an(frist: float = 3) -> bool:
+    """Ist der PC ueber den Tunnel erreichbar? (GET auf den PC-Link, antwortet {"pc": true})"""
+    try:
+        r = requests.get(f"http://127.0.0.1:{RUECK_PORT}/", headers={"X-Token": TOKEN}, timeout=frist)
+        return r.ok and bool(r.json().get("pc"))
+    except Exception:
+        return False
+
+
 def pc_werkzeug(name: str, args: dict) -> str:
     try:
         return pc_post("/tool", {"name": name, "args": args}, frist=240)["ergebnis"]
@@ -299,6 +308,34 @@ def bauen(innen: bool = True):
              "titel": {"type": "STRING"}, "nummer": {"type": "STRING", "description": "Nummer der Strategie"}},
              "required": ["aktion"]}})
 
+    # Claude: PC an -> Claude am PC (wie bisher), PC aus -> Claude Code in der Cloud (hier auf dem Server)
+    import server_claude
+
+    def claude_fertig(text: str, daten: bytes | None, dateiname: str) -> None:
+        tg.senden(text)
+        if daten:
+            tg.datei(daten, dateiname, "Projekt von Claude (Server)")
+
+    def claude_werkzeug(name: str, args: dict) -> str:
+        if pc_an():
+            return pc_werkzeug(name, args)
+        if name == "frage_claude":
+            return server_claude.frage(args.get("frage") or "")
+        return server_claude.bauen(args.get("auftrag") or "", args.get("name") or "projekt", claude_fertig)
+
+    def pc_status_text() -> str:
+        return ("💻 Dein PC ist an und verbunden." if pc_an() else
+                "💻 Dein PC ist aus oder nicht verbunden. Claude-Aufträge laufen dann über die Cloud (Server).") + \
+               "\n☁️ " + server_claude.status()
+
+    tg.befehle["/claude"] = lambda _e: server_claude.status()
+    tg.befehle["/pc"] = lambda _e: pc_status_text()
+    tg.befehle["/claude_token"] = lambda e: server_claude.token_setzen(e, TB._env_setzen)
+    tg.geheime_befehle.add("/claude_token")
+    tg.deklarationen.append({"name": "pc_status", "description": "Prueft, ob Nikolas PC gerade an und verbunden ist, und ob "
+                             "Claude in der Cloud (Server) bereit ist. Vor PC-Aufgaben nutzen, wenn unklar ist, ob der PC laeuft.",
+                             "parameters": {"type": "OBJECT", "properties": {}}})
+
     tg.befehle["/briefing"] = briefing.befehl
     tg.deklarationen.append({"name": "briefing", "description": "Morgen-Briefing jetzt (Wetter, Termine heute, Nachrichten) oder "
                              "Uhrzeit/an/aus einstellen. Fuer 'Briefing', 'was steht heute an und wie ist das Wetter'.",
@@ -336,6 +373,10 @@ def bauen(innen: bool = True):
             return "Abgebrochen: Nikola hat /stop geschickt. Mach nichts weiter, sag nur kurz, dass du gestoppt hast."
         if name == "update_einspielen":
             return update_werkzeug()
+        if name in ("frage_claude", "projekt_bauen"):
+            return claude_werkzeug(name, args)
+        if name == "pc_status":
+            return pc_status_text()
         if name in ("papier_order", "depot_status") and alpaca.konfiguriert():   # alte Namen -> Alpaca-Papier-Konto
             name = "alpaca_order" if name == "papier_order" else "alpaca_konto"
             if args.get("betrag_eur") and not args.get("betrag_usd"):

@@ -57,7 +57,8 @@ Markdown-Sternchen. Du kannst trotzdem alles am PC erledigen - nutze dafuer IMME
 Was im Panel erscheint (Fenster, Charts, Globus), sieht er gerade nicht: sag ihm das Ergebnis in Worten.
 Freigaben: Hochladen, Drucken, Loeschen, Termine usw. schicken ihm einen Freigabe-Knopf mit PIN-Abfrage in den Chat -
 sag ihm kurz, dass er dort bestaetigen soll. Du selbst kannst nichts freigeben.
-frage_claude NUR, wenn er ausdruecklich Claude sagt. Boerse: Handel laeuft ueber Alpaca (alpaca_konto, alpaca_order, strategie) - standardmaessig
+frage_claude NUR, wenn er ausdruecklich Claude sagt. Ist der PC aus, laufen frage_claude und projekt_bauen
+automatisch ueber Claude in der Cloud (Server) - sag nicht, dass es ohne PC nicht geht; pc_status zeigt, ob der PC an ist. Boerse: Handel laeuft ueber Alpaca (alpaca_konto, alpaca_order, strategie) - standardmaessig
 das Papier-Konto mit Spielgeld, da darfst du handeln. Bittet er dich zu traden, such selbst Werte aus (markt_scanner,
 markt_analyse) und loese die Orders aus - auf dem Papier-Konto werden sie sofort ausgefuehrt, ohne Freigabe (nur bei
 Echtgeld kommt ein Freigabe-Knopf). Sag ihm danach kurz, was du gekauft/verkauft hast und warum.
@@ -156,7 +157,8 @@ STATUS_TEXTE = {
     "sicherheit_gesamt": "🛡️ Ich prüfe Server und PC …", "briefing": "☀️ Ich stelle dein Briefing zusammen …",
     "update_einspielen": "⬇️ Ich schaue nach Updates …", "depot_status": "💼 Ich rechne dein Depot durch …",
     "papier_order": "💼 Ich bearbeite die Papier-Order …", "alpaca_konto": "📊 Ich schaue ins Alpaca-Konto …",
-    "alpaca_order": "📊 Ich bereite die Alpaca-Order vor …", "alpaca_hebel": "⚖️ Ich stelle den Hebel ein …", "strategie": "🤖 Ich arbeite an der Strategie …", "depot_analyse": "🔍 Ich analysiere dein Depot …",
+    "alpaca_order": "📊 Ich bereite die Alpaca-Order vor …", "alpaca_hebel": "⚖️ Ich stelle den Hebel ein …", "strategie": "🤖 Ich arbeite an der Strategie …", "pc_status": "💻 Ich prüfe deinen PC …",
+    "frage_claude": "🧠 Ich frage Claude …", "projekt_bauen": "🛠 Ich gebe den Auftrag an Claude …", "depot_analyse": "🔍 Ich analysiere dein Depot …",
     "markt_scanner": "🛰 Ich scanne den Markt (ca. 20 s) …", "wochenbericht": "🗓 Ich schreibe den Wochenbericht …", "oeffne": "🖥️ Ich öffne das am PC …",
     "lagebericht": "🌍 Ich hole den Lagebericht …", "globus_zeigen": "🌍 Ich zeige das auf dem Globus …",
     "shell": "🖥 Ich arbeite in der Shell am PC …", "browser": "🌐 Ich bediene den Browser am PC …",
@@ -658,7 +660,8 @@ class TelegramKlaus:
         (r"brief|lead|konkurrenz|kunde|firma|hochlad|druck", ["leads_suchen", "briefe_erstellen", "entwuerfe_hochladen", "briefe_drucken", "konkurrenz_check"]),
         (r"plan|widget|box|liste|notiz", ["plan_zeigen", "plan_oeffnen", "plan_anheften", "widget", "widget_erstellen", "widget_aendern"]),
         (r"protokoll|meeting|mitschrift", ["protokoll_starten", "protokoll_beenden"]),
-        (r"claude|programmier|bauen|projekt", ["frage_claude", "projekt_bauen"]),
+        (r"claude|programmier|bauen|projekt|cloud|website|app\b", ["frage_claude", "projekt_bauen", "pc_status"]),
+        (r"\bpc\b|computer|rechner|an\?|online|erreichbar", ["pc_status"]),
         (r"zwischenablage|bildschirmfoto|screenshot", ["bildschirmfoto", "zwischenablage"]),
         (r"graph|gedaechtnis|gedächtnis", ["graph_zeigen"]),
         (r"design|farbe|theme", ["design"]),

@@ -45,3 +45,9 @@ Grenzen nur, wenn gesetzt: `STRATEGIE_GESAMT_USD`, `STRATEGIE_MAX_AKTIV`, `STRAT
 `src/analysen.py`, nur lesend: `/depotcheck` (Verteilung, Klumpenrisiko, Monat gegen S&P 500), `/scanner [art]`
 (~50 US-Werte/ETFs/Krypto + Watchlist: RSI, SMA20/50-Kreuz, 52-Wochen-Hoch/Tief), `/wochenbericht` - kommt automatisch
 freitags ab 22:30 Uhr (Zustand in `data/analysen.json`). Strategien merken sich ihre Trades (`historie`, `realisiert`).
+
+## Claude in der Cloud (17.10.2026)
+`src/server_claude.py`: Ist der PC aus (Ping auf den PC-Link), laufen `frage_claude` und `projekt_bauen` ueber Claude Code
+auf dem Server (Projekte in `~/projekte/<name>`, Ergebnis als ZIP per Telegram). Einrichten als Benutzer klaus:
+`curl -fsSL https://claude.ai/install.sh | bash`, dann am PC `claude setup-token` und den Token per Telegram
+`/claude_token <token>` schicken (wird sofort geloescht). `/pc` zeigt PC- und Claude-Status, `/claude` nur Claude.

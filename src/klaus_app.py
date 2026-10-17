@@ -458,6 +458,8 @@ def main() -> None:
         for befehl in ("/status", "/timer", "/stop"):   # Bot laeuft lokal: PC-Zugriff direkt steuern
             assistent.fern.befehle[befehl] = pc_zugriff.telegram_befehl
         threading.Thread(target=assistent.fern.run, daemon=True).start()
+    import pc_update
+    pc_update.starte(assistent)   # alle 30 Minuten GitHub pruefen, in ruhigen Momenten aktualisieren und neu starten
     app.exec()
     os._exit(0)  # Audio-Thread nicht abwarten
 
