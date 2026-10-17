@@ -71,6 +71,20 @@ class AlpacaTests(unittest.TestCase):
         self.assertEqual(gesendet[0]['type'], 'market')
         self.assertIn('Papier', text)
 
+    def test_papier_direkt_ohne_freigabe_echtgeld_nie(self):
+        api, gesendet = falsche_api()
+        with patch.object(al, '_api', api):
+            auftrag = al.vorbereiten('kaufen', 'NVDA', stueck=1)
+            self.assertIn('Papier', al.papier_direkt(auftrag))
+            self.assertIn('storniert', al.papier_direkt(al.vorbereiten('stornieren', order_nr='abcdef12')))
+            with patch.dict(os.environ, {'ALPACA_LIVE': '1'}):
+                with self.assertRaises(al.HandelFehler):
+                    al.papier_direkt(al.vorbereiten('kaufen', 'NVDA', stueck=1))
+            auftrag_alt = al.vorbereiten('kaufen', 'NVDA', stueck=1)
+            with patch.dict(os.environ, {'ALPACA_LIVE': '1'}), self.assertRaises(al.HandelFehler):
+                al.papier_direkt(auftrag_alt)          # vor dem Umschalten vorbereitet: trotzdem nicht
+        self.assertEqual(len(gesendet), 2)
+
     def test_token_nur_einmal(self):
         api, gesendet = falsche_api()
         with patch.object(al, '_api', api):

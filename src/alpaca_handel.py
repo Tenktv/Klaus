@@ -7,7 +7,7 @@ Klaus - Handel ueber Alpaca (US-Aktien, ETFs, Krypto). Laeuft auf dem Server, Sc
 
 Standard ist das PAPIER-Konto von Alpaca (Spielgeld). Echtgeld nur, wenn in der .env des Servers ALPACA_LIVE=1 steht
 UND dort Live-Schluessel eingetragen sind - das kann Klaus nicht selbst umstellen.
-Schutz: jede Order einzeln freigeben, Kaufkraft-Pruefung, optional Hoechstbetrag je Order (ALPACA_MAX_ORDER_USD), kein Leerverkauf, nur Verkauf von
+Schutz: Papier-Konto ohne Freigabe; Echtgeld-Orders einzeln freigeben (Knopf + PIN), Kaufkraft-Pruefung, optional Hoechstbetrag je Order (ALPACA_MAX_ORDER_USD), kein Leerverkauf, nur Verkauf von
 Stuecken, die im Depot liegen. Keine Anlageberatung.
 """
 from __future__ import annotations
@@ -259,6 +259,17 @@ def ausfuehren(token: str | None, auftrag: Auftrag) -> str:
     freigabe.pruefe(token, ART)
     if auftrag.live != live():
         raise HandelFehler("Der Modus (Papier/Echtgeld) hat sich seit der Freigabe geändert – ich sende nichts.")
+    return _senden(auftrag)
+
+
+def papier_direkt(auftrag: Auftrag) -> str:
+    """Papier-Konto: Order (oder Storno) sofort, ohne Freigabe. Bei Echtgeld verweigert - dort nur ausfuehren(token, ...)."""
+    if live() or auftrag.live:
+        raise HandelFehler("Echtgeld-Orders gehen nur mit Freigabe (Knopf + PIN).")
+    return _senden(auftrag)
+
+
+def _senden(auftrag: Auftrag) -> str:
     if auftrag.seite == "cancel":
         _api("DELETE", f"/v2/orders/{auftrag.order_id}")
         return f"Order für {auftrag.symbol} storniert ({modus()}-Konto)."

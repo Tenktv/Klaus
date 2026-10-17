@@ -183,7 +183,7 @@ def bauen(innen: bool = True):
     tg.deklarationen.append({"name": "sicherheit_gesamt", "description": "Sicherheitszustand von Server UND PC (Abweichungen, Angriffe, "
                              "Updates, Virenscan). Fuer 'wie sicher ist alles', 'Sicherheitscheck'. Scan starten: einstellung=scan.",
                              "parameters": {"type": "OBJECT", "properties": {"einstellung": {"type": "STRING", "description": "leer = Bericht; scan = Virenscan starten"}}}})
-    # Alpaca (US-Aktien/ETFs/Krypto): Lesen frei, jede Order nur mit Freigabe (Knopf + PIN). Papier, ausser ALPACA_LIVE=1
+    # Alpaca (US-Aktien/ETFs/Krypto): Papier-Konto (Standard) ohne Freigabe; Echtgeld (ALPACA_LIVE=1) jede Order mit Knopf + PIN
     import alpaca_handel as alpaca
 
     def alpaca_lesen(_eingabe: str = "") -> str:
@@ -199,6 +199,11 @@ def bauen(innen: bool = True):
                                          args.get("betrag_usd"), args.get("limit"), args.get("order_nr") or "")
         except (alpaca.HandelFehler, ValueError, TypeError) as e:
             return f"Die Order geht so nicht: {str(e)[:200]}"
+        if not alpaca.live():   # Papier-Konto: Spielgeld, sofort ohne Freigabe
+            try:
+                return alpaca.papier_direkt(auftrag)
+            except alpaca.HandelFehler as e:
+                return f"Die Order ging nicht: {str(e)[:200]}"
         return a._mit_freigabe(alpaca.ART, auftrag.text, lambda token: alpaca.ausfuehren(token, auftrag),
                                an=f"Alpaca {alpaca.modus()}-Konto")
 
@@ -213,7 +218,7 @@ def bauen(innen: bool = True):
          "Positionen, offene Orders mit Nummer. Fuer 'wie steht mein Alpaca-Depot', 'was habe ich bei Alpaca'.",
          "parameters": {"type": "OBJECT", "properties": {}}},
         {"name": "alpaca_order", "description": "Order bei Alpaca (US-Aktien, ETFs, Krypto in USD): kaufen, verkaufen oder stornieren. "
-         "NUR wenn Nikola ausdruecklich eine Alpaca-Order will. Jede Order braucht seine Freigabe (Knopf + PIN). Entweder stueck "
+         "Auf dem Papier-Konto (Spielgeld) wird sie sofort ausgefuehrt; nur bei Echtgeld braucht sie Nikolas Freigabe. Entweder stueck "
          "ODER betrag_usd. Ohne limit = Marktpreis. Kein Leerverkauf. Stornieren braucht order_nr aus alpaca_konto.",
          "parameters": {"type": "OBJECT", "properties": {
              "aktion": {"type": "STRING", "description": "kaufen, verkaufen oder stornieren"},
@@ -223,7 +228,7 @@ def bauen(innen: bool = True):
              "limit": {"type": "NUMBER", "description": "Limitpreis in USD (optional)"},
              "order_nr": {"type": "STRING", "description": "Nummer der Order beim Stornieren"}}, "required": ["aktion"]}}]
 
-    # Eigene Strategien (nur Papier-Konto): testen frei, einschalten/fortsetzen mit Freigabe, danach handeln sie selbst
+    # Eigene Strategien (nur Papier-Konto): testen, einschalten, fortsetzen ohne Freigabe; danach handeln sie selbst
     import strategien
 
     def strategie_params(args: dict) -> dict:
@@ -238,14 +243,9 @@ def bauen(innen: bool = True):
             if akt.startswith(("anleg", "start", "aktiv", "einschalt")):
                 e = strategien.vorbereiten(typ, args.get("name") or "", strategie_params(args), args.get("betrag_usd") or 0,
                                            args.get("budget_usd"), args.get("titel") or "")
-                was = (f"Strategie einschalten (handelt danach SELBST auf dem Papier-Konto): {e['titel']} · "
-                       f"{strategien.beschreibung(e['typ'], e['p'])} · {e['betrag_usd']:.0f} $/Order, Budget {e['budget_usd']:.0f} $")
-                tg.senden(e["test"])
-                return a._mit_freigabe(strategien.ART, was, lambda token: strategien.anlegen(token, e), an="Alpaca Papier-Konto")
+                return e["test"] + "\n\n" + strategien.anlegen(e)
             if akt.startswith("fortsetz"):
-                s = strategien.fortsetzen_pruefen(args.get("nummer") or "")
-                return a._mit_freigabe(strategien.ART, f"Strategie {s['id']} „{s['titel']}“ wieder einschalten",
-                                       lambda token: strategien.fortsetzen(token, s["id"]), an="Alpaca Papier-Konto")
+                return strategien.fortsetzen(args.get("nummer") or "")
             if akt.startswith("paus"):
                 return strategien.pausieren(args.get("nummer") or "")
             if akt.startswith(("stop", "alle")):
@@ -278,8 +278,8 @@ def bauen(innen: bool = True):
     tg.deklarationen.append(
         {"name": "strategie", "description": "Eigene Handelsstrategien fuer das Alpaca-PAPIER-Konto. Du darfst Strategien selbst "
          "entwerfen: mit aktion=testen Varianten an 2 Jahren Kursdaten pruefen (mehrere Parameter ausprobieren, mit Kaufen+Halten "
-         "vergleichen) und Nikola die beste ehrlich vorschlagen. aktion=anlegen schaltet sie ein - nur wenn Nikola das will, braucht "
-         "seine Freigabe (Knopf + PIN); danach handelt sie selbst. Arten: trend (kurz/lang Tage, SMA), rsi (unter/ueber), sparplan "
+         "vergleichen) und Nikola die beste ehrlich vorschlagen. aktion=anlegen schaltet sie sofort ein (nur Papier-Konto), "
+         "danach handelt sie selbst. Arten: trend (kurz/lang Tage, SMA), rsi (unter/ueber), sparplan "
          "(tage). Optional tp_proz (Gewinnmitnahme), sl_proz (Stopp). Weitere Aktionen: zeigen, pausieren, fortsetzen, loeschen, stop "
          "(alle anhalten). Backtests sind Vergangenheit, keine Garantie.",
          "parameters": {"type": "OBJECT", "properties": {

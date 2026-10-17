@@ -72,12 +72,8 @@ class StrategieTests(unittest.TestCase):
         with patch.object(al, 'symbol', lambda n: n), patch.object(st, 'tageskurse', lambda s, b='2y': (tage(300), AUF)):
             return st.vorbereiten(kw.get('typ', 'trend'), kw.get('name', 'NVDA'), {}, kw.get('betrag', 500), kw.get('budget'))
 
-    def test_anlegen_braucht_freigabe(self):
-        e = self._entwurf()
-        with self.assertRaises(PermissionError):
-            st.anlegen(None, e)
-        self.assertEqual(st.laden()['strategien'], [])
-        st.anlegen(token(), e)
+    def test_anlegen_ohne_freigabe(self):
+        st.anlegen(self._entwurf())
         self.assertTrue(st.laden()['strategien'][0]['aktiv'])
 
     def test_nie_mit_echtgeld(self):
@@ -85,27 +81,27 @@ class StrategieTests(unittest.TestCase):
             self._entwurf()
         e = self._entwurf()
         with patch.dict(os.environ, {'ALPACA_LIVE': '1'}), self.assertRaises(st.StrategieFehler):
-            st.anlegen(token(), e)
+            st.anlegen(e)
         with patch.dict(os.environ, {'ALPACA_LIVE': '1'}), self.assertRaises(al.HandelFehler):
             al.papier_automatisch(al.Auftrag('buy', 'NVDA', 1))
 
     def test_grenzen(self):
         with self.assertRaises(st.StrategieFehler):
             self._entwurf(betrag=5000)                      # ueber ALPACA_MAX_ORDER_USD
-        st.anlegen(token(), self._entwurf(name='NVDA', betrag=1000, budget=4000))
+        st.anlegen(self._entwurf(name='NVDA', betrag=1000, budget=4000))
         with self.assertRaises(st.StrategieFehler):
             self._entwurf(name='NVDA')                      # je Wert nur eine
         with self.assertRaises(st.StrategieFehler):
             self._entwurf(name='AAPL', betrag=1000, budget=2000)   # Gesamtbudget 5000 ueberschritten
 
-    def test_fortsetzen_braucht_freigabe_pausieren_nicht(self):
-        st.anlegen(token(), self._entwurf())
+    def test_pausieren_fortsetzen_stop(self):
+        st.anlegen(self._entwurf())
         sid = st.laden()['strategien'][0]['id']
         st.pausieren(sid)
         self.assertFalse(st.laden()['strategien'][0]['aktiv'])
-        with self.assertRaises(PermissionError):
-            st.fortsetzen(None, sid)
-        st.fortsetzen(token(), sid)
+        with patch.dict(os.environ, {'ALPACA_LIVE': '1'}), self.assertRaises(st.StrategieFehler):
+            st.fortsetzen(sid)                          # nie mit Echtgeld
+        st.fortsetzen(sid)
         self.assertTrue(st.laden()['strategien'][0]['aktiv'])
         self.assertIn('1', st.befehl('/strategien stop'))
         self.assertFalse(st.laden()['strategien'][0]['aktiv'])
@@ -181,7 +177,7 @@ class StrategieTests(unittest.TestCase):
         self.assertEqual((s['stueck'], s['einstand'], s['offen']), (2.0, 150.0, None))
 
     def test_pruefen_ruht_bei_echtgeld(self):
-        st.anlegen(token(), self._entwurf())
+        st.anlegen(self._entwurf())
         with patch.dict(os.environ, {'ALPACA_LIVE': '1'}), patch.object(st, 'schritt') as schritt:
             st.pruefen(self.senden)
             st.pruefen(self.senden)

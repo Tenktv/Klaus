@@ -2,7 +2,7 @@
 Klaus - eigene Handelsstrategien fuer das Alpaca-PAPIER-Konto (laeuft auf dem Server, alle 5 Minuten, ohne KI-Anfragen).
 
     strategien.backtest(...)        Strategie mit den Tageskursen der letzten 2 Jahre durchspielen (nur Rechnen)
-    strategien.anlegen(token, ...)  aktiv schalten - nur mit Freigabe (Art "strategie": Telegram-Knopf + PIN)
+    strategien.anlegen(entwurf)     aktiv schalten (ohne Freigabe - nur Papier-Konto)
     strategien.starte(senden)       Hintergrund-Schleife: Signale pruefen, Papier-Orders, Meldung an Telegram
 
 Strategie-Arten (feste Regeln, kein frei ausgefuehrter Code):
@@ -29,7 +29,6 @@ from pathlib import Path
 import numpy as np
 
 import alpaca_handel as alpaca
-import freigabe
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATEI = BASE_DIR / "data" / "strategien.json"
@@ -224,7 +223,7 @@ def vorbereiten(typ: str, name: str, params: dict, betrag_usd: float, budget_usd
     betrag = float(betrag_usd or 0)
     grenze = alpaca.max_order_usd()
     if betrag < 1 or (grenze and betrag > grenze):
-        raise StrategieFehler(f"Betrag je Order: ab 1 $" + (f" bis {_zahl(grenze, 0)} $ (ALPACA_MAX_ORDER_USD)." if grenze else "."))
+        raise StrategieFehler("Betrag je Order: ab 1 $" + (f" bis {_zahl(grenze, 0)} $ (ALPACA_MAX_ORDER_USD)." if grenze else "."))
     budget = float(budget_usd or (betrag * 10 if typ == "sparplan" else betrag))
     if budget < betrag:
         raise StrategieFehler("Das Budget muss mindestens so groß sein wie der Betrag je Order.")
@@ -240,8 +239,8 @@ def vorbereiten(typ: str, name: str, params: dict, betrag_usd: float, budget_usd
             "betrag_usd": betrag, "budget_usd": budget, "test": backtest_text(typ, sym, p, b)}
 
 
-def anlegen(token: str | None, entwurf: dict) -> str:
-    freigabe.pruefe(token, ART)
+def anlegen(entwurf: dict) -> str:
+    """Schaltet die Strategie ein (ohne Freigabe: Strategien handeln ohnehin nur Papiergeld)."""
     if alpaca.live():
         raise StrategieFehler("Alpaca steht inzwischen auf ECHTGELD – ich schalte nichts ein.")
     s = {**{k: entwurf[k] for k in ("id", "titel", "symbol", "typ", "p", "betrag_usd", "budget_usd")},
@@ -294,8 +293,8 @@ def fortsetzen_pruefen(nummer: str) -> dict:
     return s
 
 
-def fortsetzen(token: str | None, sid: str) -> str:
-    freigabe.pruefe(token, ART)
+def fortsetzen(sid: str) -> str:
+    fortsetzen_pruefen(sid)
     with _sperre:
         d = laden()
         s = _finden(d, sid)
