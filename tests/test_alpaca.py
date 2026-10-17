@@ -71,6 +71,20 @@ class AlpacaTests(unittest.TestCase):
         self.assertEqual(gesendet[0]['type'], 'market')
         self.assertIn('Papier', text)
 
+    def test_papier_direkt_ohne_freigabe_echtgeld_nie(self):
+        api, gesendet = falsche_api()
+        with patch.object(al, '_api', api):
+            auftrag = al.vorbereiten('kaufen', 'NVDA', stueck=1)
+            self.assertIn('Papier', al.papier_direkt(auftrag))
+            self.assertIn('storniert', al.papier_direkt(al.vorbereiten('stornieren', order_nr='abcdef12')))
+            with patch.dict(os.environ, {'ALPACA_LIVE': '1'}):
+                with self.assertRaises(al.HandelFehler):
+                    al.papier_direkt(al.vorbereiten('kaufen', 'NVDA', stueck=1))
+            auftrag_alt = al.vorbereiten('kaufen', 'NVDA', stueck=1)
+            with patch.dict(os.environ, {'ALPACA_LIVE': '1'}), self.assertRaises(al.HandelFehler):
+                al.papier_direkt(auftrag_alt)          # vor dem Umschalten vorbereitet: trotzdem nicht
+        self.assertEqual(len(gesendet), 2)
+
     def test_token_nur_einmal(self):
         api, gesendet = falsche_api()
         with patch.object(al, '_api', api):
@@ -85,6 +99,36 @@ class AlpacaTests(unittest.TestCase):
         api, _ = falsche_api(preis=600.0)
         with patch.object(al, '_api', api), self.assertRaises(al.HandelFehler):
             al.vorbereiten('kaufen', 'NVDA', stueck=2)
+
+    def test_ohne_grenze_nur_kaufkraft(self):
+        api, _ = falsche_api(preis=600.0)
+        with patch.dict(os.environ, {'ALPACA_MAX_ORDER_USD': ''}), patch.object(al, '_api', api):
+            self.assertIsNone(al.max_order_usd())
+            self.assertEqual(al.vorbereiten('kaufen', 'NVDA', stueck=8).stueck, 8)   # 4.800 $ ohne Grenze ok
+            with self.assertRaises(al.HandelFehler):
+                al.vorbereiten('kaufen', 'NVDA', stueck=9)                           # 5.400 $ > Kaufkraft 5.000 $
+
+    def test_50k_mit_hebel(self):
+        api, _ = falsche_api(konto={'equity': '100000', 'last_equity': '100000', 'cash': '100000', 'buying_power': '200000'})
+        with patch.dict(os.environ, {'ALPACA_MAX_ORDER_USD': ''}), patch.object(al, '_api', api):
+            self.assertEqual(al.vorbereiten('kaufen', 'NVDA', betrag_usd=50000).betrag_usd, 50000)
+            self.assertEqual(al.vorbereiten('kaufen', 'NVDA', betrag_usd=150000).betrag_usd, 150000)   # 1,5x mit Margin
+            with self.assertRaises(al.HandelFehler):
+                al.vorbereiten('kaufen', 'NVDA', betrag_usd=250000)                                      # ueber Kaufkraft
+
+    def test_hebel_setzen_nur_papier(self):
+        aufrufe = []
+
+        def api(methode, pfad, **kw):
+            aufrufe.append((methode, pfad, kw.get('json')))
+            return {'equity': '100000', 'buying_power': '200000'}
+        with patch.object(al, '_api', api):
+            self.assertIn('2x', al.hebel_setzen(2))
+            self.assertIn('nur 1-, 2- oder 4-fach', al.hebel_setzen(10))
+            with patch.dict(os.environ, {'ALPACA_LIVE': '1'}):
+                self.assertIn('selbst', al.hebel_setzen(4))
+        self.assertEqual([a for a in aufrufe if a[0] == 'PATCH'],
+                         [('PATCH', '/v2/account/configurations', {'max_margin_multiplier': '2'})])
 
     def test_kein_leerverkauf(self):
         api, _ = falsche_api()

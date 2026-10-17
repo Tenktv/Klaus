@@ -29,7 +29,7 @@ Danach `systemctl enable --now klaus-waechter.timer klaus-scan.timer klaus-fresh
 ## Alpaca-Handel (16.10.2026)
 `src/alpaca_handel.py`, verdrahtet in `src/server_gehirn.py` (Werkzeuge `alpaca_konto`, `alpaca_order`, Befehl `/alpaca`).
 In die `.env` des Servers: `ALPACA_API_KEY`, `ALPACA_SECRET_KEY` (zuerst Paper-Schluessel), optional `ALPACA_MAX_ORDER_USD`
-(Standard 1000). Echtgeld nur mit `ALPACA_LIVE=1` plus Live-Schluessel - bewusst von Hand, Klaus aendert das nicht.
+(Standard: keine Grenze). Echtgeld nur mit `ALPACA_LIVE=1` plus Live-Schluessel - bewusst von Hand, Klaus aendert das nicht.
 Jede Order und jedes Storno laeuft ueber das Freigabe-Gate (Art `handeln`: Telegram-Knopf + PIN, 90 s); kein Leerverkauf.
 Ohne SSH: in Telegram `/alpaca_schluessel <Key> <Secret>` - nur Paper-Schluessel (PK...), Klaus loescht die Nachricht
 sofort, prueft die Schluessel bei Alpaca und schreibt sie erst dann in die `.env` (geht nicht an die KI).
@@ -39,7 +39,7 @@ Danach in Telegram `/alpaca` schicken.
 `src/strategien.py`, Schleife alle 5 Minuten (startet mit `klaus-gehirn`), Daten in `data/strategien.json`.
 Klaus entwirft und testet Strategien (trend, rsi, sparplan; 2 Jahre Tageskurse von Yahoo). Einschalten und Fortsetzen nur mit
 Freigabe (Art `strategie`), danach handeln sie selbst - ausschliesslich auf dem Alpaca-Papier-Konto; bei `ALPACA_LIVE=1` ruhen sie.
-Grenzen: 5 aktive, zusammen `STRATEGIE_GESAMT_USD` (Std. 5000), 4 Orders je Strategie und Tag. Notstopp: `/strategien stop`.
+Grenzen nur, wenn gesetzt: `STRATEGIE_GESAMT_USD`, `STRATEGIE_MAX_AKTIV`, `STRATEGIE_MAX_ORDERS_TAG`, `ALPACA_MAX_ORDER_USD`; immer die Kaufkraft (inkl. Margin-Hebel, `/hebel 1|2|4`). Notstopp: `/strategien stop`.
 
 ## Analysen (16.10.2026)
 `src/analysen.py`, nur lesend: `/depotcheck` (Verteilung, Klumpenrisiko, Monat gegen S&P 500), `/scanner [art]`

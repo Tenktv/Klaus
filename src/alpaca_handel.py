@@ -7,7 +7,7 @@ Klaus - Handel ueber Alpaca (US-Aktien, ETFs, Krypto). Laeuft auf dem Server, Sc
 
 Standard ist das PAPIER-Konto von Alpaca (Spielgeld). Echtgeld nur, wenn in der .env des Servers ALPACA_LIVE=1 steht
 UND dort Live-Schluessel eingetragen sind - das kann Klaus nicht selbst umstellen.
-Schutz: jede Order einzeln freigeben, Hoechstbetrag je Order (ALPACA_MAX_ORDER_USD), kein Leerverkauf, nur Verkauf von
+Schutz: Papier-Konto ohne Freigabe; Echtgeld-Orders einzeln freigeben (Knopf + PIN), Kaufkraft-Pruefung, optional Hoechstbetrag je Order (ALPACA_MAX_ORDER_USD), kein Leerverkauf, nur Verkauf von
 Stuecken, die im Depot liegen. Keine Anlageberatung.
 """
 from __future__ import annotations
@@ -41,11 +41,13 @@ def konfiguriert() -> bool:
     return bool(os.getenv("ALPACA_API_KEY", "").strip() and os.getenv("ALPACA_SECRET_KEY", "").strip())
 
 
-def max_order_usd() -> float:
+def max_order_usd() -> float | None:
+    """Hoechstbetrag je Kauf-Order in USD - None = keine Grenze (Standard; die Kaufkraft begrenzt trotzdem)."""
     try:
-        return max(1.0, float(os.getenv("ALPACA_MAX_ORDER_USD", "1000")))
+        wert = float(os.getenv("ALPACA_MAX_ORDER_USD", "").strip() or 0)
     except ValueError:
-        return 1000.0
+        return None
+    return wert if wert > 0 else None
 
 
 def modus() -> str:
@@ -141,8 +143,9 @@ def konto_text() -> str:
     k = konto()
     wert, vortag = float(k.get("equity") or 0), float(k.get("last_equity") or 0)
     tag = wert - vortag
+    kraft = float(k.get("buying_power") or 0)
     zeilen = [f"📊 Alpaca ({modus()}-Konto): Wert {_zahl(wert)} $, Bargeld {_zahl(k.get('cash') or 0)} $, "
-              f"Kaufkraft {_zahl(k.get('buying_power') or 0)} $, heute {'+' if tag >= 0 else '−'}{_zahl(abs(tag))} $."]
+              f"Kaufkraft {_zahl(kraft)} $ (Hebel {k.get('multiplier', '1')}x), heute {'+' if tag >= 0 else '−'}{_zahl(abs(tag))} $."]
     if k.get("trading_blocked") or k.get("account_blocked"):
         zeilen.append("⚠️ Das Konto ist für Handel gesperrt.")
     pos = positionen()
@@ -215,7 +218,7 @@ def vorbereiten(aktion: str, name: str = "", stueck: float | None = None, betrag
         if stueck < 1 and not _ist_krypto(sym):
             raise HandelFehler(f"Für den Betrag bekomme ich bei {_zahl(limit)} $ Limit nicht mal ein ganzes Stück {sym}.")
     schaetzung = stueck * preis if stueck is not None else betrag_usd
-    if seite == "buy" and schaetzung > max_order_usd():   # Verkaufen (Risiko abbauen) ist nicht begrenzt
+    if seite == "buy" and max_order_usd() and schaetzung > max_order_usd():   # Verkaufen ist nie begrenzt
         raise HandelFehler(f"Die Order wäre etwa {_zahl(schaetzung)} $ groß – mehr als die Grenze von {_zahl(max_order_usd())} $ "
                            "je Order (ALPACA_MAX_ORDER_USD in der .env des Servers).")
     k = konto()
@@ -257,6 +260,17 @@ def ausfuehren(token: str | None, auftrag: Auftrag) -> str:
     freigabe.pruefe(token, ART)
     if auftrag.live != live():
         raise HandelFehler("Der Modus (Papier/Echtgeld) hat sich seit der Freigabe geändert – ich sende nichts.")
+    return _senden(auftrag)
+
+
+def papier_direkt(auftrag: Auftrag) -> str:
+    """Papier-Konto: Order (oder Storno) sofort, ohne Freigabe. Bei Echtgeld verweigert - dort nur ausfuehren(token, ...)."""
+    if live() or auftrag.live:
+        raise HandelFehler("Echtgeld-Orders gehen nur mit Freigabe (Knopf + PIN).")
+    return _senden(auftrag)
+
+
+def _senden(auftrag: Auftrag) -> str:
     if auftrag.seite == "cancel":
         _api("DELETE", f"/v2/orders/{auftrag.order_id}")
         return f"Order für {auftrag.symbol} storniert ({modus()}-Konto)."
@@ -264,6 +278,22 @@ def ausfuehren(token: str | None, auftrag: Auftrag) -> str:
     menge = f"{o.get('qty')} Stück" if o.get("qty") else f"{o.get('notional')} $"
     return (f"✅ Order an Alpaca ({modus()}-Konto): {'Kauf' if auftrag.seite == 'buy' else 'Verkauf'} {auftrag.symbol} {menge}, "
             f"Status {o.get('status', '?')}, Nr. {str(o.get('id', ''))[:8]}.")
+
+
+def hebel_setzen(faktor) -> str:
+    """Margin-Hebel des Kontos: 1 (kein Hebel), 2 (ueber Nacht) oder 4 (Daytrading, ab 25.000 $). Nur Papier-Konto."""
+    if live():
+        return "Den Hebel beim Echtgeld-Konto stellst du bewusst selbst bei Alpaca ein, nicht über mich."
+    try:
+        f = int(float(faktor))
+    except (TypeError, ValueError):
+        f = 0
+    if f not in (1, 2, 4):
+        return "Hebel geht nur 1-, 2- oder 4-fach (4-fach nur fürs Daytrading ab 25.000 $ Kontowert)."
+    _api("PATCH", "/v2/account/configurations", json={"max_margin_multiplier": str(f)})
+    k = konto()
+    return (f"⚖️ Hebel auf {f}x gestellt (Papier-Konto). Kaufkraft jetzt {_zahl(k.get('buying_power') or 0)} $ "
+            f"bei {_zahl(k.get('equity') or 0)} $ Kontowert. Mit Hebel wirken Gewinne UND Verluste mehrfach.")
 
 
 def order(order_id: str) -> dict | None:
