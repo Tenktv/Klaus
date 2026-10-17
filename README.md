@@ -71,6 +71,7 @@ bei Bedarf `de_DE-thorsten-high` nach `data/stimmen/`.
 
 ```
 src/
+  pc_update.py        Auto-Update am PC aus GitHub (alle 30 min, in ruhigen Momenten, mit Test + Rueckfall)
   klaus_app.py        App: Panel, Bildschirm 2, Tray, Hotkeys, Autostart, Anwesenheit/Briefing
   assistent.py        Sprach-Schleife, Absichten, alle Abläufe (Leads, Briefe, Lagebericht, Pläne, Sicherheit …)
   gemini_live.py      Gemini-Live-Gespräch mit ~40 Werkzeugen
