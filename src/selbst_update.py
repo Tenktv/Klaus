@@ -5,7 +5,7 @@ Klaus - Selbst-Update auf dem Server (Code aus GitHub, Tenktv/Klaus, Zweig main)
     einspielen(token)    -> holt den neuen Stand, testet ihn, uebernimmt ihn nur bei Erfolg (sonst zurueck auf alt)
     nach_neustart()      -> Text fuer "wieder da", wenn gerade ein Update lief (sonst None)
 
-Nur mit Freigabe (Art "update", Knopf + PIN). Der Test kompiliert alle Module und laedt server_gehirn einmal komplett.
+Per Telegram "Update einspielen" mit Freigabe (Knopf + PIN) - und automatisch alle 30 Minuten (starte_auto, ohne PIN). Der Test kompiliert alle Module und laedt server_gehirn einmal komplett.
 Nach erfolgreichem Update beendet sich der Prozess; systemd (Restart=always) startet ihn mit dem neuen Code neu.
 """
 from __future__ import annotations
@@ -40,8 +40,12 @@ def pruefen() -> list[str]:
 
 def einspielen(token: str | None) -> str:
     freigabe.pruefe(token, "update")
+    return _uebernehmen()
+
+
+def _uebernehmen() -> str:
     alt = _git("rev-parse", "--short", "HEAD")
-    if _git("status", "--porcelain", "--untracked-files=no"):
+    if _git("status", "--porcelain", "--untracked-files=no", "--", ".", ":(exclude)data"):   # Laufzeitdaten zaehlen nicht
         return "Update abgebrochen: auf dem Server gibt es lokale Änderungen am Code."
     _git("merge", "--ff-only", "-q", "origin/main")
     neu = _git("rev-parse", "--short", "HEAD")
@@ -67,3 +71,37 @@ def nach_neustart() -> str | None:
         MARKER.unlink(missing_ok=True)
     zeilen = _git("log", "--oneline", "--no-decorate", f"{d['alt']}..{d['neu']}").splitlines()
     return f"✅ Wieder da – Update {d['alt']} → {d['neu']} läuft.\n" + "\n".join(f"• {z.split(' ', 1)[-1]}" for z in zeilen[:8])
+
+
+# ---------------------------------------------------------------- automatisch (Wunsch Nikola, 17.10.2026: ohne PIN)
+TAKT_S = 30 * 60
+_gemeldet = {"text": ""}
+
+
+def auto_schritt(beschaeftigt, senden) -> bool:
+    """Ein Durchlauf: neue Commits und Klaus gerade ruhig -> uebernehmen (getestet, sonst bleibt der alte Stand).
+    -> True, wenn neu gestartet wird. Aus: KLAUS_AUTO_UPDATE=0; mit Knopf + PIN statt automatisch: KLAUS_UPDATE_FREIGABE=1."""
+    if os.getenv("KLAUS_AUTO_UPDATE", "1").strip() == "0" or os.getenv("KLAUS_UPDATE_FREIGABE", "0").strip() == "1":
+        return False
+    if not pruefen() or beschaeftigt():
+        return False
+    text = _uebernehmen()
+    neustart = "getestet und übernommen" in text
+    if neustart or text != _gemeldet["text"]:   # gleiche Fehlermeldung nicht alle 30 Minuten
+        _gemeldet["text"] = text
+        senden(("🔄 Automatisches Update: " if neustart else "⚠️ ") + text)
+    return neustart
+
+
+def starte_auto(beschaeftigt, senden) -> None:
+    def schleife() -> None:
+        import time
+        time.sleep(5 * 60)
+        while True:
+            try:
+                if auto_schritt(beschaeftigt, senden):
+                    return
+            except Exception as e:   # kein Netz o. ae.: naechstes Mal
+                print(f"[Update] {str(e)[:150]}", flush=True)
+            time.sleep(TAKT_S)
+    threading.Thread(target=schleife, daemon=True, name="klaus-auto-update").start()

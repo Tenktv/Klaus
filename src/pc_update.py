@@ -55,7 +55,7 @@ def ruhig(assistent) -> bool:
 
 def einspielen() -> tuple[bool, str]:
     """Holt origin/main, testet, rollt bei Fehlern zurueck. -> (neu_starten, Meldung)"""
-    if _git("status", "--porcelain", "--untracked-files=no"):
+    if _git("status", "--porcelain", "--untracked-files=no", "--", ".", ":(exclude)data"):   # Laufzeitdaten zaehlen nicht
         return False, "Kein Auto-Update am PC: im Klaus-Ordner gibt es lokale Code-Änderungen (ich überschreibe nichts)."
     alt = _git("rev-parse", "--short", "HEAD")
     _git("merge", "--ff-only", "-q", "origin/main")
@@ -119,9 +119,35 @@ def _melden(assistent, text: str) -> None:
 _zuletzt_gemeldet = {"text": ""}
 
 
+_gefragt = {"stand": ""}   # fuer diesen GitHub-Stand schon gefragt (nicht alle 30 Minuten neu nerven)
+
+
+def freigegeben(neu: list[str]) -> bool:
+    """Standard (Wunsch Nikola, 17.10.2026): immer automatisch, ohne PIN. Mit KLAUS_UPDATE_FREIGABE=1 in der .env fragt Klaus
+    vorher (Knopf + PIN) - einmal je neuem GitHub-Stand; abgelehnt/keine Antwort -> erst bei weiteren Commits wieder."""
+    import freigabe
+
+    if os.getenv("KLAUS_UPDATE_FREIGABE", "0").strip() != "1":
+        return True
+    stand = _git("rev-parse", "--short", "origin/main")
+    if stand == _gefragt["stand"]:
+        return False
+    _gefragt["stand"] = stand
+    liste = "; ".join(z.split(" ", 1)[-1] for z in neu[:5])
+    token = freigabe.anfragen("pc_update", f"Klaus am PC aktualisieren ({len(neu)} Änderung{'en' if len(neu) != 1 else ''}: {liste[:300]})",
+                              an="Klaus am PC (Code aus GitHub)")
+    if not token:
+        return False
+    freigabe.pruefe(token, "pc_update")
+    return True
+
+
 def schritt(assistent) -> bool:
     """Ein Durchlauf. -> True, wenn neu gestartet wird (testbar ohne Schleife)."""
-    if not an() or not neue_commits() or not ruhig(assistent):
+    if not an():
+        return False
+    neu = neue_commits()
+    if not neu or not ruhig(assistent) or not freigegeben(neu):
         return False
     neu_starten, text = einspielen()
     if text and (neu_starten or text != _zuletzt_gemeldet["text"]):   # gleiche Warnung nicht alle 30 Minuten

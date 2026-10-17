@@ -1,0 +1,42 @@
+#!/bin/bash
+# Klaus -> Claude Code als eigener Benutzer "claudebau" (nach /usr/local/bin/klaus-claude, root:root 755).
+# Klaus (Benutzer klaus) darf NUR dieses Skript per sudo als claudebau starten (siehe /etc/sudoers.d/klaus-claude).
+# claudebau kann /home/klaus (Klaus' Code, .env, Schluessel) nicht lesen; er arbeitet nur in /srv/klaus-claude.
+#
+#   klaus-claude --status               -> "installiert" / "angemeldet"
+#   klaus-claude --token  (Token auf stdin, aus `claude setup-token`)
+#   klaus-claude arbeit  <claude-Argumente...>          Fragen
+#   klaus-claude projekt <name> <claude-Argumente...>   Bauen in /srv/klaus-claude/projekte/<name>
+set -euo pipefail
+umask 027                                   # Gruppe klaus darf Ergebnisse lesen (fuer das ZIP), sonst niemand
+BASIS=/srv/klaus-claude
+CLAUDE="$HOME/.local/bin/claude"
+TOKEN_DATEI="$HOME/.klaus-claude-token"
+
+[ "$(id -un)" = "claudebau" ] || { echo "nur als claudebau" >&2; exit 9; }
+
+case "${1:-}" in
+  --status)
+    [ -x "$CLAUDE" ] && echo installiert
+    [ -s "$TOKEN_DATEI" ] && echo angemeldet
+    exit 0 ;;
+  --token)
+    read -r token
+    [[ "$token" =~ ^sk-ant-oat[0-9A-Za-z_-]{20,300}$ ]] || { echo "kein gueltiger Token" >&2; exit 3; }
+    ( umask 077; printf '%s' "$token" > "$TOKEN_DATEI" )
+    exit 0 ;;
+  arbeit)
+    shift; ORDNER="$BASIS/arbeit" ;;
+  projekt)
+    name="${2:-}"
+    [[ "$name" =~ ^[a-z0-9-]{1,40}$ ]] || { echo "ungueltiger Projektname" >&2; exit 4; }
+    shift 2; ORDNER="$BASIS/projekte/$name" ;;
+  *)
+    echo "unbekannt" >&2; exit 2 ;;
+esac
+
+[ -s "$TOKEN_DATEI" ] || { echo '{"is_error": true, "result": "Claude ist nicht angemeldet (/claude_token)."}'; exit 0; }
+mkdir -p "$ORDNER"
+cd "$ORDNER"
+export CLAUDE_CODE_OAUTH_TOKEN="$(cat "$TOKEN_DATEI")"
+exec "$CLAUDE" "$@"

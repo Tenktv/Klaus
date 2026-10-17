@@ -510,6 +510,14 @@ def main() -> None:
             tg.senden(meldung)
     except Exception as e:
         print(f"[Update] Meldung nach Neustart: {e}", flush=True)
+    try:   # automatisch aus GitHub, nur wenn Klaus gerade nichts tut (keine Antwort/Freigabe/Claude-Bau, 5 min Ruhe)
+        import selbst_update
+        import server_claude
+
+        selbst_update.starte_auto(lambda: (freigabe.offen() or tg._sperre.locked() or server_claude._bau_sperre.locked()
+                                           or time.time() - tg.zuletzt < 5 * 60), tg.senden)
+    except Exception as e:
+        print(f"[Update] Auto-Update nicht gestartet: {e}", flush=True)
     tg.run()   # blockiert
 
 
