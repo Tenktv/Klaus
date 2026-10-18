@@ -23,3 +23,4 @@ Pillow
 PyAutoGUI>=0.9.54
 tzdata
 pyflakes
+mss>=10,<11

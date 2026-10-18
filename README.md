@@ -11,6 +11,10 @@ schreibt Briefe mit einem persönlichen Website-Entwurf.
 
 ## Was Klaus kann
 
+Experimenteller [Genshin-Modus](GENSHIN.md): lokales Bildmodell, begrenzte
+Spieleingaben, F9-Not-Aus und Windows-Rechtediagnose. Noch kein nachgewiesener
+autonomer Questabschluss. Der bestehende Spiele-Coach bleibt ebenfalls verfügbar.
+
 | Bereich | Beispiele (einfach sprechen: „Klaus, …“) |
 |---|---|
 | **Gespräch** | Gemini Live mit eigener Stimme, man kann ihm ins Wort fallen. Ohne Schlüssel läuft eine lokale Kette (Whisper → Ollama → Stimme). |

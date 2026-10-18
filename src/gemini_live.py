@@ -157,6 +157,11 @@ WERKZEUGE = [
          "aktion": {"type": "STRING", "description": "oeffnen, lesen, klicken, tippen, taste, zurueck oder schliessen"},
          "url": {"type": "STRING"}, "nr": {"type": "INTEGER", "description": "Nummer des Elements aus lesen"},
          "text": {"type": "STRING", "description": "Text zum Eintippen"}, "taste": {"type": "STRING"}}, "required": ["aktion"]}},
+    {"name": "genshin_modus", "description": "Oeffnet auf ausdruecklichen Wunsch das lokale Genshin-Testpanel, liest dessen Status oder stoppt es. "
+     "oeffnen startet noch keine Spieleingaben: Nikola startet die begrenzte Sitzung im Panel mit F8. "
+     "Kein Admin-Start durch dieses Werkzeug. Bei Rechtekonflikt meldet das Panel den Grund.",
+     "parameters": {"type": "OBJECT", "properties": {
+         "aktion": {"type": "STRING", "enum": ["oeffnen", "stop", "status"]}}, "required": ["aktion"]}},
     {"name": "spiel_coach", "description": "Spiele-Coach: Klaus schaut beim Zocken zu (nur Bildschirmfotos, drueckt nichts) und gibt "
      "kurze Tipps. aktion=start ('Coach an', 'schau mir beim Spielen zu'), stop ('Coach aus'), tipp ('was soll ich jetzt machen', "
      "'gib mir einen Tipp' - sofort ein Tipp zum aktuellen Bild; Ergebnis kurz vorlesen).",
@@ -502,6 +507,9 @@ class GeminiGespraech:
                 import pc_zugriff
                 return pc_zugriff.browser(args.get("aktion", ""), args.get("url", ""), args.get("nr"), args.get("text", ""),
                                           args.get("taste", ""))
+            if name == "genshin_modus":
+                import genshin_modus
+                return genshin_modus.werkzeug(args.get('aktion', 'status'))
             if name == "spiel_coach":
                 import spiel_coach
                 aktion = (args.get("aktion") or "tipp").lower()

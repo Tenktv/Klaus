@@ -24,3 +24,5 @@ data/mikro_aus
 data/betrieb.json
 data/ki_modelle.json
 data/ki_kosten.sqlite*
+src/genshin_agent/logs/
+src/genshin_agent/stop.request

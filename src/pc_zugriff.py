@@ -176,6 +176,11 @@ def _waechter_lauf() -> None:
 # ---------------------------------------------------------------- harter Stopp, Zeitlimit
 def _alles_abbrechen() -> int:
     """Shell-Prozesse (mit allen Kindern) abschiessen, Browser schliessen, offene Freigaben ablehnen."""
+    try:
+        import genshin_modus
+        genshin_modus.stoppen()
+    except Exception as error:
+        _log(f'Genshin-Stopp nicht zugestellt: {type(error).__name__}')
     with Z.lock:
         prozesse = list(Z.prozesse)
     for p in prozesse:

@@ -24,7 +24,8 @@ class SteuerungTests(unittest.TestCase):
         self.dotenv = patch.dict(os.environ, {'PYTHON_DOTENV_DISABLED': '1'})
         self.dotenv.start()
         self.addCleanup(self.dotenv.stop)
-        self.modules = patch.dict(sys.modules, {'rechte': types.SimpleNamespace(protokoll=Mock())})
+        self.modules = patch.dict(sys.modules, {'rechte': types.SimpleNamespace(protokoll=Mock()),
+                                              'genshin_modus': types.SimpleNamespace(stoppen=Mock())})
         self.modules.start()
         self.addCleanup(self.modules.stop)
         self.gate = laden('freigabe')
