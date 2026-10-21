@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Klaus Stream-Overlay</title>
+<!-- OBS-Browserquelle 1920x1080, Hintergrund durchsichtig. Ereignisse kommen von stream_overlay.py (/ereignisse). -->
+<script src="klaus.js"></script>
+<script>window.klausBereit?.catch(() => {});   // kein Qt hier: nur KlausOrb + Themen aus klaus.js benutzen</script>
+<style>
+  @font-face { font-family: "Rajdhani"; font-weight: 500; src: url(vendor/rajdhani-500.woff2) format("woff2"); }
+  @font-face { font-family: "Rajdhani"; font-weight: 700; src: url(vendor/rajdhani-700.woff2) format("woff2"); }
+  @font-face { font-family: "Chakra"; font-weight: 600; src: url(vendor/chakra-petch-600.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow"; font-weight: 500; src: url(vendor/barlow-semi-condensed-500.woff2) format("woff2"); }
+  :root { --rgb: 213, 186, 133; --rgb2: 226, 184, 119; --cyan: #d5ba85; --bernstein: #e2b877; --text: #f1ede4;
+    --glas: rgba(20, 20, 19, .82); --ease: cubic-bezier(.165, .84, .44, 1); --schraege: 14px; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; background: transparent; overflow: hidden; color: var(--text);
+    font-family: "Barlow", "Segoe UI", sans-serif; }
+
+  /* Holo-Glas: abgeschraegte Ecken, feiner Leuchtrand, Lichtkante oben */
+  .holo { position: relative; background: var(--glas);
+    clip-path: polygon(var(--schraege) 0, 100% 0, 100% calc(100% - var(--schraege)), calc(100% - var(--schraege)) 100%, 0 100%, 0 var(--schraege)); }
+  .holo::before { content: ""; position: absolute; inset: 0; pointer-events: none; padding: 1px;
+    background: linear-gradient(135deg, rgba(var(--rgb), .95), rgba(var(--rgb), .18) 40%, rgba(var(--rgb), .1) 70%, rgba(var(--rgb), .7));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; clip-path: inherit; }
+  .holo::after { content: ""; position: absolute; left: var(--schraege); right: 20%; top: 0; height: 2px; pointer-events: none;
+    background: linear-gradient(90deg, rgba(var(--rgb), .9), transparent); }
+  .kopf { font: 600 13px "Chakra", sans-serif; letter-spacing: .28em; color: var(--cyan); text-transform: uppercase;
+    text-shadow: 0 0 10px rgba(var(--rgb), .55); }
+  .kopf::before { content: "◆ "; color: var(--bernstein); }
+
+  /* ---- Klaus unten links ---- */
+  #klaus { position: absolute; left: 34px; bottom: 30px; display: flex; align-items: center; gap: 14px; }
+  #orb { width: 200px; height: 200px; filter: drop-shadow(0 0 18px rgba(var(--rgb), .35)); }
+  #sprache { min-width: 260px; max-width: 760px; padding: 14px 22px 16px; opacity: 0; transform: translateX(-16px);
+    transition: opacity .3s var(--ease), transform .3s var(--ease); }
+  #sprache.an { opacity: 1; transform: none; }
+  #untertitel { margin-top: 6px; font: 700 27px/1.25 "Rajdhani", sans-serif; text-wrap: balance;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  #namensschild { position: absolute; left: 34px; bottom: 14px; width: 200px; text-align: center;
+    font: 700 15px "Rajdhani", sans-serif; letter-spacing: .4em; color: var(--cyan); text-shadow: 0 0 12px rgba(var(--rgb), .7); }
+
+  /* ---- Chat rechts ---- */
+  #chat { position: absolute; right: 34px; bottom: 30px; width: 440px; padding: 14px 18px 10px; transition: opacity .4s; }
+  #chat.leer { opacity: 0; }
+  #zeilen { margin-top: 8px; display: flex; flex-direction: column; gap: 7px; }
+  .zeile { font: 500 19px/1.3 "Barlow", sans-serif; overflow-wrap: anywhere; animation: rein .35s var(--ease);
+    transition: opacity .8s, transform .8s; }
+  .zeile.weg { opacity: 0; transform: translateX(30px); }
+  .zeile b { font: 700 19px "Rajdhani", sans-serif; letter-spacing: .03em; margin-right: 6px; }
+  .zeile.neu b::after { content: "NEU"; margin-left: 6px; padding: 0 5px; font: 600 10px "Chakra"; letter-spacing: .15em;
+    color: #191918; background: var(--bernstein); vertical-align: 3px; }
+  @keyframes rein { from { opacity: 0; transform: translateX(30px); } }
+
+  /* ---- Hinweise oben mitte ---- */
+  #hinweis { position: absolute; top: 34px; left: 50%; min-width: 420px; max-width: 900px; padding: 14px 34px 16px; text-align: center;
+    transform: translate(-50%, -140%); transition: transform .45s var(--ease); }
+  #hinweis.an { transform: translate(-50%, 0); }
+  #hinweis .gross { margin-top: 4px; font: 700 40px/1.1 "Rajdhani", sans-serif; letter-spacing: .04em;
+    text-shadow: 0 0 22px rgba(var(--rgb), .6); }
+  #hinweis.clip { --rgb: 255, 120, 90; }
+  #banner { position: absolute; top: 0; left: 50%; transform: translate(-50%, -110%); padding: 10px 40px 12px;
+    font: 700 26px "Rajdhani", sans-serif; letter-spacing: .06em; white-space: nowrap; transition: transform .45s var(--ease); }
+  #banner.an { transform: translate(-50%, 0); }
+  #hinweis.an ~ #banner.an { transform: translate(-50%, -110%); }   /* Hinweis hat Vorrang */
+  .blitz { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at 50% 0, rgba(var(--rgb), .35), transparent 55%);
+    opacity: 0; }
+  .blitz.los { animation: blitz 1.1s ease-out; }
+  @keyframes blitz { 15% { opacity: 1; } to { opacity: 0; } }
+
+  body.nur-orb #chat, body.nur-orb #hinweis, body.nur-orb #banner,
+  body.nur-chat #klaus, body.nur-chat #namensschild, body.nur-chat #hinweis, body.nur-chat #banner,
+  body.nur-hinweise #klaus, body.nur-hinweise #namensschild, body.nur-hinweise #chat { display: none; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="blitz" id="blitz"></div>
+<div id="klaus">
+  <canvas id="orb"></canvas>
+  <div class="holo" id="sprache"><div class="kopf" id="sprech-kopf">Klaus</div><div id="untertitel"></div></div>
+</div>
+<div id="namensschild">KLAUS</div>
+<div class="holo leer" id="chat"><div class="kopf" id="chat-kopf">Twitch-Chat</div><div id="zeilen"></div></div>
+<div class="holo" id="hinweis"><div class="kopf" id="hinweis-kopf"></div><div class="gross" id="hinweis-text"></div></div>
+<div class="holo" id="banner"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+const nur = new URLSearchParams(location.search).get("nur");
+if (nur) document.body.classList.add("nur-" + nur);
+const orb = new KlausOrb($("orb"));
+const KOPF = { hoeren: "Klaus · hört zu", denken: "Klaus · denkt nach", sprechen: "Klaus", aktion: "Klaus · los geht's", fehler: "Klaus · Problem" };
+const MAX_ZEILEN = 7, ZEILE_MS = 90_000, HINWEIS_MS = 5200;
+let sprachTimer = null;
+
+function zustand(z) {
+  orb.setZustand(z);
+  $("sprech-kopf").textContent = KOPF[z] || "Klaus";
+  clearTimeout(sprachTimer);
+  if (z === "aus") sprachTimer = setTimeout(() => $("sprache").classList.remove("an"), 1500);
+  else if ($("untertitel").textContent) $("sprache").classList.add("an");
+}
+
+function untertitel(t) {
+  $("untertitel").textContent = t || "";
+  $("sprache").classList.toggle("an", !!t);
+}
+
+function chatZeile(d) {
+  const z = document.createElement("div");
+  z.className = "zeile" + (d.neu ? " neu" : "");
+  const name = document.createElement("b");
+  name.textContent = d.name;   // fremder Text: nur textContent, nie innerHTML
+  name.style.color = /^#[0-9a-f]{6}$/i.test(d.farbe || "") ? d.farbe : "var(--cyan)";
+  z.append(name, document.createTextNode(d.text));
+  $("zeilen").append(z);
+  while ($("zeilen").children.length > MAX_ZEILEN) $("zeilen").firstElementChild.remove();
+  $("chat").classList.remove("leer");
+  setTimeout(() => { z.classList.add("weg"); setTimeout(() => { z.remove(); if (!$("zeilen").children.length) $("chat").classList.add("leer"); }, 800); }, ZEILE_MS);
+}
+
+// Hinweise nacheinander zeigen (Willkommen, Clip, ...)
+const hinweise = [];
+let hinweisLaeuft = false;
+function hinweis(kopf, text, art = "") { hinweise.push({ kopf, text, art }); if (!hinweisLaeuft) naechsterHinweis(); }
+function naechsterHinweis() {
+  const h = hinweise.shift();
+  if (!h) { hinweisLaeuft = false; return; }
+  hinweisLaeuft = true;
+  $("hinweis-kopf").textContent = h.kopf;
+  $("hinweis-text").textContent = h.text;
+  $("hinweis").className = "holo an " + h.art;
+  $("blitz").classList.remove("los"); void $("blitz").offsetWidth; $("blitz").classList.add("los");
+  orb.funkenregen();
+  setTimeout(() => { $("hinweis").classList.remove("an"); setTimeout(naechsterHinweis, 600); }, HINWEIS_MS);
+}
+
+function banner(t) {
+  $("banner").textContent = t || "";
+  $("banner").classList.toggle("an", !!t);
+}
+
+function verbinden() {
+  const q = new EventSource("/ereignisse");
+  const an = (art, fn) => q.addEventListener(art, (e) => { try { fn(JSON.parse(e.data)); } catch (f) { console.error(art, f); } });
+  an("thema", (n) => wendeThemaAn(n));
+  an("zustand", zustand);
+  an("pegel", (p) => orb.setPegel(p));
+  an("text", untertitel);
+  an("kanal", (k) => { $("chat-kopf").textContent = "Twitch-Chat · " + k; });
+  an("chat", chatZeile);
+  an("willkommen", (d) => hinweis("Neu im Chat", "Willkommen, " + d.name + "!"));
+  an("clip", (d) => hinweis("Clip", d.text || "Clip gespeichert!", "clip"));
+  an("hinweis", (d) => hinweis(d.kopf || "Klaus", d.text || ""));
+  an("banner", banner);
+  q.onerror = () => { q.close(); setTimeout(verbinden, 3000); };   // Klaus neu gestartet -> wieder verbinden
+}
+wendeThemaAn("gold");
+verbinden();
+</script>
+</body>
+</html>

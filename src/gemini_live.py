@@ -179,6 +179,12 @@ WERKZEUGE = [
      "parameters": {"type": "OBJECT", "properties": {
          "aktion": {"type": "STRING", "enum": ["chat_lesen", "status", "clip", "vorlesen_an", "vorlesen_aus"]},
          "minuten": {"type": "NUMBER", "description": "chat_lesen: letzte Minuten (Standard 10)"}}, "required": ["aktion"]}},
+    {"name": "stream_overlay", "description": "Stream-Overlay (Zuschauer sehen es): banner = Text oben im Stream anzeigen "
+     "('zeig im Stream: gleich Bossfight'), banner_weg, hinweis = kurze Einblendung (z. B. 'Danke fuer den Follow, Name!'), "
+     "einrichten = Overlay als Browserquelle in alle OBS-Szenen legen. Nur auf Nikolas Wunsch, nie Privates einblenden.",
+     "parameters": {"type": "OBJECT", "properties": {
+         "aktion": {"type": "STRING", "enum": ["banner", "banner_weg", "hinweis", "einrichten"]},
+         "text": {"type": "STRING"}}, "required": ["aktion"]}},
     {"name": "obs", "description": "Steuert OBS Studio: status, stream_starten (braucht Freigabe), stream_stoppen, aufnahme_starten, "
      "aufnahme_stoppen, replay_speichern (lokaler Clip), szene (wechselt zur Szene 'szene').",
      "parameters": {"type": "OBJECT", "properties": {
@@ -549,6 +555,20 @@ class GeminiGespraech:
                 if aktion in ("vorlesen_an", "vorlesen_aus"):
                     return stream.setze_vorlesen(aktion == "vorlesen_an")
                 return "Unbekannte Twitch-Aktion."
+            if name == "stream_overlay":
+                import stream_overlay
+                aktion, text = args.get("aktion", ""), str(args.get("text", ""))[:120]
+                if aktion in ("banner", "banner_weg"):
+                    return self.a.stream_banner(text if aktion == "banner" else "")
+                if aktion == "hinweis":
+                    stream_overlay.senden("hinweis", {"kopf": "Klaus", "text": text})
+                    return "Ist eingeblendet."
+                if aktion == "einrichten":
+                    try:
+                        return stream_overlay.in_obs_einrichten()
+                    except RuntimeError as e:
+                        return str(e)
+                return "Unbekannte Overlay-Aktion."
             if name == "obs":
                 import stream
                 if args.get("aktion") == "stream_starten":

@@ -332,7 +332,16 @@ Ruhemodus, gemeinsame Starter-Sperre, Protokoll-Waechter und Premium-Textmodell-
 - „Klaus, clip das“: OBS-Replay-Puffer lokal speichern (sofort, ohne Freigabe) + Twitch-Clip (öffentlich → Freigabe-Art
   `clip`, braucht `TWITCH_CLIENT_ID` + einmal `python src/stream.py anmelden`, Gerätecode, Recht nur `clips:edit`).
 - OBS über obs-websocket v5 (`OBS_PASSWORT`, Port 4455): Status, Szene wechseln, Aufnahme, Stream stoppen; **Stream
-  starten nur mit Freigabe** (Art `stream`). Gemini-Werkzeuge `twitch` und `obs`. Am 21.10. waren weder OBS noch
+  starten nur mit Freigabe** (Art `stream`). Gemini-Werkzeuge `twitch` und `obs`.
+- **Stream-Overlay** (`stream_overlay.py` + `web/stream_overlay.html`): lokaler Server `http://127.0.0.1:7710/overlay`
+  (Server-Sent Events, nur lesend, nur Dateien aus `src/web`), als OBS-Browserquelle „Klaus Overlay“ in allen Szenen.
+  Zeigt den echten Reaktor-Orb (`KlausOrb` aus `klaus.js`), Untertitel wenn Klaus spricht, Twitch-Chat (auch eigene
+  Nachrichten, nur `textContent`), „Neu im Chat“-Karten, Clip-Blitz, Banner per Stimme („Klaus, zeig im Stream: …“,
+  „Banner weg“), Werkzeug `stream_overlay`. Teilansichten `?nur=orb|chat|hinweise`. Achtung: Alles, was Klaus sagt,
+  steht während des Streams als Untertitel im Bild (und ist ohnehin über Desktop-Audio hörbar).
+- Einrichtung 21.10.: OBS 32.2.2 (winget), Twitch-Konto „lateniko“ in OBS verbunden, Profil „Unbenannt“ (NVENC,
+  1080p60, 6000 kbit/s vom Assistenten, Replay 30 s), Szenen Spiel/Desktop/Pause, Twitch-App „Klaus“ (Client-ID in
+  `.env`, Token `data/twitch_token.json`). Am 21.10. waren weder OBS noch
   Streamlabs installiert → Twitch/OBS noch nicht live getestet (nur Unit-Tests `tests/test_stream_spielmodus.py`).
 
 ## 6. Offene Fragen an Nikola

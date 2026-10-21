@@ -54,6 +54,7 @@ MAX_WARTESCHLANGE = 4   # mehr ungelesene Nachrichten -> aelteste verwerfen, ein
 # Setzt assistent.py
 sprechen: Callable[[str], None] = lambda text: print(f"[Twitch] {text}")
 anzeigen: Callable[[str], None] = lambda text: None          # Sprechblase am Mini-Orb
+overlay: Callable[[str, object], None] = lambda art, daten: None   # Stream-Overlay (stream_overlay.senden)
 beschaeftigt: Callable[[], bool] = lambda: False             # laeuft gerade ein Gespraech mit Klaus?
 
 _z = {"chat": None, "verlauf": deque(maxlen=60), "gesehen": set(), "warteschlange": deque(), "viel_los": False,
@@ -149,16 +150,31 @@ class TwitchChat:
             pause = min(pause * 2, 300)
 
 
+def _overlay(art: str, daten) -> None:
+    try:
+        overlay(art, daten)
+    except Exception:
+        pass
+
+
 def _ereignis(z: dict, kanal: str) -> None:
     nick = z["nick"]
-    if not nick or nick == kanal or nick.startswith("justinfan") or nick in BOTS:
+    if not nick or nick.startswith("justinfan") or nick in BOTS:
         return
     name = z["tags"].get("display-name") or nick
+    if z["befehl"] == "PRIVMSG" and not z["text"].startswith("\x01"):   # Stream-Overlay zeigt auch deine eigenen Nachrichten
+        _overlay("chat", {"name": name, "text": z["text"][:300], "farbe": z["tags"].get("color", ""),
+                          "neu": nick != kanal and nick not in _z["gesehen"]})
+    if nick == kanal:
+        return
     if z["befehl"] == "JOIN" and nick not in _z["gesehen"]:
         _z["gesehen"].add(nick)
+        _overlay("willkommen", {"name": name})
         _melden(f"{name} ist jetzt im Chat.", f"→ {name} ist im Chat", vorlesen_immer=True)
     elif z["befehl"] == "PRIVMSG":
         neu = nick not in _z["gesehen"]
+        if neu:
+            _overlay("willkommen", {"name": name})
         _z["gesehen"].add(nick)
         _z["verlauf"].append((time.time(), name, z["text"]))
         text = _vorlesbar(z["text"])
@@ -321,6 +337,7 @@ def twitch_clip(token: str) -> str:
         return f"Clip ging nicht ({r.status_code}): {r.text[:120]}"
     clip = r.json()["data"][0]
     _log(f"Clip erstellt: {clip['id']}")
+    _overlay("clip", {"text": "Twitch-Clip erstellt!"})
     return f"Clip ist erstellt: clips.twitch.tv/{clip['id']} – Titel und Länge kannst du auf Twitch noch anpassen."
 
 
@@ -427,6 +444,7 @@ def obs_replay_speichern() -> str:
     except RuntimeError:
         return "Der Replay-Puffer ist in OBS nicht eingerichtet: Einstellungen → Ausgabe → Replay-Puffer aktivieren."
     obs_anfrage("SaveReplayBuffer")
+    _overlay("clip", {"text": "Clip gespeichert!"})
     return "Clip gespeichert (OBS-Replay)."
 
 

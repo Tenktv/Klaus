@@ -418,6 +418,11 @@ def main() -> None:
     bruecke.mini.connect(spielmodus.manuell)
     bruecke.pegel.connect(spielmodus.mini.setze_pegel)
     bruecke.chat.connect(spielmodus.mini.sprechblase)
+    import stream_overlay   # Stream-Overlay in OBS: derselbe Orb, Untertitel beim Sprechen (Thread-sicher, ohne GUI)
+    bruecke.zustand.connect(lambda z: stream_overlay.senden("zustand", z))
+    bruecke.pegel.connect(lambda p: stream_overlay.senden("pegel", round(p, 3)))
+    bruecke.text.connect(lambda t: stream_overlay.senden("text", t))
+    bruecke.thema.connect(lambda n: stream_overlay.senden("thema", n) if n != "weiter" else None)
     pc_hinweis = PcNutzungHinweis()   # "Klaus benutzt gerade den PC" (pc_zugriff.py)
     bruecke.pc_nutzung.connect(pc_hinweis.setze)
     steuerung.panel_bruecke = panel_bruecke

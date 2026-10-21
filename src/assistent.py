@@ -129,6 +129,8 @@ CLIP = re.compile(r"^\W*(?:(?:mach|erstell)\w*\s+(?:mal\s+)?(?:einen|nen|'nen)\s
 CHAT_VORLESEN = re.compile(r"\b(?:twitch-?)?chat\s+(?:vorlesen|vorlesen an|lesen)\b|\blies\s+(?:mir\s+)?(?:den\s+)?(?:twitch-?)?chat\s+vor\b", re.I)
 CHAT_STILL = re.compile(r"\b(?:twitch-?)?chat\s+(?:nicht mehr vorlesen|vorlesen aus|leise|still|ruhig)\b|"
                         r"\bh(?:ö|oe)r auf\s+(?:den\s+)?chat\s+vorzulesen\b", re.I)
+STREAM_BANNER_WEG = re.compile(r"\b(?:stream-?)?banner\s+(?:weg|aus|entfernen|l(?:ö|oe)schen)\b|\bnimm\s+(?:das\s+)?banner\s+weg\b", re.I)
+STREAM_BANNER = re.compile(r"\b(?:zeig|schreib|setz)\w*\s+(?:mal\s+)?(?:im|in den|auf dem|auf den|ins)\s+(?:stream|overlay)\s*[:,]?\s*(?P<text>.+?)[.!]?$", re.I)
 WISSEN = re.compile(r"was (wei(ß|ss)t|hast) du (alles |eigentlich |so )?((ü|ue)ber mich|von mir)|was hast du dir (alles )?gemerkt", re.I)
 NACHFRAGE_SEK = 8  # so lange hoert Klaus nach einer Antwort ohne Weckwort weiter
 VERLAUF_VERGESSEN_SEK = 180
@@ -210,6 +212,9 @@ class Assistent:
         stream.sprechen = lambda text: self.vorlesen(text, quelle="twitch")
         stream.anzeigen = self.b.chat.emit
         stream.beschaeftigt = lambda: bool(self.gemini) and time.time() - (self.gemini.letzte_aktivitaet or 0) < 8
+        import stream_overlay   # OBS-Browserquelle http://127.0.0.1:7710/overlay
+        stream.overlay = stream_overlay.senden
+        stream_overlay.starten()
         stream.starten()
         import datei_senden   # Dateien aufs Handy (Telegram)
         datei_senden.datei_melder = lambda inhalt, name, text: (self.fern.datei(inhalt, name, text)
@@ -977,6 +982,10 @@ class Assistent:
             self.sage("Okay, ich mach mich klein.", zustand="aktion")
         elif CLIP.search(befehl):
             self.sage(self.clip(), zustand="aktion")
+        elif STREAM_BANNER_WEG.search(befehl):
+            self.sage(self.stream_banner(""), zustand="aktion")
+        elif STREAM_BANNER.search(befehl):
+            self.sage(self.stream_banner(STREAM_BANNER.search(befehl).group("text")), zustand="aktion")
         elif CHAT_STILL.search(befehl):
             import stream
             self.sage(stream.setze_vorlesen(False), zustand="aktion")
@@ -1001,6 +1010,14 @@ class Assistent:
                                             stream.twitch_clip, an=f"twitch.tv/{stream.KANAL}"))
         return " ".join(teile) or ("Clippen geht noch nicht: OBS läuft nicht (Replay-Puffer) und Twitch ist nicht verbunden "
                                    "(„python src/stream.py anmelden“).")
+
+    def stream_banner(self, text: str) -> str:
+        """Banner oben im Stream-Overlay (Nikolas eigene Worte; leer = weg)."""
+        import stream_overlay
+
+        text = text.strip(" ,.:")[:90]
+        stream_overlay.senden("banner", text)
+        return f"Steht im Stream: {text}." if text else "Banner ist weg."
 
     def stream_starten(self) -> str:
         import stream
