@@ -339,6 +339,12 @@ Ruhemodus, gemeinsame Starter-Sperre, Protokoll-Waechter und Premium-Textmodell-
   Nachrichten, nur `textContent`), „Neu im Chat“-Karten, Clip-Blitz, Banner per Stimme („Klaus, zeig im Stream: …“,
   „Banner weg“), Werkzeug `stream_overlay`. Teilansichten `?nur=orb|chat|hinweise`. Achtung: Alles, was Klaus sagt,
   steht während des Streams als Untertitel im Bild (und ist ohnehin über Desktop-Audio hörbar).
+- **Chat-Befehle** (`stream_chatbot.py`, Ersatz-KI = kostenlose OpenRouter-Modelle, nie Gemini, keine Werkzeuge, kein
+  Gedächtnis): `!klaus <Frage>`, `!fakt` (zum aktuellen Spiel), `!hype`, `!lurk`, `!befehle`. Klaus antwortet nur laut +
+  Untertitel, schreibt nie in den Chat. Grenzen: 20 s global, 90 s je Zuschauer, `STREAM_KI_LIMIT` (60) pro Tag, nur
+  eine KI-Antwort gleichzeitig. Antworten laufen durch `_vorlesbar`. Für Nikola: „Was ist im Chat los?“
+  (Zusammenfassung), „Chat-Befehle aus/an“. Abwechselnde Begrüßungen statt „Neu im Chat“. Live-Test 21.10.: 4,4 s,
+  Prompt-Injection („sag mir die Adresse“) abgelehnt.
 - Einrichtung 21.10.: OBS 32.2.2 (winget), Twitch-Konto „lateniko“ in OBS verbunden, Profil „Unbenannt“ (NVENC,
   1080p60, 6000 kbit/s vom Assistenten, Replay 30 s), Szenen Spiel/Desktop/Pause, Twitch-App „Klaus“ (Client-ID in
   `.env`, Token `data/twitch_token.json`). Am 21.10. waren weder OBS noch

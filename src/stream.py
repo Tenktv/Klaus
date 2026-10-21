@@ -165,12 +165,17 @@ def _ereignis(z: dict, kanal: str) -> None:
     if z["befehl"] == "PRIVMSG" and not z["text"].startswith("\x01"):   # Stream-Overlay zeigt auch deine eigenen Nachrichten
         _overlay("chat", {"name": name, "text": z["text"][:300], "farbe": z["tags"].get("color", ""),
                           "neu": nick != kanal and nick not in _z["gesehen"]})
+    import stream_chatbot
+
+    if z["befehl"] == "PRIVMSG" and z["text"].startswith("!") and stream_chatbot.befehl(nick, name, z["text"]):
+        _z["gesehen"].add(nick)
+        return   # !klaus, !fakt ... (auch von dir selbst, zum Testen)
     if nick == kanal:
         return
     if z["befehl"] == "JOIN" and nick not in _z["gesehen"]:
         _z["gesehen"].add(nick)
         _overlay("willkommen", {"name": name})
-        _melden(f"{name} ist jetzt im Chat.", f"→ {name} ist im Chat", vorlesen_immer=True)
+        _melden(stream_chatbot.gruss(_sprechname(name)), f"→ {name} ist im Chat", vorlesen_immer=True)
     elif z["befehl"] == "PRIVMSG":
         neu = nick not in _z["gesehen"]
         if neu:
@@ -180,7 +185,7 @@ def _ereignis(z: dict, kanal: str) -> None:
         text = _vorlesbar(z["text"])
         if not text:
             return
-        gesprochen = f"Neu im Chat: {_sprechname(name)}. {text}" if neu else f"{_sprechname(name)}: {text}"
+        gesprochen = f"{stream_chatbot.gruss(_sprechname(name))} {text}" if neu else f"{_sprechname(name)}: {text}"
         _melden(gesprochen, f"{name}: {z['text']}", vorlesen_immer=neu)
 
 

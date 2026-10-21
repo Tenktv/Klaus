@@ -39,7 +39,10 @@ class StreamTests(unittest.TestCase):
     def test_neuer_zuschauer_wird_gemeldet_und_vorgelesen(self):
         stream._ereignis(stream.parse_zeile('@display-name=Lisa :lisa!lisa@lisa.tmi.twitch.tv PRIVMSG #nikola :hi'), 'nikola')
         stream._ereignis(stream.parse_zeile('@display-name=Lisa :lisa!lisa@lisa.tmi.twitch.tv PRIVMSG #nikola :na'), 'nikola')
-        self.assertEqual(list(stream._z['warteschlange']), ['Neu im Chat: Lisa. hi', 'Lisa: na'])
+        erste, zweite = list(stream._z['warteschlange'])
+        self.assertIn('Lisa', erste)
+        self.assertTrue(erste.endswith('hi'))
+        self.assertEqual(zweite, 'Lisa: na')
         self.assertEqual(self.blasen, ['Lisa: hi', 'Lisa: na'])
 
     def test_eigene_und_bot_nachrichten_ignoriert(self):

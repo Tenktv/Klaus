@@ -129,6 +129,9 @@ CLIP = re.compile(r"^\W*(?:(?:mach|erstell)\w*\s+(?:mal\s+)?(?:einen|nen|'nen)\s
 CHAT_VORLESEN = re.compile(r"\b(?:twitch-?)?chat\s+(?:vorlesen|vorlesen an|lesen)\b|\blies\s+(?:mir\s+)?(?:den\s+)?(?:twitch-?)?chat\s+vor\b", re.I)
 CHAT_STILL = re.compile(r"\b(?:twitch-?)?chat\s+(?:nicht mehr vorlesen|vorlesen aus|leise|still|ruhig)\b|"
                         r"\bh(?:ö|oe)r auf\s+(?:den\s+)?chat\s+vorzulesen\b", re.I)
+CHAT_LOS = re.compile(r"\bwas\s+(?:ist|war|geht)\s+(?:gerade\s+|so\s+)?(?:im|in meinem|im twitch-?)\s*chat\b|\bchat\s+zusammenfass\w*|"
+                      r"\bfass\w*\s+(?:mir\s+)?(?:den\s+)?chat\s+zusammen\b", re.I)
+CHAT_BEFEHLE = re.compile(r"\bchat-?befehle\s+(?P<an>an|ein|aus|ab)\b|\b(?P<an2>aktivier|deaktivier)\w*\s+(?:die\s+)?chat-?befehle\b", re.I)
 STREAM_BANNER_WEG = re.compile(r"\b(?:stream-?)?banner\s+(?:weg|aus|entfernen|l(?:ö|oe)schen)\b|\bnimm\s+(?:das\s+)?banner\s+weg\b", re.I)
 STREAM_BANNER = re.compile(r"\b(?:zeig|schreib|setz)\w*\s+(?:mal\s+)?(?:im|in den|auf dem|auf den|ins)\s+(?:stream|overlay)\s*[:,]?\s*(?P<text>.+?)[.!]?$", re.I)
 WISSEN = re.compile(r"was (wei(ß|ss)t|hast) du (alles |eigentlich |so )?((ü|ue)ber mich|von mir)|was hast du dir (alles )?gemerkt", re.I)
@@ -986,6 +989,13 @@ class Assistent:
             self.sage(self.stream_banner(""), zustand="aktion")
         elif STREAM_BANNER.search(befehl):
             self.sage(self.stream_banner(STREAM_BANNER.search(befehl).group("text")), zustand="aktion")
+        elif CHAT_LOS.search(befehl):
+            import stream_chatbot
+            self.sage(stream_chatbot.zusammenfassung(), zustand="aktion")
+        elif CHAT_BEFEHLE.search(befehl):
+            import stream_chatbot
+            m = CHAT_BEFEHLE.search(befehl)
+            self.sage(stream_chatbot.setze_an((m.group("an") or m.group("an2")).lower() in ("an", "ein", "aktivier")), zustand="aktion")
         elif CHAT_STILL.search(befehl):
             import stream
             self.sage(stream.setze_vorlesen(False), zustand="aktion")
