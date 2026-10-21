@@ -2,6 +2,7 @@
 Klaus - Fenster
     DesktopPanel  ersetzt den Desktop: Vollbild, liegt immer ganz unten hinter allen Apps
     ChatFenster   das Klaus-Fenster fuer Gespraeche, mit Maus und Tastatur bedienbar
+    MiniOrb       Spielmodus: kleiner verschiebbarer Kreis mit Mute-Knopf statt Panel (ohne Browser-Engine)
 Beide zeigen HTML aus src/web/ und sprechen ueber QWebChannel mit Python (WebBruecke).
 """
 
@@ -21,6 +22,7 @@ from PySide6.QtCore import QBuffer, QFileInfo, QIODevice, QObject, Qt, QTimer, Q
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
 from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtGui import QColor, QPainter, QPen, QRadialGradient
 from PySide6.QtWidgets import QApplication, QFileIconProvider, QWidget
 
 import apps
@@ -125,6 +127,7 @@ class WebBruecke(QObject):
     sichtbar = Signal(bool)  # False = Panel ist von einem Vollbild-Fenster verdeckt -> Animationen pausieren
     stummStatus = Signal(bool)  # Klaus stumm (hoert nur noch auf "Klaus, wieder an")
     mikroStatus = Signal(bool)  # Mikrofon komplett aus
+    mini = Signal(bool)  # Spielmodus: Panel ist weg -> alle Holo-Fenster auf Bildschirm 2 (bzw. ueber das Spiel)
     _fertig = Signal(str, str)  # intern: Worker-Thread -> GUI-Thread
 
     alle: list["WebBruecke"] = []  # damit ein Design-Wechsel Panel und Popup gleichzeitig trifft
@@ -589,17 +592,22 @@ def _vollbild_auf(bildschirm) -> bool:
 
         zustand = ctypes.c_int(0)
         ctypes.windll.shell32.SHQueryUserNotificationState(ctypes.byref(zustand))
-        if zustand.value in (3, 4):  # Spiel im exklusiven Vollbild (D3D) oder Praesentationsmodus
-            return True
-        if zustand.value != 2:       # 2 = "Vollbild-App" - meldet Windows auch fuer unser eigenes Panel -> genauer hinsehen
+        if zustand.value not in (2, 3, 4):  # 2 = "Vollbild-App" (auch unser Panel), 3 = exklusives D3D-Vollbild, 4 = Praesentation
             return False
         h = win32gui.GetForegroundWindow()
-        if not h or win32process.GetWindowThreadProcessId(h)[1] == os.getpid() or ctypes.windll.user32.IsZoomed(h):
-            return False             # Klaus selbst oder nur maximiert (z. B. VS Code) -> kein Vollbild
+        eigenes = not h or win32process.GetWindowThreadProcessId(h)[1] == os.getpid()
+        if eigenes:
+            return zustand.value in (3, 4)
+        monitor = win32api.GetMonitorInfo(win32api.MonitorFromWindow(h, 2))
+        if bildschirm is not None and monitor["Device"] != bildschirm.name():
+            return False             # das Vollbild laeuft auf dem anderen Bildschirm (Spiel vorne, Bildschirm 2 frei)
+        if zustand.value in (3, 4):
+            return True
+        if ctypes.windll.user32.IsZoomed(h):
+            return False             # nur maximiert (z. B. VS Code) -> kein Vollbild
         if win32gui.GetClassName(h) in ("Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"):
             return False             # Windows-Desktop/Taskleiste ist bildschirmgross, aber kein Spiel
-        monitor = win32api.GetMonitorInfo(win32api.MonitorFromWindow(h, 2))["Monitor"]
-        return tuple(win32gui.GetWindowRect(h)) == tuple(monitor)  # randloses Vollbild (Spiel im Fenstermodus)
+        return tuple(win32gui.GetWindowRect(h)) == tuple(monitor["Monitor"])  # randloses Vollbild (Spiel im Fenstermodus)
     except Exception:
         return False
 
@@ -616,13 +624,20 @@ class ZweitFenster(QWidget):
         self.ansicht = QWebEngineView(self)
         _web_ansicht(self.ansicht, "dashboard.html", bruecke, abfrage="zweit=1")
         bruecke.fenster = self
+        self.mini = False   # Spielmodus: das Panel ist weg -> notfalls auf dem Hauptbildschirm ueber dem Spiel zeigen
+
+    def ziel(self):
+        """Bildschirm 2, wenn dort kein Vollbild laeuft; im Spielmodus sonst der Hauptbildschirm."""
+        b = _zweiter_bildschirm()
+        if b is not None and not _vollbild_auf(b):
+            return b
+        return QApplication.primaryScreen() if self.mini else None
 
     def verfuegbar(self) -> bool:
-        b = _zweiter_bildschirm()
-        return b is not None and not _vollbild_auf(b)
+        return self.ziel() is not None
 
     def zeigen(self) -> None:
-        b = _zweiter_bildschirm()
+        b = self.ziel()
         if not b:
             return
         self.setGeometry(b.geometry())
@@ -706,6 +721,215 @@ class OrbOverlay(QWebEngineView):
 
     def setze_pegel(self, pegel: float) -> None:
         self.bruecke.pegel.emit(pegel)
+
+
+# ------------------------------------------------------------------ Spielmodus: Mini-Orb
+class MiniBlase(QWidget):
+    """Sprechblase neben dem Mini-Orb (z. B. Twitch-Chat). Klick-durchlaessig, verschwindet nach ein paar Sekunden."""
+
+    def __init__(self) -> None:
+        from PySide6.QtWidgets import QHBoxLayout, QLabel
+
+        super().__init__()
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnTopHint | Qt.WindowTransparentForInput
+                            | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.label = QLabel(self)
+        self.label.setTextFormat(Qt.PlainText)   # Chat-Text ist fremd: nie als HTML darstellen
+        self.label.setWordWrap(True)
+        self.label.setMaximumWidth(320)
+        self.label.setStyleSheet("QLabel { background: rgba(24, 25, 28, 235); color: #f4ede1; border: 1px solid #bd805a;"
+                                 " border-radius: 10px; padding: 7px 12px; font: 600 12px 'Segoe UI'; }")
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(self.label)
+        self.weg = QTimer(self, singleShot=True, interval=7000)
+        self.weg.timeout.connect(self.hide)
+
+    def zeige(self, text: str, orb: QWidget) -> None:
+        self.label.setText(text[:220])
+        self.adjustSize()
+        g = orb.frameGeometry()
+        bild = (orb.screen() or QApplication.primaryScreen()).availableGeometry()
+        links = g.center().x() > bild.center().x()   # Orb rechts -> Blase links daneben
+        self.move(g.left() - self.width() - 6 if links else g.right() + 6, g.center().y() - self.height() // 2)
+        self.show()
+        self.weg.start()
+
+
+class MiniOrb(QWidget):
+    """Spielmodus: statt Panel nur ein kleiner Kreis, immer im Vordergrund, frei verschiebbar.
+    Knopf unten rechts = Mikrofon aus/an, Doppelklick = Panel zurueck, Rechtsklick = Menue.
+    Reines QPainter (keine Browser-Engine) und nur Neuzeichnen bei Aenderungen -> kostet beim Zocken praktisch nichts."""
+
+    GROESSE, RADIUS = 84, 29
+    FARBEN = {"aus": (189, 128, 90), "start": (189, 128, 90), "hoeren": (57, 208, 255), "denken": (167, 123, 255),
+              "sprechen": (255, 197, 107), "aktion": (255, 197, 107), "fehler": (255, 80, 80)}
+    mute_klick = Signal()    # Mikrofon aus/an
+    stumm_klick = Signal()   # Stumm an/aus
+    zurueck = Signal()       # Spielmodus beenden
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setWindowTitle("Klaus Mini")
+        self.setFixedSize(self.GROESSE, self.GROESSE)
+        self.setToolTip("Klaus · ziehen = verschieben · Knopf = Mikro aus/an · Doppelklick = Panel zurück · Rechtsklick = Menü")
+        self.zustand, self.pegel, self.stumm, self.mikro_aus, self.winkel = "aus", 0.0, False, False, 0
+        self._druck = self._start = None
+        self._gezogen = False
+        self.blase = MiniBlase()
+        self.dreh = QTimer(self, interval=50)   # nur beim Denken (drehender Bogen)
+        self.dreh.timeout.connect(self._drehen)
+        self.oben = QTimer(self, interval=3000)  # randlose Spiele schieben sich gern davor -> wieder nach vorne
+        self.oben.timeout.connect(self._nach_oben)
+
+    # ---------------------------------------------------------------- an/aus
+    def zeigen(self) -> None:
+        pos = daten.lade_einstellungen().get("mini_pos")
+        bild = QApplication.primaryScreen().availableGeometry()
+        if not (isinstance(pos, list) and len(pos) == 2 and any(s.availableGeometry().contains(pos[0] + 40, pos[1] + 40)
+                                                                  for s in QApplication.screens())):
+            pos = [bild.right() - self.GROESSE - 20, bild.top() + 90]   # Standard: oben rechts
+        self.move(pos[0], pos[1])
+        self.show()
+        self._nach_oben()
+        self.oben.start()
+
+    def verstecken(self) -> None:
+        self.oben.stop()
+        self.dreh.stop()
+        self.blase.hide()
+        self.hide()
+
+    def _nach_oben(self) -> None:
+        # HWND_TOPMOST, ohne Fokus zu nehmen (SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
+        ctypes.windll.user32.SetWindowPos(int(self.winId()), -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
+
+    # ---------------------------------------------------------------- Zustand
+    def setze_zustand(self, zustand: str) -> None:
+        self.zustand = zustand
+        if zustand == "denken" and self.isVisible():
+            self.dreh.start()
+        else:
+            self.dreh.stop()
+        self.update()
+
+    def setze_pegel(self, pegel: float) -> None:
+        if self.isVisible() and (abs(pegel - self.pegel) > 0.05 or pegel == 0.0):
+            self.pegel = pegel
+            self.update()
+
+    def setze_stumm(self, an: bool) -> None:
+        self.stumm = an
+        self.update()
+
+    def setze_mikro(self, aus: bool) -> None:
+        self.mikro_aus = aus
+        self.update()
+
+    def sprechblase(self, text: str) -> None:
+        if self.isVisible():
+            self.blase.zeige(text, self)
+
+    def _drehen(self) -> None:
+        self.winkel = (self.winkel + 14) % 360
+        self.update()
+
+    # ---------------------------------------------------------------- Zeichnen
+    def _knopf(self):
+        from PySide6.QtCore import QRectF
+        return QRectF(self.GROESSE - 31, self.GROESSE - 31, 27, 27)
+
+    def paintEvent(self, _ereignis) -> None:
+        from PySide6.QtCore import QPointF, QRectF
+
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        m, r = QPointF(self.RADIUS + 9, self.RADIUS + 9), self.RADIUS
+        farbe = QColor(130, 130, 140) if (self.stumm or self.mikro_aus) else QColor(*self.FARBEN.get(self.zustand, (189, 128, 90)))
+        # Schein (waechst mit der Lautstaerke beim Sprechen)
+        schein = QRadialGradient(m, r + 9)
+        aussen = QColor(farbe)
+        aussen.setAlpha(int(60 + 120 * min(self.pegel, 1.0)))
+        schein.setColorAt(0.55, aussen)
+        schein.setColorAt(1.0, QColor(0, 0, 0, 0))
+        p.setPen(Qt.NoPen)
+        p.setBrush(schein)
+        p.drawEllipse(m, r + 9, r + 9)
+        # Kern: heller Reaktor wie im Panel (kein dunkles Glas)
+        kern = QRadialGradient(QPointF(m.x() - 6, m.y() - 7), r)
+        kern.setColorAt(0.0, QColor(255, 255, 255))
+        kern.setColorAt(0.35, farbe.lighter(130))
+        kern.setColorAt(1.0, QColor(24, 25, 28, 235))
+        p.setBrush(kern)
+        k = r - 5 + 4 * min(self.pegel, 1.0)
+        p.drawEllipse(m, k, k)
+        p.setBrush(Qt.NoBrush)
+        p.setPen(QPen(farbe, 2.4))
+        p.drawEllipse(m, r, r)
+        if self.zustand == "denken":
+            p.setPen(QPen(QColor(255, 255, 255, 220), 2.6))
+            p.drawArc(QRectF(m.x() - r, m.y() - r, 2 * r, 2 * r), -self.winkel * 16, 80 * 16)
+        # Mute-Knopf
+        kn = self._knopf()
+        p.setPen(QPen(QColor(255, 90, 90) if self.mikro_aus else farbe, 1.6))
+        p.setBrush(QColor(170, 40, 40, 245) if self.mikro_aus else QColor(24, 25, 28, 240))
+        p.drawEllipse(kn)
+        c = kn.center()
+        p.setPen(QPen(QColor(244, 237, 225), 1.7))
+        p.setBrush(QColor(244, 237, 225))
+        p.drawRoundedRect(QRectF(c.x() - 2.6, c.y() - 7.5, 5.2, 9), 2.6, 2.6)   # Mikrofon
+        p.setBrush(Qt.NoBrush)
+        p.drawArc(QRectF(c.x() - 5, c.y() - 4.5, 10, 9), 200 * 16, 140 * 16)
+        p.drawLine(QPointF(c.x(), c.y() + 4.5), QPointF(c.x(), c.y() + 7))
+        if self.mikro_aus:
+            p.setPen(QPen(QColor(255, 255, 255), 2))
+            p.drawLine(QPointF(c.x() - 6, c.y() + 6), QPointF(c.x() + 6, c.y() - 6))
+        p.end()
+
+    # ---------------------------------------------------------------- Maus
+    def mousePressEvent(self, e) -> None:
+        if e.button() == Qt.LeftButton:
+            self._druck, self._start, self._gezogen = e.globalPosition().toPoint(), self.pos(), False
+        elif e.button() == Qt.RightButton:
+            self._menue(e.globalPosition().toPoint())
+
+    def mouseMoveEvent(self, e) -> None:
+        if self._druck is None:
+            return
+        weg = e.globalPosition().toPoint() - self._druck
+        if weg.manhattanLength() > 4:
+            self._gezogen = True
+        if self._gezogen:
+            self.move(self._start + weg)
+            self.blase.hide()
+
+    def mouseReleaseEvent(self, e) -> None:
+        if e.button() != Qt.LeftButton or self._druck is None:
+            return
+        self._druck = None
+        if self._gezogen:
+            daten.speichere_einstellung("mini_pos", [self.x(), self.y()])
+        elif self._knopf().contains(e.position()):
+            self.mute_klick.emit()
+
+    def mouseDoubleClickEvent(self, e) -> None:
+        if e.button() == Qt.LeftButton and not self._knopf().contains(e.position()):
+            self.zurueck.emit()
+
+    def _menue(self, wo) -> None:
+        from PySide6.QtWidgets import QMenu
+
+        menue = QMenu()
+        menue.addAction("Mikrofon an" if self.mikro_aus else "Mikrofon aus", self.mute_klick.emit)
+        menue.addAction("Wieder an (nicht stumm)" if self.stumm else "Stumm", self.stumm_klick.emit)
+        menue.addSeparator()
+        menue.addAction("Panel zurück (Spielmodus aus)", self.zurueck.emit)
+        menue.exec(wo)
 
 
 # ------------------------------------------------------------------ Chat-Fenster

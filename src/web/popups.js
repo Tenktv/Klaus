@@ -38,9 +38,10 @@ function holoBefehl(json) {
       return;
     }
     if (b.aktion === "alle_zu") { for (const id of zweitIds) klaus.zweit(JSON.stringify({ aktion: "zu", id }), () => {}); zweitIds.clear(); }
-    // Grosse Ansicht oder Hauptbildschirm voll (ab 3 Pop-ups) -> Bildschirm 2 fragen; geht nicht -> hier oeffnen
+    // Grosse Ansicht oder Hauptbildschirm voll (ab 3 Pop-ups) -> Bildschirm 2 fragen; geht nicht -> hier oeffnen.
+    // Spielmodus (window.klausMini): Panel ist ausgeblendet -> alles nach Bildschirm 2 (bzw. ueber das Spiel)
     const voll = Object.keys(holoPopups).length >= 3;
-    if (b.art && !holoPopups[b.id] && b.aktion !== "zu" && (ZWEIT_ARTEN.has(b.art) || voll)) {
+    if (b.art && !holoPopups[b.id] && b.aktion !== "zu" && (ZWEIT_ARTEN.has(b.art) || voll || window.klausMini)) {
       zweitWartet.set(b.id, []);
       klaus.zweit(JSON.stringify(b), (ok) => {
         const rest = zweitWartet.get(b.id) || [];

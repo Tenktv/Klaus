@@ -120,6 +120,15 @@ VERGISS = re.compile(r"^\W*(?:bitte\s+)?vergiss\s+(?:bitte\s+)?[,:]?\s*(?:dass\s
 # "zeig dein Gedaechtnis als Graph", "zeig Projekt Klaus als Netz", "Graph von meinem Projekt …"
 GRAPH = re.compile(r"\b(graph\w*|netz\w*|wissensnetz)\b", re.I)
 GRAPH_PROJEKT = re.compile(r"projekt\w*\s+(?:von\s+)?(?P<name>.+?)(?:\s+als\s+.*)?$", re.I)
+# Spielmodus (Mini-Orb statt Panel) und Streaming - lokal erkannt, ohne Gemini (schnell, kostet kein Kontingent)
+MINI_AN = re.compile(r"\bminimier\w*\s+dich\b|\bmach dich (?:mal )?klein(?:er)?\b|"
+                     r"\b(?:spiel|gaming|zock|mini)-?modus(?:\s+an|\s+ein)?\s*[.!]?$", re.I)
+MINI_AUS = re.compile(r"\b(?:spiel|gaming|zock|mini)-?modus\s+(?:aus|beenden|stoppen)\b|\bmach dich (?:wieder )?gro(?:ß|ss)\b|"
+                      r"\bkomm (?:wieder )?(?:zur(?:ü|ue)ck|gro(?:ß|ss) raus)\b|\bpanel (?:wieder )?(?:an|zur(?:ü|ue)ck)\b", re.I)
+CLIP = re.compile(r"^\W*(?:(?:mach|erstell)\w*\s+(?:mal\s+)?(?:einen|nen|'nen)\s+)?clip\w*(?:\s+(?:das|des|dat|mal|that|it|bitte))*\W*$", re.I)
+CHAT_VORLESEN = re.compile(r"\b(?:twitch-?)?chat\s+(?:vorlesen|vorlesen an|lesen)\b|\blies\s+(?:mir\s+)?(?:den\s+)?(?:twitch-?)?chat\s+vor\b", re.I)
+CHAT_STILL = re.compile(r"\b(?:twitch-?)?chat\s+(?:nicht mehr vorlesen|vorlesen aus|leise|still|ruhig)\b|"
+                        r"\bh(?:ö|oe)r auf\s+(?:den\s+)?chat\s+vorzulesen\b", re.I)
 WISSEN = re.compile(r"was (wei(ß|ss)t|hast) du (alles |eigentlich |so )?((ü|ue)ber mich|von mir)|was hast du dir (alles )?gemerkt", re.I)
 NACHFRAGE_SEK = 8  # so lange hoert Klaus nach einer Antwort ohne Weckwort weiter
 VERLAUF_VERGESSEN_SEK = 180
@@ -140,6 +149,8 @@ class Bruecke(QObject):
     nachricht = Signal(str, str)  # (rolle, text) fuers Chat-Fenster: du/klaus/info/auftrag
     holo = Signal(str)  # Pop-up-Fenster rund ums Auge als JSON: {aktion, id, art, titel, daten} (web/popups.js)
     pc_nutzung = Signal(str)  # "Klaus benutzt gerade den PC" als JSON: {aktiv, arten, was, rest} (pc_zugriff.py)
+    mini = Signal(bool)  # Spielmodus an/aus (klaus_app.Spielmodus)
+    chat = Signal(str)  # Twitch-Chat-Zeile als Sprechblase am Mini-Orb (stream.py)
 
 
 class Pipeline:
@@ -195,6 +206,11 @@ class Assistent:
         pc_zugriff.melder = lambda text: self.fern.senden(text) if self.fern else None
         import spiel_coach   # Tipps beim Zocken: lokal vorlesen (Headset), bzw. Telegram, wenn du dort schreibst
         spiel_coach.sagen = lambda text: self.sage(text, zustand="sprechen", quelle="coach")
+        import stream   # Twitch-Chat vorlesen (nur lokal, nie ins Gedaechtnis/Telegram), Clips, OBS
+        stream.sprechen = lambda text: self.vorlesen(text, quelle="twitch")
+        stream.anzeigen = self.b.chat.emit
+        stream.beschaeftigt = lambda: bool(self.gemini) and time.time() - (self.gemini.letzte_aktivitaet or 0) < 8
+        stream.starten()
         import datei_senden   # Dateien aufs Handy (Telegram)
         datei_senden.datei_melder = lambda inhalt, name, text: (self.fern.datei(inhalt, name, text)
                                                                 if self.fern and hasattr(self.fern, "datei") else None)
@@ -936,6 +952,66 @@ class Assistent:
                 self.b.pegel.emit(0.0)
                 self.b.zustand.emit("aus")
 
+    def vorlesen(self, text: str, quelle: str) -> None:
+        """Fremden Text (Twitch-Chat) laut vorlesen: nur am PC, nicht ins Chat-Protokoll/Gedaechtnis, nicht an Telegram."""
+        if self.per_telegram() or not self.darf_sprechen(quelle):
+            return
+        with self.sprech_sperre:
+            if not self.darf_sprechen(quelle):
+                return
+            self.zeige("sprechen", text)
+            try:
+                voice.sprich(text, False, on_pegel=self.b.pegel.emit, abbruch=lambda: not self.darf_sprechen(quelle))
+            finally:
+                self.b.pegel.emit(0.0)
+                self.b.zustand.emit("aus")
+
+    # ---------------------------------------------------------------- Spielmodus + Streaming
+    def schnellbefehl(self, befehl: str) -> bool:
+        """Spielmodus/Clip/Chat ohne Gemini erledigen. True = erledigt."""
+        if MINI_AUS.search(befehl):
+            self.b.mini.emit(False)
+            self.sage("Bin wieder groß.", zustand="aktion")
+        elif MINI_AN.search(befehl):
+            self.b.mini.emit(True)
+            self.sage("Okay, ich mach mich klein.", zustand="aktion")
+        elif CLIP.search(befehl):
+            self.sage(self.clip(), zustand="aktion")
+        elif CHAT_STILL.search(befehl):
+            import stream
+            self.sage(stream.setze_vorlesen(False), zustand="aktion")
+        elif CHAT_VORLESEN.search(befehl):
+            import stream
+            self.sage(stream.setze_vorlesen(True), zustand="aktion")
+        else:
+            return False
+        return True
+
+    def clip(self) -> str:
+        """„Klaus, clip das“: OBS-Replay sofort lokal speichern; Twitch-Clip (oeffentlich) nur mit Freigabe."""
+        import stream
+
+        teile = []
+        try:
+            teile.append(stream.obs_replay_speichern())
+        except RuntimeError:
+            pass   # OBS laeuft nicht - dann nur Twitch
+        if stream.CLIENT_ID and stream.TOKEN_DATEI.exists():
+            teile.append(self._mit_freigabe("clip", "Twitch-Clip der letzten Sekunden erstellen (öffentlich sichtbar)",
+                                            stream.twitch_clip, an=f"twitch.tv/{stream.KANAL}"))
+        return " ".join(teile) or ("Clippen geht noch nicht: OBS läuft nicht (Replay-Puffer) und Twitch ist nicht verbunden "
+                                   "(„python src/stream.py anmelden“).")
+
+    def stream_starten(self) -> str:
+        import stream
+
+        try:
+            stream.obs_anfrage("GetStreamStatus")
+        except RuntimeError as e:
+            return str(e)
+        return self._mit_freigabe("stream", "Live-Stream in OBS starten (öffentlich)", stream.obs_stream_starten,
+                                  an=f"twitch.tv/{stream.KANAL}" if stream.KANAL else "OBS-Streamziel")
+
     def hoere(self, timeout: float) -> str:
         """Wartet auf Sprache (ohne Weckwort) oder eine getippte Eingabe."""
         self.zeige("hoeren")
@@ -1017,6 +1093,9 @@ class Assistent:
                 if STUMM.search(befehl):  # "Klaus, sei still" - sofort, ohne Gemini zu fragen
                     self.setze_stumm(True)
                     self.zeige("aktion", "Stumm")
+                    self.verschwinde(nach=1.0)
+                    continue
+                if befehl and self.schnellbefehl(befehl):
                     self.verschwinde(nach=1.0)
                     continue
                 if self.gemini:
@@ -1194,6 +1273,8 @@ class Assistent:
         if STUMM.search(befehl):
             self.sage("Okay, ich bin still. Sag Klaus, wieder an, wenn du mich brauchst.")
             self.setze_stumm(True)
+            return
+        if self.schnellbefehl(befehl):
             return
         if PROTOKOLL_ENDE.search(befehl):
             self.sage(self.protokoll_beenden(), zustand="aktion")

@@ -310,6 +310,31 @@ Konkurrenz-Check am 05.10.2026 live geprüft (Bäckerei in Göppingen: 36 Mitbew
 Aktueller Stand zum Kontrollzentrum und zur freigegebenen Maus-/Tastatursteuerung: siehe `DESIGN_HANDOFF.md`.
 Ruhemodus, gemeinsame Starter-Sperre, Protokoll-Waechter und Premium-Textmodell-Kostenrahmen: `STABILITAET_UND_KI.md`.
 
+## Spielmodus & Streaming (21.10.2026)
+
+- **Spielmodus** (`klaus_app.Spielmodus`, `fenster.MiniOrb`, `spielmodus.py`): Panel wird ausgeblendet, statt dessen ein
+  kleiner verschiebbarer Kreis (reines QPainter, keine Browser-Engine), immer im Vordergrund, ohne Fokus zu stehlen.
+  Knopf unten rechts = Mikro aus/an, Doppelklick = Panel zurück, Rechtsklick = Menü (Mikro, Stumm, Panel zurück).
+  Position in `einstellungen.json` (`mini_pos`). Gemessen: QtWebEngine 2,1 % → 0,0 % CPU, Klaus gesamt 2,5 % → 0,1 %.
+  An: automatisch, sobald ein Spiel läuft (Prozessliste `spielmodus.SPIELE` + Vollbild-Programme aus Spiele-Ordnern;
+  Thread alle 5 s, Schalter `spielmodus_auto`), „Klaus, minimier dich / mach dich klein / Spielmodus“, Strg+Alt+O,
+  Taskleiste, Gemini-Werkzeug `spielmodus`. Aus: „komm zurück / Spielmodus aus“, oder das Spiel endet (nur wenn es
+  automatisch an ging). Beendet Nikola ihn mitten im Spiel selbst, bleibt er für dieses Spiel aus.
+- Im Spielmodus gehen **alle** Holo-Fenster an Bildschirm 2 (`window.klausMini` in `popups.js`); läuft dort auch ein
+  Vollbild, zeigt `ZweitFenster` sie über dem Hauptbildschirm. `_vollbild_auf()` prüft jetzt wirklich den
+  übergebenen Bildschirm (vorher galt ein Spiel auf Bildschirm 1 auch als „Bildschirm 2 belegt“). Live geprüft (Globus).
+  Exklusives Vollbild (D3D) kann keine Fenster darüber zeigen → Spiele auf „randloses Fenster“ stellen.
+- **Streaming** (`stream.py`): Twitch-Chat anonym lesen (`TWITCH_KANAL`, kein Token, schreibt nie in den Chat),
+  neue Leute im Chat werden immer gemeldet, Nachrichten vorgelesen (abschaltbar: „Chat nicht mehr vorlesen“,
+  `data/stream.json`), Sprechblase am Mini-Orb. Vorgelesener Text: ohne „Klaus“ und Freigabe-Wörter (sonst könnte ein
+  Zuschauer über die Lautsprecher Klaus steuern), Links/Spam gekürzt, `!befehle` ignoriert, max. 4 in der Warteschlange,
+  wartet, solange ein Gespräch mit Klaus läuft. Nicht ins Gedächtnis/Telegram. An Gemini nur als „FREMDE DATEN“.
+- „Klaus, clip das“: OBS-Replay-Puffer lokal speichern (sofort, ohne Freigabe) + Twitch-Clip (öffentlich → Freigabe-Art
+  `clip`, braucht `TWITCH_CLIENT_ID` + einmal `python src/stream.py anmelden`, Gerätecode, Recht nur `clips:edit`).
+- OBS über obs-websocket v5 (`OBS_PASSWORT`, Port 4455): Status, Szene wechseln, Aufnahme, Stream stoppen; **Stream
+  starten nur mit Freigabe** (Art `stream`). Gemini-Werkzeuge `twitch` und `obs`. Am 21.10. waren weder OBS noch
+  Streamlabs installiert → Twitch/OBS noch nicht live getestet (nur Unit-Tests `tests/test_stream_spielmodus.py`).
+
 ## 6. Offene Fragen an Nikola
 - Fish Audio: Schlüssel (Plus-Abo wegen kommerzieller Nutzung) eintragen, dann Stimme gemeinsam entwerfen.
 - Apple Kalender: Apple-ID + App-spezifisches Passwort in die .env (nicht in den Chat schreiben).

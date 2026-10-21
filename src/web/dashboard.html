@@ -1986,6 +1986,7 @@ klausBereit.then((k) => {
     window.klausPause = !sichtbar;
     document.body.classList.toggle("ruhe", !sichtbar);
   });
+  klaus.mini?.connect((an) => { window.klausMini = an; });   // Spielmodus (MiniOrb in fenster.py)
 
   klaus.daten.connect((schluessel, json) => {
     let d; try { d = JSON.parse(json); } catch { return; }

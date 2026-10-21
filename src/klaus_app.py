@@ -74,7 +74,7 @@ import daten
 import gehirn
 from assistent import Assistent, Bruecke
 from daten import lade_einstellungen, speichere_einstellung
-from fenster import (ChatFenster, DesktopPanel, OrbOverlay, PcNutzungHinweis, WebBruecke, ZweitFenster, setze_thema, taskleiste_verstecken,
+from fenster import (ChatFenster, DesktopPanel, MiniOrb, OrbOverlay, PcNutzungHinweis, WebBruecke, ZweitFenster, setze_thema, taskleiste_verstecken,
                      taskleiste_versteckt)
 
 AUTOSTART_LNK = Path(os.environ["APPDATA"]) / r"Microsoft\Windows\Start Menu\Programs\Startup\Klaus.lnk"
@@ -120,6 +120,7 @@ class Steuerung(QObject):
         self.tray: QSystemTrayIcon | None = None
         self.schalter: tuple | None = None  # (Stumm-, Mikro-aus-Eintrag) im Taskleisten-Menue
         self.panel_bruecke: WebBruecke | None = None
+        self.spielmodus: "Spielmodus | None" = None
 
     def _panel_in_mitte(self) -> bool:
         """True, wenn in der Bildschirmmitte gerade das Desktop-Panel zu sehen ist."""
@@ -149,6 +150,10 @@ class Steuerung(QObject):
 
     @Slot(str)
     def zustand(self, zustand: str) -> None:
+        if self.spielmodus and self.spielmodus.an:   # Spielmodus: nur der Mini-Orb zeigt den Zustand, kein grosser Orb
+            self.spielmodus.mini.setze_zustand(zustand)
+            self.orb.setze_zustand("aus")
+            return
         # Mitte-Overlay nur, wenn du in einer anderen App bist (sonst waere der Orb doppelt da)
         chat_vorne = ctypes.windll.user32.GetForegroundWindow() == int(self.chat.winId())
         if zustand != "aus" and (chat_vorne or self._panel_in_mitte()):
@@ -172,6 +177,8 @@ class Steuerung(QObject):
     @Slot(bool)
     def stumm_geaendert(self, an: bool) -> None:
         self._setze_haken(0, an)
+        if self.spielmodus:
+            self.spielmodus.mini.setze_stumm(an)
         self.panel_bruecke.stummStatus.emit(an)
         if self.tray:
             self.tray.setToolTip("Klaus – STUMM (sag „Klaus, wieder an“)" if an else "Klaus – sag „Klaus“")
@@ -179,6 +186,8 @@ class Steuerung(QObject):
     @Slot(bool)
     def mikro_geaendert(self, aus: bool) -> None:
         self._setze_haken(1, aus)
+        if self.spielmodus:
+            self.spielmodus.mini.setze_mikro(aus)
         self.panel_bruecke.mikroStatus.emit(aus)
         if self.tray:
             self.tray.setToolTip("Klaus – MIKROFON AUS (Strg+Shift+M)" if aus else "Klaus – sag „Klaus“")
@@ -194,6 +203,69 @@ class Steuerung(QObject):
     def meldung(self, text: str) -> None:
         if self.tray:
             self.tray.showMessage("Klaus", text, self.tray.icon(), 4000)
+
+
+class Spielmodus(QObject):
+    """Beim Zocken: Panel (Browser-Engine) komplett ausblenden, nur der Mini-Orb bleibt. Grosse Ansichten gehen auf
+    Bildschirm 2 (bzw. ueber das Spiel, wenn dort auch eins laeuft). Automatisch, sobald ein Spiel laeuft
+    (spielmodus.py), oder per Stimme/Strg+Alt+O/Taskleiste."""
+
+    spiel = Signal(str)   # aus dem Erkennungs-Thread
+
+    def __init__(self, assistent: Assistent, panel: DesktopPanel, panel_bruecke: WebBruecke, zweit: ZweitFenster,
+                 orb: OrbOverlay) -> None:
+        super().__init__()
+        self.assistent, self.panel, self.panel_bruecke, self.zweit, self.orb = assistent, panel, panel_bruecke, zweit, orb
+        self.mini = MiniOrb()
+        self.mini.mute_klick.connect(lambda: assistent.setze_mikro_aus(not assistent.pausiert))
+        self.mini.stumm_klick.connect(lambda: assistent.setze_stumm(not assistent.ist_stumm))
+        self.mini.zurueck.connect(lambda: self.manuell(False))
+        self.an = False
+        self.automatisch = False   # vom Spiel ausgeloest -> geht mit dem Spiel wieder aus
+        self.spiel_jetzt = ""
+        self.nicht_fuer = ""       # fuer dieses Spiel hat Nikola den Spielmodus selbst beendet -> nicht wieder einschalten
+        self.geaendert = None      # Rueckruf fuer den Haken im Taskleisten-Menue
+        self.spiel.connect(self._spiel)
+        import spielmodus
+        self._halt = threading.Event()
+        threading.Thread(target=spielmodus.beobachten, args=(self.spiel.emit, self._halt), daemon=True, name="spielerkennung").start()
+
+    def setze(self, an: bool, automatisch: bool = False) -> None:
+        if an == self.an:
+            return
+        self.an, self.automatisch = an, automatisch and an
+        self.zweit.mini = an
+        self.panel_bruecke.mini.emit(an)
+        if an:
+            self.panel.einschalten(False)              # Browser-Engine zeichnet nichts mehr
+            self.panel_bruecke.sichtbar.emit(False)    # Panel-Animationen anhalten
+            self.orb.setze_zustand("aus")
+            self.mini.setze_stumm(self.assistent.ist_stumm)
+            self.mini.setze_mikro(self.assistent.pausiert)
+            self.mini.zeigen()
+        else:
+            self.mini.verstecken()
+            self.panel.einschalten(lade_einstellungen().get("panel", True) and "--ohne-panel" not in sys.argv)
+            self.panel_bruecke.sichtbar.emit(True)
+        print(f"[Klaus] Spielmodus {'an' if an else 'aus'}{' (automatisch: ' + self.spiel_jetzt + ')' if self.automatisch else ''}")
+        if self.geaendert:
+            self.geaendert(an)
+
+    @Slot(bool)
+    def manuell(self, an: bool) -> None:
+        if not an and self.an and self.spiel_jetzt:
+            self.nicht_fuer = self.spiel_jetzt   # mitten im Spiel selbst beendet -> respektieren, bis das Spiel zu ist
+        self.setze(an)
+
+    @Slot(str)
+    def _spiel(self, name: str) -> None:
+        self.spiel_jetzt = name
+        if not name:
+            self.nicht_fuer = ""
+            if self.an and self.automatisch:
+                self.setze(False)
+        elif not self.an and name != self.nicht_fuer and lade_einstellungen().get("spielmodus_auto", True):
+            self.setze(True, automatisch=True)
 
 
 class Tastenkuerzel(QAbstractNativeEventFilter):
@@ -341,6 +413,11 @@ def main() -> None:
     bruecke.thema.connect(zweit_bruecke.thema)
     bruecke.panel.connect(panel_bruecke.panelBefehl)
     bruecke.holo.connect(panel_bruecke.holo)
+    spielmodus = Spielmodus(assistent, panel, panel_bruecke, zweit, orb)   # beim Zocken nur der Mini-Orb
+    steuerung.spielmodus = spielmodus
+    bruecke.mini.connect(spielmodus.manuell)
+    bruecke.pegel.connect(spielmodus.mini.setze_pegel)
+    bruecke.chat.connect(spielmodus.mini.sprechblase)
     pc_hinweis = PcNutzungHinweis()   # "Klaus benutzt gerade den PC" (pc_zugriff.py)
     bruecke.pc_nutzung.connect(pc_hinweis.setze)
     steuerung.panel_bruecke = panel_bruecke
@@ -386,6 +463,18 @@ def main() -> None:
         panel.einschalten(panel.an)  # Groesse an die neue Bildschirmflaeche anpassen
 
     taskleiste_aus.toggled.connect(taskleiste_umschalten)
+    spiel_an = QAction("Spielmodus – nur Mini-Kreis  (Strg+Alt+O)", checkable=True)
+    spiel_an.toggled.connect(spielmodus.manuell)
+
+    def spiel_haken(an: bool) -> None:
+        spiel_an.blockSignals(True)
+        spiel_an.setChecked(an)
+        spiel_an.blockSignals(False)
+
+    spielmodus.geaendert = spiel_haken
+    spiel_auto = QAction("Spielmodus automatisch, wenn ein Spiel läuft", checkable=True,
+                         checked=einstellungen.get("spielmodus_auto", True))
+    spiel_auto.toggled.connect(lambda an: speichere_einstellung("spielmodus_auto", an))
     stumm = QAction("Stumm  (Strg+Alt+K)", checkable=True)
     stumm.toggled.connect(assistent.setze_stumm)
     mikro_aus = QAction("Mikrofon aus  (Strg+Shift+M)", checkable=True)
@@ -395,8 +484,10 @@ def main() -> None:
     bruecke.mikro_aus.connect(steuerung.mikro_geaendert)
     # Globale Tastenkuerzel - funktionieren auch, wenn ein Spiel oder eine andere App vorne ist
     tasten = Tastenkuerzel({1: lambda: assistent.setze_stumm(not assistent.ist_stumm),
-                            2: lambda: assistent.setze_mikro_aus(not assistent.pausiert)})
+                            2: lambda: assistent.setze_mikro_aus(not assistent.pausiert),
+                            3: lambda: spielmodus.manuell(not spielmodus.an)})
     tasten.registriere(1, "K")
+    tasten.registriere(3, "O")
     tasten.registriere(2, "M", shift=True)  # Strg+Alt+M ist bei dir schon belegt
     app.installNativeEventFilter(tasten)
     autostart = QAction("Mit Windows starten", checkable=True, checked=AUTOSTART_LNK.exists())
@@ -416,7 +507,7 @@ def main() -> None:
         app.quit()
 
     ende.triggered.connect(beenden)
-    for eintrag in (stumm, mikro_aus, chat_oeffnen, panel_an, taskleiste_aus, autostart, stimme, projekte, log):
+    for eintrag in (stumm, mikro_aus, spiel_an, spiel_auto, chat_oeffnen, panel_an, taskleiste_aus, autostart, stimme, projekte, log):
         menue.addAction(eintrag)
     menue.addSeparator()
     menue.addAction(ende)
@@ -432,6 +523,9 @@ def main() -> None:
     zuletzt_sichtbar = [True]
 
     def sicht_pruefen() -> None:
+        if spielmodus.an:            # Panel ist ausgeblendet; nach dem Spielmodus neu bewerten
+            zuletzt_sichtbar[0] = True
+            return
         sichtbar = not steuerung.panel_verdeckt()
         if sichtbar != zuletzt_sichtbar[0]:
             zuletzt_sichtbar[0] = sichtbar

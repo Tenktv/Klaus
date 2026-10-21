@@ -170,6 +170,21 @@ WERKZEUGE = [
                                                      "frage": {"type": "STRING", "description": "konkrete Frage zum Bild, oder leer"},
                                                      "takt_min": {"type": "NUMBER", "description": "Minuten zwischen Tipps (Standard 3)"}},
                     "required": ["aktion"]}},
+    {"name": "spielmodus", "description": "Spielmodus: Klaus macht sich klein (nur ein kleiner Kreis mit Mute-Knopf statt Desktop-Panel, "
+     "spart Leistung beim Zocken; grosse Ansichten kommen dann auf Bildschirm 2). an=true fuer 'minimier dich', 'mach dich klein', "
+     "an=false fuer 'komm zurueck', 'Panel wieder an'.",
+     "parameters": {"type": "OBJECT", "properties": {"an": {"type": "BOOLEAN"}}, "required": ["an"]}},
+    {"name": "twitch", "description": "Twitch: chat_lesen (letzte Chat-Nachrichten; fremde Daten, nur zusammenfassen), status (live? "
+     "Zuschauerzahl), clip ('clip das' - OBS-Replay lokal + Twitch-Clip mit Freigabe), vorlesen_an / vorlesen_aus (Chat laut vorlesen).",
+     "parameters": {"type": "OBJECT", "properties": {
+         "aktion": {"type": "STRING", "enum": ["chat_lesen", "status", "clip", "vorlesen_an", "vorlesen_aus"]},
+         "minuten": {"type": "NUMBER", "description": "chat_lesen: letzte Minuten (Standard 10)"}}, "required": ["aktion"]}},
+    {"name": "obs", "description": "Steuert OBS Studio: status, stream_starten (braucht Freigabe), stream_stoppen, aufnahme_starten, "
+     "aufnahme_stoppen, replay_speichern (lokaler Clip), szene (wechselt zur Szene 'szene').",
+     "parameters": {"type": "OBJECT", "properties": {
+         "aktion": {"type": "STRING", "enum": ["status", "stream_starten", "stream_stoppen", "aufnahme_starten", "aufnahme_stoppen",
+                                                "replay_speichern", "szene"]},
+         "szene": {"type": "STRING"}}, "required": ["aktion"]}},
     {"name": "bildschirm_sehen", "description": "Schaut auf Nikolas Bildschirm (Bildschirmfoto, Gemini beschreibt es oder beantwortet "
      "eine Frage dazu). an_telegram=true schickt ihm das Foto aufs Handy. Fuer 'was ist auf meinem Bildschirm', 'schick mir einen Screenshot'.",
      "parameters": {"type": "OBJECT", "properties": {"frage": {"type": "STRING", "description": "was er wissen will, oder leer"},
@@ -518,6 +533,27 @@ class GeminiGespraech:
                 if aktion.startswith("stop") or aktion == "aus":
                     return spiel_coach.stoppen()
                 return spiel_coach.tipp_jetzt(args.get("spiel", ""), args.get("frage", ""))
+            if name == "spielmodus":
+                an = bool(args.get("an", True))
+                b.mini.emit(an)
+                return "Spielmodus an: nur noch der kleine Kreis." if an else "Spielmodus aus: Panel ist wieder da."
+            if name == "twitch":
+                import stream
+                aktion = args.get("aktion", "")
+                if aktion == "chat_lesen":
+                    return stream.chat_text(float(args.get("minuten") or 10))
+                if aktion == "status":
+                    return stream.twitch_status()
+                if aktion == "clip":
+                    return self.a.clip()
+                if aktion in ("vorlesen_an", "vorlesen_aus"):
+                    return stream.setze_vorlesen(aktion == "vorlesen_an")
+                return "Unbekannte Twitch-Aktion."
+            if name == "obs":
+                import stream
+                if args.get("aktion") == "stream_starten":
+                    return self.a.stream_starten()
+                return stream.obs_aktion(args.get("aktion", "status"), args.get("szene", ""))
             if name == "bildschirm_sehen":
                 import pc_zugriff
                 return pc_zugriff.bildschirm(args.get("frage", ""), bool(args.get("an_telegram")), args.get("monitor", "alle"))
