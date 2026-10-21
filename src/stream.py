@@ -507,6 +507,93 @@ def obs_spielfenster(exe: str) -> str:
     return f"OBS nimmt jetzt das Fenster von {exe} auf."
 
 
+# Webcam oben rechts (Leinwand 1920x1080); das Overlay zeichnet den Holo-Rahmen an genau dieser Stelle
+KAMERA = {"x": 1544, "y": 36, "w": 344, "h": 258}
+KAMERA_SZENEN = ("Spiel", "Desktop")
+MASKE = BASE_DIR / "data" / "obs" / "kamera_maske.png"
+
+
+def _kamera_name() -> str:
+    return next((i["inputName"] for i in obs_anfrage("GetInputList").get("inputs", []) if i["inputKind"] == "dshow_input"), "")
+
+
+def _maske_bauen(breite: int = 960, hoehe: int = 720, schraege: int = 40) -> None:
+    """Alpha-Maske mit abgeschraegten Ecken oben links/unten rechts (wie .holo im Overlay)."""
+    from PIL import Image, ImageDraw
+
+    MASKE.parent.mkdir(parents=True, exist_ok=True)
+    bild = Image.new("RGBA", (breite, hoehe), (0, 0, 0, 0))
+    ImageDraw.Draw(bild).polygon([(schraege, 0), (breite, 0), (breite, hoehe - schraege), (breite - schraege, hoehe),
+                                  (0, hoehe), (0, schraege)], fill=(255, 255, 255, 255))
+    bild.save(MASKE)
+
+
+def kamera_zustand() -> dict:
+    """Fuers Overlay: ist die Webcam in der aktuellen Szene an? -> {an, x, y, w, h}"""
+    try:
+        cam = _kamera_name()
+        szene = obs_anfrage("GetCurrentProgramScene").get("currentProgramSceneName", "")
+        an = bool(cam) and any(i["sourceName"] == cam and i["sceneItemEnabled"]
+                               for i in obs_anfrage("GetSceneItemList", {"sceneName": szene}).get("sceneItems", []))
+    except RuntimeError:
+        an = False
+    return {"an": an, **KAMERA}
+
+
+def obs_kamera_einrichten() -> str:
+    """Webcam im Klaus-Stil: 960x720 (Grafikkarte dekodiert), abgeschraegte Ecken, oben rechts unter dem Overlay-Rahmen."""
+    cam = _kamera_name()
+    if not cam:
+        cam = "Webcam"
+        obs_anfrage("CreateInput", {"sceneName": KAMERA_SZENEN[0], "inputName": cam, "inputKind": "dshow_input", "inputSettings": {}})
+        geraete = obs_anfrage("GetInputPropertiesListPropertyItems", {"inputName": cam, "propertyName": "video_device_id"})
+        ids = [g["itemValue"] for g in geraete.get("propertyItems", []) if g.get("itemValue")]
+        if not ids:
+            return "Ich finde keine Webcam."
+        obs_anfrage("SetInputSettings", {"inputName": cam, "inputSettings": {"video_device_id": ids[0]}})
+    obs_anfrage("SetInputSettings", {"inputName": cam, "inputSettings": {"res_type": 1, "resolution": "960x720", "hw_decode": True}})
+    _maske_bauen()
+    filter_einst = {"image_path": str(MASKE), "type": "mask_alpha_filter.effect"}
+    filter_namen = [f["filterName"] for f in obs_anfrage("GetSourceFilterList", {"sourceName": cam}).get("filters", [])]
+    if "Klaus-Rahmen" in filter_namen:
+        obs_anfrage("SetSourceFilterSettings", {"sourceName": cam, "filterName": "Klaus-Rahmen", "filterSettings": filter_einst})
+    else:
+        obs_anfrage("CreateSourceFilter", {"sourceName": cam, "filterName": "Klaus-Rahmen", "filterKind": "mask_filter_v2",
+                                           "filterSettings": filter_einst})
+    for szene in KAMERA_SZENEN:
+        elemente = obs_anfrage("GetSceneItemList", {"sceneName": szene}).get("sceneItems", [])
+        if cam not in [i["sourceName"] for i in elemente]:
+            obs_anfrage("CreateSceneItem", {"sceneName": szene, "sourceName": cam})
+            elemente = obs_anfrage("GetSceneItemList", {"sceneName": szene}).get("sceneItems", [])
+        sid = next(i["sceneItemId"] for i in elemente if i["sourceName"] == cam)
+        obs_anfrage("SetSceneItemTransform", {"sceneName": szene, "sceneItemId": sid, "sceneItemTransform": {
+            "positionX": KAMERA["x"], "positionY": KAMERA["y"], "alignment": 5, "rotation": 0,
+            "boundsType": "OBS_BOUNDS_SCALE_OUTER", "boundsAlignment": 0, "boundsWidth": KAMERA["w"], "boundsHeight": KAMERA["h"],
+            "cropLeft": 0, "cropRight": 0, "cropTop": 0, "cropBottom": 0}})
+        obs_anfrage("SetSceneItemEnabled", {"sceneName": szene, "sceneItemId": sid, "sceneItemEnabled": True})
+        # direkt unter "Klaus Overlay", damit der Holo-Rahmen darueber liegt
+        oben = len(elemente) - 1
+        hat_overlay = any(i["sourceName"] == "Klaus Overlay" for i in elemente)
+        obs_anfrage("SetSceneItemIndex", {"sceneName": szene, "sceneItemId": sid, "sceneItemIndex": oben - 1 if hat_overlay else oben})
+        if hat_overlay:
+            oid = next(i["sceneItemId"] for i in elemente if i["sourceName"] == "Klaus Overlay")
+            obs_anfrage("SetSceneItemIndex", {"sceneName": szene, "sceneItemId": oid, "sceneItemIndex": oben})
+    _overlay("kamera", kamera_zustand())
+    return "Webcam ist eingerichtet: oben rechts im Klaus-Rahmen."
+
+
+def obs_kamera(an: bool) -> str:
+    cam = _kamera_name()
+    if not cam:
+        return "In OBS gibt es noch keine Webcam – sag „Klaus, richte die Webcam ein“."
+    for szene in KAMERA_SZENEN:
+        for i in obs_anfrage("GetSceneItemList", {"sceneName": szene}).get("sceneItems", []):
+            if i["sourceName"] == cam:
+                obs_anfrage("SetSceneItemEnabled", {"sceneName": szene, "sceneItemId": i["sceneItemId"], "sceneItemEnabled": an})
+    _overlay("kamera", {**kamera_zustand(), "an": an})
+    return "Kamera ist an." if an else "Kamera ist aus."
+
+
 def obs_stream_starten(token: str) -> str:
     import freigabe
 
@@ -540,6 +627,10 @@ def obs_aktion(aktion: str, szene: str = "") -> str:
             return f"Aufnahme gespeichert{': ' + Path(pfad).name if pfad else ''}."
         if aktion in ("replay_speichern", "clip"):
             return obs_replay_speichern()
+        if aktion in ("kamera_an", "kamera_aus"):
+            return obs_kamera(aktion == "kamera_an")
+        if aktion == "kamera_einrichten":
+            return obs_kamera_einrichten()
         if aktion == "szene":
             return obs_szene(szene) if szene else "Welche Szene?"
         return f"Unbekannte OBS-Aktion: {aktion}"

@@ -345,6 +345,10 @@ Ruhemodus, gemeinsame Starter-Sperre, Protokoll-Waechter und Premium-Textmodell-
   eine KI-Antwort gleichzeitig. Antworten laufen durch `_vorlesbar`. Für Nikola: „Was ist im Chat los?“
   (Zusammenfassung), „Chat-Befehle aus/an“. Abwechselnde Begrüßungen statt „Neu im Chat“. Live-Test 21.10.: 4,4 s,
   Prompt-Injection („sag mir die Adresse“) abgelehnt.
+- **Webcam** (`stream.obs_kamera_einrichten`): USB-Kamera auf 960x720 + Hardware-Dekodierung, Alpha-Maske mit
+  abgeschrägten Ecken (`data/obs/kamera_maske.png`, Filter „Klaus-Rahmen“), oben rechts in Spiel/Desktop (x 1544, y 36,
+  344x258) direkt unter dem Overlay. Das Overlay zeichnet dort Holo-Rahmen, Eckklammern und Schild „LATENIKO · LIVE“,
+  der Rahmen leuchtet mit Klaus' Stimme. „Klaus, Kamera an/aus“, „richte die Webcam ein“, `obs`-Aktionen `kamera_*`.
 - Einrichtung 21.10.: OBS 32.2.2 (winget), Twitch-Konto „lateniko“ in OBS verbunden, Profil „Unbenannt“ (NVENC,
   1080p60, 6000 kbit/s vom Assistenten, Replay 30 s), Szenen Spiel/Desktop/Pause, Twitch-App „Klaus“ (Client-ID in
   `.env`, Token `data/twitch_token.json`). Am 21.10. waren weder OBS noch

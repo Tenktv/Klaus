@@ -26,7 +26,7 @@ URL = f"http://127.0.0.1:{PORT}/overlay"
 _hoerer: list[queue.Queue] = []
 _sperre = threading.Lock()
 _zuletzt = {"pegel": 0.0}
-_zustand = {"zustand": "aus", "banner": ""}   # fuer neu verbundene Seiten (OBS laedt die Quelle oft neu)
+_zustand = {"zustand": "aus", "banner": "", "kamera": None}   # fuer neu verbundene Seiten (OBS laedt die Quelle oft neu)
 
 
 def senden(art: str, daten=None) -> None:
@@ -36,7 +36,7 @@ def senden(art: str, daten=None) -> None:
         if daten and jetzt - _zuletzt["pegel"] < 0.066:
             return
         _zuletzt["pegel"] = jetzt
-    if art in ("zustand", "banner"):
+    if art in ("zustand", "banner", "kamera"):
         _zustand[art] = daten
     roh = f"event: {art}\ndata: {json.dumps(daten, ensure_ascii=False)}\n\n".encode("utf-8")
     with _sperre:
@@ -91,6 +91,9 @@ class _Anfrage(BaseHTTPRequestHandler):
         start = [("thema", _thema()), ("zustand", _zustand["zustand"]), ("banner", _zustand["banner"])]
         if stream.KANAL:
             start.append(("kanal", stream.KANAL))
+        if _zustand["kamera"] is None:   # nach einem Klaus-Neustart: einmal OBS fragen, ob die Webcam an ist
+            _zustand["kamera"] = stream.kamera_zustand()
+        start.append(("kamera", _zustand["kamera"]))
         try:
             for art, d in start:
                 self.wfile.write(f"event: {art}\ndata: {json.dumps(d, ensure_ascii=False)}\n\n".encode("utf-8"))

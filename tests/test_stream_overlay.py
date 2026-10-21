@@ -78,6 +78,25 @@ class OverlayChatTests(unittest.TestCase):
         self.assertEqual([a for a, _ in self.ereignisse], ['chat', 'willkommen'])
 
 
+class KameraTests(unittest.TestCase):
+    def test_maske_schraeg(self):
+        import tempfile
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as ordner, patch.object(stream, 'MASKE', Path(ordner) / 'm.png'):
+            stream._maske_bauen(100, 80, 10)
+            m = Image.open(stream.MASKE)
+            self.assertEqual(m.getpixel((1, 1))[3], 0)        # oben links abgeschraegt
+            self.assertEqual(m.getpixel((98, 78))[3], 0)      # unten rechts abgeschraegt
+            self.assertEqual(m.getpixel((98, 1))[3], 255)
+            self.assertEqual(m.getpixel((50, 40))[3], 255)
+
+    def test_sprachbefehl(self):
+        from assistent import KAMERA
+        self.assertEqual(KAMERA.search('kamera aus').group('an'), 'aus')
+        self.assertTrue(KAMERA.search('richte die webcam ein').group('einrichten'))
+        self.assertIsNone(KAMERA.search('öffne die kamera-app'))
+
+
 class BannerBefehlTests(unittest.TestCase):
     def test_banner(self):
         m = STREAM_BANNER.search('zeig im Stream: gleich kommt der Bossfight!')

@@ -68,6 +68,20 @@
   .blitz.los { animation: blitz 1.1s ease-out; }
   @keyframes blitz { 15% { opacity: 1; } to { opacity: 0; } }
 
+  /* ---- Webcam-Rahmen (die Kamera selbst liegt in OBS darunter, mit derselben Schraege maskiert) ---- */
+  #kamera { position: absolute; display: none; --p: 0; pointer-events: none;
+    filter: drop-shadow(0 0 calc(4px + var(--p) * 16px) rgba(var(--rgb), calc(.35 + var(--p) * .5))); }
+  #kamera.an { display: block; }
+  #kamera .rand { position: absolute; inset: 0; clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px); }
+  #kamera .rand::before { content: ""; position: absolute; inset: 0; padding: 2px;
+    background: linear-gradient(135deg, rgba(var(--rgb), 1), rgba(var(--rgb), .25) 35%, rgba(var(--rgb), .15) 65%, rgba(var(--rgb), .9));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; clip-path: inherit; }
+  #kamera .ecke { position: absolute; width: 26px; height: 26px; border: 3px solid var(--bernstein); }
+  #kamera .ecke.ro { top: -6px; right: -6px; border-left: 0; border-bottom: 0; }
+  #kamera .ecke.lu { bottom: -6px; left: -6px; border-right: 0; border-top: 0; }
+  #kamera .schild { position: absolute; left: 22px; bottom: -15px; padding: 5px 14px 6px; white-space: nowrap; }
+  #kamera .schild .kopf::after { content: " · LIVE"; color: #ff6a5a; text-shadow: 0 0 10px rgba(255, 90, 70, .8); }
+
   body.nur-orb #chat, body.nur-orb #hinweis, body.nur-orb #banner,
   body.nur-chat #klaus, body.nur-chat #namensschild, body.nur-chat #hinweis, body.nur-chat #banner,
   body.nur-hinweise #klaus, body.nur-hinweise #namensschild, body.nur-hinweise #chat { display: none; }
@@ -84,6 +98,8 @@
 <div class="holo leer" id="chat"><div class="kopf" id="chat-kopf">Twitch-Chat</div><div id="zeilen"></div></div>
 <div class="holo" id="hinweis"><div class="kopf" id="hinweis-kopf"></div><div class="gross" id="hinweis-text"></div></div>
 <div class="holo" id="banner"></div>
+<div id="kamera"><div class="rand"></div><div class="ecke ro"></div><div class="ecke lu"></div>
+  <div class="holo schild"><div class="kopf" id="kamera-name">Live</div></div></div>
 <script>
 const $ = (id) => document.getElementById(id);
 const nur = new URLSearchParams(location.search).get("nur");
@@ -145,9 +161,14 @@ function verbinden() {
   const an = (art, fn) => q.addEventListener(art, (e) => { try { fn(JSON.parse(e.data)); } catch (f) { console.error(art, f); } });
   an("thema", (n) => wendeThemaAn(n));
   an("zustand", zustand);
-  an("pegel", (p) => orb.setPegel(p));
+  an("pegel", (p) => { orb.setPegel(p); $("kamera").style.setProperty("--p", Math.min(1, p * 1.4).toFixed(2)); });
+  an("kamera", (k) => {
+    if (!k) return;
+    Object.assign($("kamera").style, { left: k.x + "px", top: k.y + "px", width: k.w + "px", height: k.h + "px" });
+    $("kamera").classList.toggle("an", !!k.an);
+  });
   an("text", untertitel);
-  an("kanal", (k) => { $("chat-kopf").textContent = "Twitch-Chat · " + k; });
+  an("kanal", (k) => { $("chat-kopf").textContent = "Twitch-Chat · " + k; $("kamera-name").textContent = k; });
   an("chat", chatZeile);
   an("willkommen", (d) => hinweis("Neu im Chat", "Willkommen, " + d.name + "!"));
   an("clip", (d) => hinweis("Clip", d.text || "Clip gespeichert!", "clip"));

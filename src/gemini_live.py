@@ -186,10 +186,11 @@ WERKZEUGE = [
          "aktion": {"type": "STRING", "enum": ["banner", "banner_weg", "hinweis", "einrichten"]},
          "text": {"type": "STRING"}}, "required": ["aktion"]}},
     {"name": "obs", "description": "Steuert OBS Studio: status, stream_starten (braucht Freigabe), stream_stoppen, aufnahme_starten, "
-     "aufnahme_stoppen, replay_speichern (lokaler Clip), szene (wechselt zur Szene 'szene').",
+     "aufnahme_stoppen, replay_speichern (lokaler Clip), szene (wechselt zur Szene 'szene'), kamera_an / kamera_aus (Webcam im "
+     "Stream), kamera_einrichten (Webcam im Klaus-Rahmen oben rechts).",
      "parameters": {"type": "OBJECT", "properties": {
          "aktion": {"type": "STRING", "enum": ["status", "stream_starten", "stream_stoppen", "aufnahme_starten", "aufnahme_stoppen",
-                                                "replay_speichern", "szene"]},
+                                                "replay_speichern", "szene", "kamera_an", "kamera_aus", "kamera_einrichten"]},
          "szene": {"type": "STRING"}}, "required": ["aktion"]}},
     {"name": "bildschirm_sehen", "description": "Schaut auf Nikolas Bildschirm (Bildschirmfoto, Gemini beschreibt es oder beantwortet "
      "eine Frage dazu). an_telegram=true schickt ihm das Foto aufs Handy. Fuer 'was ist auf meinem Bildschirm', 'schick mir einen Screenshot'.",
