@@ -760,12 +760,17 @@ class MiniBlase(QWidget):
 
 class MiniOrb(QWidget):
     """Spielmodus: statt Panel nur ein kleiner Kreis, immer im Vordergrund, frei verschiebbar.
-    Knopf unten rechts = Mikrofon aus/an, Doppelklick = Panel zurueck, Rechtsklick = Menue.
+    Knopf unten rechts = Mikrofon aus/an, Rechtsklick = Menue (Panel zurueck nur dort - ein Doppelklick passierte
+    beim Zocken versehentlich, und das Panel liegt hinter dem Spiel).
     Reines QPainter (keine Browser-Engine) und nur Neuzeichnen bei Aenderungen -> kostet beim Zocken praktisch nichts."""
 
-    GROESSE, RADIUS = 84, 29
-    FARBEN = {"aus": (189, 128, 90), "start": (189, 128, 90), "hoeren": (57, 208, 255), "denken": (167, 123, 255),
-              "sprechen": (255, 197, 107), "aktion": (255, 197, 107), "fehler": (255, 80, 80)}
+    GROESSE, ORB = 104, 96   # Fenster / Reaktor (gezeichnet in 600er-Einheiten wie web/klaus.js)
+    # Farben wie im Panel (klaus.js, Thema gold): Hauptfarbe, Ausfuehren gruen, Fehler rot, gedimmt bei stumm/Mikro aus
+    HAUPT = (213, 186, 133)
+    FARBEN = {"sprechen": (187, 164, 117), "aktion": (157, 197, 170), "fertig": (157, 197, 170), "fehler": (237, 156, 145),
+              "freigabe": (226, 184, 119)}
+    GEDIMMT = (120, 120, 128)
+    TEMPO = {"aus": 1, "start": 1.4, "hoeren": 1.6, "denken": 7, "sprechen": 2, "aktion": 3.2, "freigabe": 0.6, "fehler": 0.4}
     mute_klick = Signal()    # Mikrofon aus/an
     stumm_klick = Signal()   # Stumm an/aus
     zurueck = Signal()       # Spielmodus beenden
@@ -777,12 +782,14 @@ class MiniOrb(QWidget):
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setWindowTitle("Klaus Mini")
         self.setFixedSize(self.GROESSE, self.GROESSE)
-        self.setToolTip("Klaus · ziehen = verschieben · Knopf = Mikro aus/an · Doppelklick = Panel zurück · Rechtsklick = Menü")
-        self.zustand, self.pegel, self.stumm, self.mikro_aus, self.winkel = "aus", 0.0, False, False, 0
+        self.setToolTip("Klaus · ziehen = verschieben · Knopf = Mikro aus/an · Rechtsklick = Menü (Stumm, Panel zurück)")
+        self.zustand, self.pegel, self.pegel_ziel, self.stumm, self.mikro_aus = "aus", 0.0, 0.0, False, False
+        self.t = self.dreh_a = self.dreh_b = self.dreh_c = 0.0
+        self._skala = None   # vorgezeichnete statische Teile (Tunnel, Strahlen, Skala)
         self._druck = self._start = None
         self._gezogen = False
         self.blase = MiniBlase()
-        self.dreh = QTimer(self, interval=50)   # nur beim Denken (drehender Bogen)
+        self.dreh = QTimer(self, interval=50)   # 20 Bilder/s (~2,8 ms je Bild), nur solange Klaus hoert/denkt/spricht; in Ruhe steht das Bild
         self.dreh.timeout.connect(self._drehen)
         self.oben = QTimer(self, interval=3000)  # randlose Spiele schieben sich gern davor -> wieder nach vorne
         self.oben.timeout.connect(self._nach_oben)
@@ -810,18 +817,25 @@ class MiniOrb(QWidget):
         ctypes.windll.user32.SetWindowPos(int(self.winId()), -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
 
     # ---------------------------------------------------------------- Zustand
-    def setze_zustand(self, zustand: str) -> None:
-        self.zustand = zustand
-        if zustand == "denken" and self.isVisible():
-            self.dreh.start()
+    def _aktiv(self) -> bool:
+        return self.zustand != "aus" or self.pegel_ziel > 0.02 or self.pegel > 0.02
+
+    def _takt_pruefen(self) -> None:
+        if self.isVisible() and self._aktiv():
+            if not self.dreh.isActive():
+                self.dreh.start()
         else:
             self.dreh.stop()
-        self.update()
+            self.update()   # Ruhebild
+
+    def setze_zustand(self, zustand: str) -> None:
+        self.zustand = zustand
+        self._takt_pruefen()
 
     def setze_pegel(self, pegel: float) -> None:
-        if self.isVisible() and (abs(pegel - self.pegel) > 0.05 or pegel == 0.0):
-            self.pegel = pegel
-            self.update()
+        self.pegel_ziel = max(0.0, min(1.0, pegel))
+        if self.isVisible() and not self.dreh.isActive() and self._aktiv():
+            self.dreh.start()
 
     def setze_stumm(self, an: bool) -> None:
         self.stumm = an
@@ -836,7 +850,15 @@ class MiniOrb(QWidget):
             self.blase.zeige(text, self)
 
     def _drehen(self) -> None:
-        self.winkel = (self.winkel + 14) % 360
+        dt = 0.05
+        self.t += dt
+        self.pegel += (self.pegel_ziel - self.pegel) * 0.3
+        tempo = self.TEMPO.get(self.zustand, 1)
+        self.dreh_a += dt * 0.10 * tempo
+        self.dreh_b -= dt * 0.16 * tempo
+        self.dreh_c += dt * 0.42 * tempo
+        if not self._aktiv():
+            self.dreh.stop()
         self.update()
 
     # ---------------------------------------------------------------- Zeichnen
@@ -844,36 +866,166 @@ class MiniOrb(QWidget):
         from PySide6.QtCore import QRectF
         return QRectF(self.GROESSE - 31, self.GROESSE - 31, 27, 27)
 
+    def _farbe(self) -> tuple:
+        if self.stumm or self.mikro_aus:
+            return self.GEDIMMT
+        return self.FARBEN.get(self.zustand, self.HAUPT)
+
+    @staticmethod
+    def _rgba(farbe: tuple, a: float, hell: float = 0.0) -> QColor:
+        r, g, b = (int(w + (255 - w) * hell) for w in farbe)
+        return QColor(r, g, b, int(255 * max(0.0, min(1.0, a))))
+
+    def _statisch(self, px: int):
+        """Tunnel-Ringe, Lichtstrahlen und Skala (weiss) einmal vorzeichnen - wie baueStatisch() in klaus.js."""
+        import math
+
+        from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QBrush, QPixmap
+
+        if self._skala is not None and self._skala.width() == px:
+            return self._skala
+        bild = QPixmap(px, px)
+        bild.fill(Qt.transparent)
+        q = QPainter(bild)
+        q.setRenderHint(QPainter.Antialiasing)
+        q.scale(px / 600, px / 600)
+        m, dick = QPointF(300, 300), 600 / px   # dick = 1 Bildpunkt (feine Linien bleiben im Kleinen sichtbar)
+        q.setBrush(Qt.NoBrush)
+        for i in range(9):
+            k = i / 9
+            r = 62 + 214 * (1 - k) ** 1.5
+            q.setPen(QPen(QColor(255, 255, 255, int(255 * (0.08 + k * 0.16))), dick))
+            q.drawEllipse(m, r, r)
+        strahl = QRadialGradient(m, 250)
+        strahl.setColorAt(30 / 250, QColor(255, 255, 255, 150))
+        strahl.setColorAt(0.45, QColor(255, 255, 255, 30))
+        strahl.setColorAt(1.0, QColor(255, 255, 255, 0))
+        for n, b in ((72, 0.8 * dick), (18, 2.2 * dick)):
+            q.setPen(QPen(QBrush(strahl), b))
+            for i in range(n):
+                a = i / n * 2 * math.pi + (0.09 if n == 18 else 0)
+                innen = 34 + (i % 3) * 8
+                q.drawLine(QPointF(300 + math.cos(a) * innen, 300 + math.sin(a) * innen),
+                           QPointF(300 + math.cos(a) * 250, 300 + math.sin(a) * 250))
+        for i in range(120):
+            lang = i % 10 == 0
+            a, l = i / 120 * 2 * math.pi, (22 if lang else 9)
+            q.setPen(QPen(QColor(255, 255, 255, 110 if lang else 45), dick))
+            q.drawLine(QPointF(300 + math.cos(a) * (284 - l), 300 + math.sin(a) * (284 - l)),
+                       QPointF(300 + math.cos(a) * 284, 300 + math.sin(a) * 284))
+        q.end()
+        self._skala = bild
+        return bild
+
+    def _segring(self, p, r, breite, n, fuell, dreh, farbe, alpha, hell=0.0) -> None:
+        import math
+
+        from PySide6.QtCore import QRectF
+
+        feld, schritt = QRectF(300 - r, 300 - r, 2 * r, 2 * r), 360 / n
+        for i in range(n):
+            p.setPen(QPen(self._rgba(farbe, alpha * (1 if i % 6 == 0 else 0.55), hell), breite, Qt.SolidLine, Qt.FlatCap))
+            p.drawArc(feld, int((-math.degrees(dreh) - i * schritt) * 16), int(-schritt * fuell * 16))
+
+    def _boegen(self, p, r, anzahl, spanne, dreh, breite, farbe, alpha, hell=0.0) -> None:
+        import math
+
+        from PySide6.QtCore import QRectF
+
+        feld = QRectF(300 - r, 300 - r, 2 * r, 2 * r)
+        for b, a in ((breite * 4, alpha * 0.14), (breite, alpha)):
+            p.setPen(QPen(self._rgba(farbe, a, hell), b, Qt.SolidLine, Qt.FlatCap))
+            for i in range(anzahl):
+                start = -math.degrees(dreh + i * 2 * math.pi / anzahl)
+                p.drawArc(feld, int(start * 16), int(-math.degrees(spanne) * 16))
+
+    def _roehre(self, p, r, staerke, farbe) -> None:
+        from PySide6.QtCore import QPointF
+
+        p.setBrush(Qt.NoBrush)
+        for b, a, hell in ((36, 0.08, 0), (16, 0.22, 0), (7, 0.75, 0.35), (2.5, 0.95, 0.85)):
+            p.setPen(QPen(self._rgba(farbe, a, hell), b * staerke))
+            p.drawEllipse(QPointF(300, 300), r, r)
+
+    def _reaktor(self, p) -> None:
+        """Reaktor-Kern wie im Panel (web/klaus.js zeichne): Tunnel, Plattenring, gluehendes Portal, weisser Kern."""
+        import math
+
+        from PySide6.QtCore import QPointF, QRectF
+
+        dpr = self.devicePixelRatioF()
+        farbe, t, z, m = self._farbe(), self.t, self.zustand, QPointF(300, 300)
+        if z in ("hoeren", "start"):
+            pu = 0.9 + self.pegel * 0.6
+        elif z == "sprechen":
+            pu = 0.95 + self.pegel * 0.5
+        elif z == "denken":
+            pu = 1.05 + 0.1 * math.sin(t * 9)
+        elif z in ("aktion", "fertig"):
+            pu = 1.1 + 0.05 * math.sin(t * 4)
+        elif z == "fehler":
+            pu = 0.8
+        else:
+            pu = 1.0
+        p.save()
+        p.scale(self.ORB / 600, self.ORB / 600)
+        p.setCompositionMode(QPainter.CompositionMode_Plus)   # "lighter" wie im Canvas
+        p.setPen(Qt.NoPen)
+        g = QRadialGradient(m, 290)
+        g.setColorAt(0, self._rgba(farbe, 0.35 * pu))
+        g.setColorAt(0.5, self._rgba(farbe, 0.08))
+        g.setColorAt(1, self._rgba(farbe, 0))
+        p.setBrush(g)
+        p.drawEllipse(m, 290, 290)
+        p.save()
+        p.translate(300, 300)
+        p.rotate(math.degrees(self.dreh_a * 0.3))
+        p.translate(-300, -300)
+        p.drawPixmap(QRectF(0, 0, 600, 600), self._statisch(max(64, round(self.ORB * dpr))), QRectF())
+        p.restore()
+        if z in ("denken", "aktion"):   # Abtast-Kegel
+            from PySide6.QtGui import QConicalGradient
+            kegel = QConicalGradient(m, -math.degrees(self.dreh_c * 2))
+            kegel.setColorAt(0, self._rgba(farbe, 0.3))
+            kegel.setColorAt(0.12, self._rgba(farbe, 0))
+            kegel.setColorAt(1, self._rgba(farbe, 0))
+            p.setPen(Qt.NoPen)
+            p.setBrush(kegel)
+            p.drawEllipse(m, 270, 270)
+        dick = 600 / self.ORB   # 1 Bildpunkt
+        self._segring(p, 244, 12, 24, 0.86, self.dreh_a, (255, 255, 255), 0.09)
+        self._segring(p, 244, max(1.2, dick), 24, 0.86, self.dreh_a, farbe, 0.55, 0.5)
+        self._segring(p, 206, 6, 48, 0.6, -self.dreh_b, farbe, 0.3 + 0.12 * pu, 0.2)
+        self._segring(p, 96, max(2, dick), 36, 0.5, self.dreh_b * 1.6, farbe, 0.5, 0.4)
+        self._boegen(p, 226, 3, 0.7, self.dreh_b * 0.7, max(2, dick * 1.4), farbe, 0.75)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(255, 150, 60, int(255 * (0.55 + 0.25 * math.sin(t * 2)))))   # Warnlichter
+        for i in range(8):
+            a = self.dreh_a + i / 8 * 2 * math.pi + 0.12
+            p.drawEllipse(QPointF(300 + math.cos(a) * 244, 300 + math.sin(a) * 244), 6, 6)
+        self._roehre(p, 150 * (0.97 + pu * 0.03), 0.8 + pu * 0.25, farbe)
+        self._roehre(p, 122, 0.35, farbe)
+        self._boegen(p, 150, 4, 0.5, -self.dreh_c * 1.5, 3.5, farbe, 0.6, 0.9)
+        r = 120 * pu
+        g = QRadialGradient(m, r)
+        g.setColorAt(0, QColor(255, 255, 255, 255))
+        g.setColorAt(0.14, QColor(255, 255, 255, 230))
+        g.setColorAt(0.32, self._rgba(farbe, 0.75, 0.45))
+        g.setColorAt(0.65, self._rgba(farbe, 0.18))
+        g.setColorAt(1, self._rgba(farbe, 0))
+        p.setPen(Qt.NoPen)
+        p.setBrush(g)
+        p.drawEllipse(m, r, r)
+        p.restore()
+
     def paintEvent(self, _ereignis) -> None:
         from PySide6.QtCore import QPointF, QRectF
 
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        m, r = QPointF(self.RADIUS + 9, self.RADIUS + 9), self.RADIUS
-        farbe = QColor(130, 130, 140) if (self.stumm or self.mikro_aus) else QColor(*self.FARBEN.get(self.zustand, (189, 128, 90)))
-        # Schein (waechst mit der Lautstaerke beim Sprechen)
-        schein = QRadialGradient(m, r + 9)
-        aussen = QColor(farbe)
-        aussen.setAlpha(int(60 + 120 * min(self.pegel, 1.0)))
-        schein.setColorAt(0.55, aussen)
-        schein.setColorAt(1.0, QColor(0, 0, 0, 0))
-        p.setPen(Qt.NoPen)
-        p.setBrush(schein)
-        p.drawEllipse(m, r + 9, r + 9)
-        # Kern: heller Reaktor wie im Panel (kein dunkles Glas)
-        kern = QRadialGradient(QPointF(m.x() - 6, m.y() - 7), r)
-        kern.setColorAt(0.0, QColor(255, 255, 255))
-        kern.setColorAt(0.35, farbe.lighter(130))
-        kern.setColorAt(1.0, QColor(24, 25, 28, 235))
-        p.setBrush(kern)
-        k = r - 5 + 4 * min(self.pegel, 1.0)
-        p.drawEllipse(m, k, k)
-        p.setBrush(Qt.NoBrush)
-        p.setPen(QPen(farbe, 2.4))
-        p.drawEllipse(m, r, r)
-        if self.zustand == "denken":
-            p.setPen(QPen(QColor(255, 255, 255, 220), 2.6))
-            p.drawArc(QRectF(m.x() - r, m.y() - r, 2 * r, 2 * r), -self.winkel * 16, 80 * 16)
+        self._reaktor(p)
+        farbe = QColor(*self._farbe())
         # Mute-Knopf
         kn = self._knopf()
         p.setPen(QPen(QColor(255, 90, 90) if self.mikro_aus else farbe, 1.6))
@@ -916,10 +1068,6 @@ class MiniOrb(QWidget):
             daten.speichere_einstellung("mini_pos", [self.x(), self.y()])
         elif self._knopf().contains(e.position()):
             self.mute_klick.emit()
-
-    def mouseDoubleClickEvent(self, e) -> None:
-        if e.button() == Qt.LeftButton and not self._knopf().contains(e.position()):
-            self.zurueck.emit()
 
     def _menue(self, wo) -> None:
         from PySide6.QtWidgets import QMenu

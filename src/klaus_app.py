@@ -223,9 +223,14 @@ class Spielmodus(QObject):
         self.an = False
         self.automatisch = False   # vom Spiel ausgeloest -> geht mit dem Spiel wieder aus
         self.spiel_jetzt = ""
-        self.nicht_fuer = ""       # fuer dieses Spiel hat Nikola den Spielmodus selbst beendet -> nicht wieder einschalten
+        self.nicht_bis = 0.0       # bis dahin nicht automatisch wieder an (Nikola hat ihn im Spiel selbst beendet)
+        self.obs_fuer = ""         # fuer dieses Spiel ist die OBS-Fensteraufnahme schon eingestellt
+        self._obs_laeuft = False
         self.geaendert = None      # Rueckruf fuer den Haken im Taskleisten-Menue
         self.spiel.connect(self._spiel)
+        self.wieder = QTimer(self)
+        self.wieder.timeout.connect(self._nachschauen)
+        self.wieder.start(10_000)
         import spielmodus
         self._halt = threading.Event()
         threading.Thread(target=spielmodus.beobachten, args=(self.spiel.emit, self._halt), daemon=True, name="spielerkennung").start()
@@ -251,20 +256,50 @@ class Spielmodus(QObject):
         if self.geaendert:
             self.geaendert(an)
 
+    PAUSE_NACH_HAND_AUS = 120   # mitten im Spiel selbst beendet -> so lange nicht automatisch wieder an
+
     @Slot(bool)
     def manuell(self, an: bool) -> None:
         if not an and self.an and self.spiel_jetzt:
-            self.nicht_fuer = self.spiel_jetzt   # mitten im Spiel selbst beendet -> respektieren, bis das Spiel zu ist
+            # Nur kurz respektieren: das Panel liegt hinter dem Spiel, ohne Mini-Kreis sieht er Klaus sonst gar nicht
+            self.nicht_bis = time.time() + self.PAUSE_NACH_HAND_AUS
         self.setze(an)
+
+    def _nachschauen(self) -> None:
+        if self.spiel_jetzt and self.spiel_jetzt != self.obs_fuer:
+            self._obs_fenster(self.spiel_jetzt)
+        if self.spiel_jetzt and not self.an and time.time() >= self.nicht_bis:
+            self._spiel(self.spiel_jetzt)
+
+    def _obs_fenster(self, name: str) -> None:
+        """OBS-Fensteraufnahme aufs Spiel stellen (im Hintergrund; OBS zu oder Spielfenster noch nicht da -> spaeter nochmal)."""
+        if self._obs_laeuft:
+            return
+        self._obs_laeuft = True
+
+        def los() -> None:
+            import stream
+            try:
+                text = stream.obs_spielfenster(name + ".exe")
+                if text.startswith("OBS nimmt"):
+                    self.obs_fuer = name
+                    print(f"[Stream] {text}")
+            except RuntimeError:
+                pass   # OBS ist nicht offen
+            finally:
+                self._obs_laeuft = False
+        threading.Thread(target=los, daemon=True).start()
 
     @Slot(str)
     def _spiel(self, name: str) -> None:
+        if name and name != self.obs_fuer:
+            self._obs_fenster(name)
         self.spiel_jetzt = name
         if not name:
-            self.nicht_fuer = ""
+            self.nicht_bis = 0.0
             if self.an and self.automatisch:
                 self.setze(False)
-        elif not self.an and name != self.nicht_fuer and lade_einstellungen().get("spielmodus_auto", True):
+        elif not self.an and time.time() >= self.nicht_bis and lade_einstellungen().get("spielmodus_auto", True):
             self.setze(True, automatisch=True)
 
 

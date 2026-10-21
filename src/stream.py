@@ -463,6 +463,50 @@ def obs_szene(name: str) -> str:
     return f"Szene „{treffer}“ ist drauf."
 
 
+def _fenster_kennung(exe: str) -> str:
+    """OBS-Fensterkennung "Titel:Klasse:Programm" (':' als '#3A') fuers sichtbare Hauptfenster eines Programms."""
+    import psutil
+    import win32gui
+    import win32process
+
+    pids = {p.pid: p.info["name"] for p in psutil.process_iter(["name"]) if (p.info["name"] or "").lower() == exe.lower()}
+    gefunden = []
+
+    def pruefen(h, _):
+        if win32gui.IsWindowVisible(h) and win32gui.GetWindowText(h) and win32process.GetWindowThreadProcessId(h)[1] in pids:
+            gefunden.append(h)
+
+    win32gui.EnumWindows(pruefen, None)
+    if not gefunden:
+        return ""
+    h = gefunden[0]
+    teile = (win32gui.GetWindowText(h), win32gui.GetClassName(h), pids[win32process.GetWindowThreadProcessId(h)[1]])
+    return ":".join(t.replace("#", "#22").replace(":", "#3A") for t in teile)
+
+
+def obs_spielfenster(exe: str) -> str:
+    """Szene "Spiel": Fensteraufnahme (Windows-Grafikaufnahme, ohne Einhaken) auf das Spiel stellen. Noetig fuer Spiele,
+    die mit Admin-Rechten/Anti-Cheat laufen (z. B. Genshin) - dort bleibt die normale Spielaufnahme schwarz.
+    Liegt unter der Spielaufnahme: klappt die, deckt sie die Fensteraufnahme einfach zu."""
+    kennung = _fenster_kennung(exe if exe.lower().endswith(".exe") else exe + ".exe")
+    if not kennung:
+        return f"Kein Fenster von {exe} gefunden."
+    einst = {"window": kennung, "method": 2, "priority": 2, "cursor": False, "client_area": True}
+    namen = {i["inputName"] for i in obs_anfrage("GetInputList").get("inputs", [])}
+    if "Spielfenster" in namen:
+        obs_anfrage("SetInputSettings", {"inputName": "Spielfenster", "inputSettings": einst})
+    else:
+        obs_anfrage("CreateInput", {"sceneName": "Spiel", "inputName": "Spielfenster", "inputKind": "window_capture",
+                                    "inputSettings": einst})
+    sid = obs_anfrage("GetSceneItemId", {"sceneName": "Spiel", "sourceName": "Spielfenster"})["sceneItemId"]
+    obs_anfrage("SetSceneItemIndex", {"sceneName": "Spiel", "sceneItemId": sid, "sceneItemIndex": 0})
+    video = obs_anfrage("GetVideoSettings")
+    obs_anfrage("SetSceneItemTransform", {"sceneName": "Spiel", "sceneItemId": sid, "sceneItemTransform": {
+        "positionX": 0, "positionY": 0, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsAlignment": 0,
+        "boundsWidth": video["baseWidth"], "boundsHeight": video["baseHeight"]}})
+    return f"OBS nimmt jetzt das Fenster von {exe} auf."
+
+
 def obs_stream_starten(token: str) -> str:
     import freigabe
 
