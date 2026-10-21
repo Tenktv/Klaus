@@ -483,6 +483,10 @@ def obs_aktion(aktion: str, szene: str = "") -> str:
             return obs_status()
         if aktion == "stream_stoppen":
             obs_anfrage("StopStream")
+            try:
+                obs_anfrage("StopReplayBuffer")   # kodiert sonst dauernd mit und kostet beim Zocken FPS
+            except RuntimeError:
+                pass
             return "Stream ist beendet."
         if aktion == "aufnahme_starten":
             obs_anfrage("StartRecord")

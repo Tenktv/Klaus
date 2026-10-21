@@ -137,7 +137,11 @@ def in_obs_einrichten() -> str:
                           "inputSettings": {"url": URL, "width": 1920, "height": 1080, "fps": 30, "fps_custom": True,
                                             "reroute_audio": False, "shutdown": False}})
     for szene in szenen:
-        namen = [i["sourceName"] for i in a("GetSceneItemList", {"sceneName": szene}).get("sceneItems", [])]
-        if "Klaus Overlay" not in namen:
+        elemente = a("GetSceneItemList", {"sceneName": szene}).get("sceneItems", [])
+        if "Klaus Overlay" not in [i["sourceName"] for i in elemente]:
             a("CreateSceneItem", {"sceneName": szene, "sourceName": "Klaus Overlay"})
+            elemente = a("GetSceneItemList", {"sceneName": szene}).get("sceneItems", [])
+        eintrag = next(i for i in elemente if i["sourceName"] == "Klaus Overlay")
+        a("SetSceneItemIndex", {"sceneName": szene, "sceneItemId": eintrag["sceneItemId"],   # ganz nach oben, sonst
+                                "sceneItemIndex": len(elemente) - 1})                        # verdeckt ihn das Spiel
     return f"Klaus-Overlay ist in {len(szenen)} Szenen ({', '.join(szenen)})."
