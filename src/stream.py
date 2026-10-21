@@ -508,7 +508,7 @@ def obs_spielfenster(exe: str) -> str:
 
 
 # Webcam oben rechts (Leinwand 1920x1080); das Overlay zeichnet den Holo-Rahmen an genau dieser Stelle
-KAMERA = {"x": 1544, "y": 36, "w": 344, "h": 258}
+KAMERA = {"x": 1504, "y": 36, "w": 384, "h": 216}   # 16:9 wie das 1080p-Bild der Kamera (ganzer Sensor in der Breite)
 KAMERA_SZENEN = ("Spiel", "Desktop")
 MASKE = BASE_DIR / "data" / "obs" / "kamera_maske.png"
 
@@ -517,7 +517,7 @@ def _kamera_name() -> str:
     return next((i["inputName"] for i in obs_anfrage("GetInputList").get("inputs", []) if i["inputKind"] == "dshow_input"), "")
 
 
-def _maske_bauen(breite: int = 960, hoehe: int = 720, schraege: int = 40) -> None:
+def _maske_bauen(breite: int = 1920, hoehe: int = 1080, schraege: int = 80) -> None:
     """Alpha-Maske mit abgeschraegten Ecken oben links/unten rechts (wie .holo im Overlay)."""
     from PIL import Image, ImageDraw
 
@@ -541,7 +541,8 @@ def kamera_zustand() -> dict:
 
 
 def obs_kamera_einrichten() -> str:
-    """Webcam im Klaus-Stil: 960x720 (Grafikkarte dekodiert), abgeschraegte Ecken, oben rechts unter dem Overlay-Rahmen."""
+    """Webcam im Klaus-Stil: 1080p mit 30 Bildern/s (Grafikkarte dekodiert), leicht geschaerft und kraeftiger,
+    abgeschraegte Ecken, oben rechts unter dem Overlay-Rahmen."""
     cam = _kamera_name()
     if not cam:
         cam = "Webcam"
@@ -551,15 +552,22 @@ def obs_kamera_einrichten() -> str:
         if not ids:
             return "Ich finde keine Webcam."
         obs_anfrage("SetInputSettings", {"inputName": cam, "inputSettings": {"video_device_id": ids[0]}})
-    obs_anfrage("SetInputSettings", {"inputName": cam, "inputSettings": {"res_type": 1, "resolution": "960x720", "hw_decode": True}})
+    # 1080p bei 30 Bildern/s: mehr schafft USB 2.0 nicht (MJPEG); 60 ("an Ausgabe angleichen") zwingt sie in kleinere Modi
+    obs_anfrage("SetInputSettings", {"inputName": cam, "inputSettings": {"res_type": 1, "resolution": "1920x1080",
+                                                                         "frame_interval": 333333, "hw_decode": False}})
     _maske_bauen()
-    filter_einst = {"image_path": str(MASKE), "type": "mask_alpha_filter.effect"}
-    filter_namen = [f["filterName"] for f in obs_anfrage("GetSourceFilterList", {"sourceName": cam}).get("filters", [])]
-    if "Klaus-Rahmen" in filter_namen:
-        obs_anfrage("SetSourceFilterSettings", {"sourceName": cam, "filterName": "Klaus-Rahmen", "filterSettings": filter_einst})
-    else:
-        obs_anfrage("CreateSourceFilter", {"sourceName": cam, "filterName": "Klaus-Rahmen", "filterKind": "mask_filter_v2",
-                                           "filterSettings": filter_einst})
+    vorhanden = [f["filterName"] for f in obs_anfrage("GetSourceFilterList", {"sourceName": cam}).get("filters", [])]
+    filter = [("Klaus-Farbe", "color_filter_v2", {"contrast": 0.06, "saturation": 0.12}),
+              ("Klaus-Schaerfe", "sharpness_filter_v2", {"sharpness": 0.12}),
+              ("Klaus-Rahmen", "mask_filter_v2", {"image_path": str(MASKE), "type": "mask_alpha_filter.effect"})]   # Maske zuletzt
+    for nr, (name, art, einst) in enumerate(filter):
+        if name in vorhanden:
+            obs_anfrage("SetSourceFilterSettings", {"sourceName": cam, "filterName": name, "filterSettings": einst})
+        else:
+            obs_anfrage("CreateSourceFilter", {"sourceName": cam, "filterName": name, "filterKind": art, "filterSettings": einst})
+    anzahl = len(obs_anfrage("GetSourceFilterList", {"sourceName": cam}).get("filters", []))
+    for nr, (name, _, _) in enumerate(filter):
+        obs_anfrage("SetSourceFilterIndex", {"sourceName": cam, "filterName": name, "filterIndex": anzahl - len(filter) + nr})
     for szene in KAMERA_SZENEN:
         elemente = obs_anfrage("GetSceneItemList", {"sceneName": szene}).get("sceneItems", [])
         if cam not in [i["sourceName"] for i in elemente]:
@@ -568,7 +576,7 @@ def obs_kamera_einrichten() -> str:
         sid = next(i["sceneItemId"] for i in elemente if i["sourceName"] == cam)
         obs_anfrage("SetSceneItemTransform", {"sceneName": szene, "sceneItemId": sid, "sceneItemTransform": {
             "positionX": KAMERA["x"], "positionY": KAMERA["y"], "alignment": 5, "rotation": 0,
-            "boundsType": "OBS_BOUNDS_SCALE_OUTER", "boundsAlignment": 0, "boundsWidth": KAMERA["w"], "boundsHeight": KAMERA["h"],
+            "boundsType": "OBS_BOUNDS_STRETCH", "boundsAlignment": 0, "boundsWidth": KAMERA["w"], "boundsHeight": KAMERA["h"],
             "cropLeft": 0, "cropRight": 0, "cropTop": 0, "cropBottom": 0}})
         obs_anfrage("SetSceneItemEnabled", {"sceneName": szene, "sceneItemId": sid, "sceneItemEnabled": True})
         # direkt unter "Klaus Overlay", damit der Holo-Rahmen darueber liegt
