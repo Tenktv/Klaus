@@ -602,6 +602,82 @@ def obs_kamera(an: bool) -> str:
     return "Kamera ist an." if an else "Kamera ist aus."
 
 
+PAUSE_SZENE = "Pause"
+_pause = {"an": False, "vorher": "Spiel", "mikro_war_stumm": False}
+
+
+def _mikro_name() -> str:
+    return next((i["inputName"] for i in obs_anfrage("GetInputList").get("inputs", [])
+                 if i["inputKind"] == "wasapi_input_capture"), "")
+
+
+def obs_pause_einrichten() -> str:
+    """Szene "Pause": Browserquelle "Klaus Pause" (stream_pause.html) als Hintergrund, alte Text-/Farbquellen aus."""
+    import stream_overlay
+
+    szenen = [s["sceneName"] for s in obs_anfrage("GetSceneList").get("scenes", [])]
+    if PAUSE_SZENE not in szenen:
+        obs_anfrage("CreateScene", {"sceneName": PAUSE_SZENE})
+    if "Klaus Pause" not in {i["inputName"] for i in obs_anfrage("GetInputList").get("inputs", [])}:
+        obs_anfrage("CreateInput", {"sceneName": PAUSE_SZENE, "inputName": "Klaus Pause", "inputKind": "browser_source",
+                                    "inputSettings": {"url": stream_overlay.URL.replace("/overlay", "/pause"), "width": 1920,
+                                                      "height": 1080, "fps": 30, "fps_custom": True, "shutdown": True}})
+    for i in obs_anfrage("GetSceneItemList", {"sceneName": PAUSE_SZENE}).get("sceneItems", []):
+        if i["sourceName"] in ("Pause-Hintergrund", "Pause-Text"):
+            obs_anfrage("SetSceneItemEnabled", {"sceneName": PAUSE_SZENE, "sceneItemId": i["sceneItemId"], "sceneItemEnabled": False})
+        if i["sourceName"] == "Klaus Pause":
+            obs_anfrage("SetSceneItemIndex", {"sceneName": PAUSE_SZENE, "sceneItemId": i["sceneItemId"], "sceneItemIndex": 0})
+    stream_overlay.in_obs_einrichten()   # Overlay (Chat, Hinweise) bleibt obendrauf
+    return "Pause-Bildschirm ist eingerichtet."
+
+
+def _minuten(text: str) -> float | None:
+    """"5 Minuten", "fünf min", "eine Stunde", "halbe Stunde" -> Minuten (oder None)."""
+    woerter = {"eine": 1, "einer": 1, "ein": 1, "zwei": 2, "drei": 3, "vier": 4, "fünf": 5, "fuenf": 5, "sechs": 6, "sieben": 7,
+               "acht": 8, "neun": 9, "zehn": 10, "fünfzehn": 15, "zwanzig": 20, "dreißig": 30}
+    t = text.lower()
+    if "halbe stunde" in t:
+        return 30
+    for wert, einheit in re.findall(r"(\d+(?:[.,]\d+)?|[a-zäöüß]+)\s*(min\w*|stunde\w*)", t):
+        zahl = float(wert.replace(",", ".")) if wert[0].isdigit() else woerter.get(wert)
+        if zahl:
+            return zahl * (60 if einheit.startswith("stunde") else 1)
+    return None
+
+
+def obs_pause(minuten: float | None = None, text: str = "") -> str:
+    """BRB: Szene "Pause" mit Countdown, dein Mikro im Stream stumm. Zurueck mit obs_zurueck()."""
+    jetzt = obs_anfrage("GetCurrentProgramScene").get("currentProgramSceneName", "")
+    if "Klaus Pause" not in {i["inputName"] for i in obs_anfrage("GetInputList").get("inputs", [])}:
+        obs_pause_einrichten()
+    if jetzt != PAUSE_SZENE:
+        _pause["vorher"] = jetzt or "Spiel"
+    mikro = _mikro_name()
+    if mikro and not _pause["an"]:
+        _pause["mikro_war_stumm"] = obs_anfrage("GetInputMute", {"inputName": mikro}).get("inputMuted", False)
+        obs_anfrage("SetInputMute", {"inputName": mikro, "inputMuted": True})
+    obs_anfrage("SetCurrentProgramScene", {"sceneName": PAUSE_SZENE})
+    _pause["an"] = True
+    _overlay("pause", {"an": True, "bis": int((time.time() + minuten * 60) * 1000) if minuten else None, "text": text[:40]})
+    return (f"Pause-Bildschirm ist drin{f', Countdown {minuten:g} Minuten' if minuten else ''}. "
+            "Dein Mikro ist im Stream stumm. Sag „Klaus, ich bin wieder da“, wenn's weitergeht.")
+
+
+def obs_zurueck() -> str:
+    obs_anfrage("SetCurrentProgramScene", {"sceneName": _pause["vorher"]})
+    mikro = _mikro_name()
+    if mikro and not _pause["mikro_war_stumm"]:
+        obs_anfrage("SetInputMute", {"inputName": mikro, "inputMuted": False})
+    _pause["an"] = False
+    _overlay("pause", {"an": False})
+    _overlay("hinweis", {"kopf": "Klaus", "text": "Er ist zurück!"})
+    return f"Willkommen zurück! Szene „{_pause['vorher']}“, dein Mikro ist wieder an."
+
+
+def pause_laeuft() -> bool:
+    return _pause["an"]
+
+
 def obs_stream_starten(token: str) -> str:
     import freigabe
 
@@ -635,6 +711,10 @@ def obs_aktion(aktion: str, szene: str = "") -> str:
             return f"Aufnahme gespeichert{': ' + Path(pfad).name if pfad else ''}."
         if aktion in ("replay_speichern", "clip"):
             return obs_replay_speichern()
+        if aktion == "pause":
+            return obs_pause(_minuten(szene) if szene else None)
+        if aktion == "zurueck":
+            return obs_zurueck()
         if aktion in ("kamera_an", "kamera_aus"):
             return obs_kamera(aktion == "kamera_an")
         if aktion == "kamera_einrichten":

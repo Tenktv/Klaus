@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Klaus Pause</title>
+<!-- OBS-Browserquelle 1920x1080 in der Szene "Pause" (stream.obs_pause). Ereignisse von stream_overlay.py (/ereignisse). -->
+<script src="klaus.js"></script>
+<script>window.klausBereit?.catch(() => {});</script>
+<style>
+  @font-face { font-family: "Rajdhani"; font-weight: 500; src: url(vendor/rajdhani-500.woff2) format("woff2"); }
+  @font-face { font-family: "Rajdhani"; font-weight: 700; src: url(vendor/rajdhani-700.woff2) format("woff2"); }
+  @font-face { font-family: "Chakra"; font-weight: 600; src: url(vendor/chakra-petch-600.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow"; font-weight: 500; src: url(vendor/barlow-semi-condensed-500.woff2) format("woff2"); }
+  :root { --rgb: 213, 186, 133; --rgb2: 226, 184, 119; --cyan: #d5ba85; --bernstein: #e2b877; --text: #f1ede4;
+    --ease: cubic-bezier(.165, .84, .44, 1); }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; color: var(--text); font-family: "Barlow", sans-serif;
+    background: radial-gradient(ellipse at 34% 50%, #2a2620 0%, #191918 45%, #0b0b0a 100%); }
+  /* Holo-Raster + Vignette */
+  .raster { position: absolute; inset: 0; opacity: .5;
+    background: repeating-linear-gradient(0deg, rgba(var(--rgb), .045) 0 1px, transparent 1px 60px),
+                repeating-linear-gradient(90deg, rgba(var(--rgb), .045) 0 1px, transparent 1px 60px);
+    -webkit-mask: radial-gradient(ellipse at 34% 50%, #000 0%, transparent 75%); }
+  .boden { position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(var(--rgb), .8), transparent); box-shadow: 0 0 30px rgba(var(--rgb), .5); }
+
+  #orb { position: absolute; left: 130px; top: 190px; width: 700px; height: 700px; }
+
+  .rechts { position: absolute; left: 900px; top: 300px; width: 900px; }
+  .kopf { font: 600 18px "Chakra", sans-serif; letter-spacing: .32em; color: var(--cyan); text-transform: uppercase;
+    text-shadow: 0 0 12px rgba(var(--rgb), .55); }
+  .kopf::before { content: "◆ "; color: var(--bernstein); }
+  h1 { margin-top: 14px; font: 700 132px/0.95 "Rajdhani", sans-serif; letter-spacing: .02em; text-transform: uppercase;
+    text-shadow: 0 0 40px rgba(var(--rgb), .35); }
+  #zeit { margin-top: 26px; font: 500 40px "Rajdhani", sans-serif; letter-spacing: .06em; color: var(--bernstein); min-height: 48px; }
+  #zeit b { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+
+  .holo { position: relative; background: rgba(20, 20, 19, .82);
+    clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px); }
+  .holo::before { content: ""; position: absolute; inset: 0; padding: 1px;
+    background: linear-gradient(135deg, rgba(var(--rgb), .95), rgba(var(--rgb), .15) 45%, rgba(var(--rgb), .7));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; clip-path: inherit; }
+  .info { margin-top: 44px; padding: 18px 26px 20px; max-width: 760px; }
+  .info p { margin-top: 8px; font: 500 26px/1.35 "Barlow", sans-serif; }
+  .info code { font: 700 26px "Rajdhani", sans-serif; color: var(--bernstein); }
+
+  #sprache { position: absolute; left: 900px; top: 820px; max-width: 900px; padding: 14px 24px 16px;
+    opacity: 0; transform: translateY(12px); transition: opacity .3s var(--ease), transform .3s var(--ease); }
+  #sprache.an { opacity: 1; transform: none; }
+  #untertitel { margin-top: 6px; font: 700 30px/1.25 "Rajdhani", sans-serif; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="raster"></div>
+<canvas id="orb"></canvas>
+<div class="rechts">
+  <div class="kopf" id="kopf">Stream-Pause</div>
+  <h1 id="titel">Bin gleich<br>zurück</h1>
+  <div id="zeit"></div>
+  <div class="holo info">
+    <div class="kopf">Klaus hält die Stellung</div>
+    <p>Schreibt in den Chat – Klaus liest mit.<br>Fragen an ihn: <code>!klaus deine Frage</code> · <code>!fakt</code> · <code>!hype</code></p>
+  </div>
+</div>
+<div class="holo" id="sprache"><div class="kopf">Klaus</div><div id="untertitel"></div></div>
+<div class="boden"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+const orb = new KlausOrb($("orb"), { platz: 0.92 });
+let bis = null, zustand = "aus", sprachTimer = null;
+orb.setZustand("start");   // in der Pause dreht der Reaktor ruhig weiter
+
+function zeit() {
+  if (!bis) { $("zeit").textContent = "Gleich geht's weiter …"; return; }
+  const rest = Math.round((bis - Date.now()) / 1000);
+  if (rest <= 0) { $("zeit").textContent = "Gleich da …"; return; }
+  $("zeit").innerHTML = "Weiter in <b>" + String(Math.floor(rest / 60)).padStart(2, "0") + ":" + String(rest % 60).padStart(2, "0") + "</b>";
+}
+setInterval(zeit, 1000);
+zeit();
+
+function verbinden() {
+  const q = new EventSource("/ereignisse");
+  const an = (art, fn) => q.addEventListener(art, (e) => { try { fn(JSON.parse(e.data)); } catch (f) { console.error(art, f); } });
+  an("thema", (n) => wendeThemaAn(n));
+  an("pause", (p) => { if (p) { bis = p.bis || null; if (p.text) $("titel").textContent = p.text; zeit(); } });
+  an("kanal", (k) => { $("kopf").textContent = k + " · Stream-Pause"; });
+  an("zustand", (z) => {
+    zustand = z;
+    orb.setZustand(z === "aus" ? "start" : z);
+    clearTimeout(sprachTimer);
+    if (z === "aus") sprachTimer = setTimeout(() => $("sprache").classList.remove("an"), 1500);
+  });
+  an("pegel", (p) => orb.setPegel(p));
+  an("text", (t) => { $("untertitel").textContent = t || ""; $("sprache").classList.toggle("an", !!t && zustand !== "aus"); });
+  an("hinweis", (d) => orb.funkenregen());
+  an("willkommen", () => orb.funkenregen());
+  q.onerror = () => { q.close(); setTimeout(verbinden, 3000); };
+}
+wendeThemaAn("gold");
+verbinden();
+</script>
+</body>
+</html>

@@ -132,6 +132,10 @@ CHAT_STILL = re.compile(r"\b(?:twitch-?)?chat\s+(?:nicht mehr vorlesen|vorlesen 
 CHAT_LOS = re.compile(r"\bwas\s+(?:ist|war|geht)\s+(?:gerade\s+|so\s+)?(?:im|in meinem|im twitch-?)\s*chat\b|\bchat\s+zusammenfass\w*|"
                       r"\bfass\w*\s+(?:mir\s+)?(?:den\s+)?chat\s+zusammen\b", re.I)
 CHAT_BEFEHLE = re.compile(r"\bchat-?befehle\s+(?P<an>an|ein|aus|ab)\b|\b(?P<an2>aktivier|deaktivier)\w*\s+(?:die\s+)?chat-?befehle\b", re.I)
+BRB = re.compile(r"\b(?:brb|be right back|bin (?:gleich|kurz) (?:zur(?:ü|ue)ck|wieder da|weg)|(?:stream[- ]?|kurze\s+)pause|"
+                 r"pause-?(?:bildschirm|screen|szene))\b", re.I)
+PAUSE_ENDE = re.compile(r"\b(?:ich\s+)?bin\s+(?:wieder\s+)?(?:da|zur(?:ü|ue)ck)\b|\bpause\s+(?:vorbei|beenden|aus|ende)\b|"
+                        r"\bweiter\s+geht'?s\b", re.I)   # nur, wenn gerade der Pause-Bildschirm laeuft
 KAMERA = re.compile(r"\b(?:kamera|webcam|cam|facecam)\s+(?P<an>an|ein|aus|weg)\b|\b(?P<einrichten>richt\w*|einricht\w*)\b.*\b(?:kamera|webcam|cam)\b", re.I)
 STREAM_BANNER_WEG = re.compile(r"\b(?:stream-?)?banner\s+(?:weg|aus|entfernen|l(?:ö|oe)schen)\b|\bnimm\s+(?:das\s+)?banner\s+weg\b", re.I)
 STREAM_BANNER = re.compile(r"\b(?:zeig|schreib|setz)\w*\s+(?:mal\s+)?(?:im|in den|auf dem|auf den|ins)\s+(?:stream|overlay)\s*[:,]?\s*(?P<text>.+?)[.!]?$", re.I)
@@ -986,6 +990,12 @@ class Assistent:
             self.sage("Okay, ich mach mich klein.", zustand="aktion")
         elif CLIP.search(befehl):
             self.sage(self.clip(), zustand="aktion")
+        elif PAUSE_ENDE.search(befehl) and __import__("stream").pause_laeuft():
+            import stream
+            self.sage(stream.obs_aktion("zurueck"), zustand="aktion")
+        elif BRB.search(befehl):
+            import stream
+            self.sage(stream.obs_aktion("pause", befehl), zustand="aktion")
         elif KAMERA.search(befehl):
             import stream
             m = KAMERA.search(befehl)

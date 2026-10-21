@@ -349,6 +349,11 @@ Ruhemodus, gemeinsame Starter-Sperre, Protokoll-Waechter und Premium-Textmodell-
   abgeschrägten Ecken (`data/obs/kamera_maske.png`, Filter „Klaus-Rahmen“), oben rechts in Spiel/Desktop (x 1504, y 36,
   384x216, 16:9) direkt unter dem Overlay. Das Overlay zeichnet dort Holo-Rahmen, Eckklammern und Schild „LATENIKO · LIVE“,
   der Rahmen leuchtet mit Klaus' Stimme. „Klaus, Kamera an/aus“, „richte die Webcam ein“, `obs`-Aktionen `kamera_*`.
+- **Pause-Bildschirm / BRB** (`web/stream_pause.html` unter `/pause`, Browserquelle „Klaus Pause“ in der Szene „Pause“,
+  alte Text-/Farbquellen dort aus): großer Reaktor, „Bin gleich zurück“, Countdown, Hinweis auf `!klaus`; Untertitel, wenn
+  Klaus spricht. „Klaus, BRB 5 Minuten“ / „bin gleich zurück“ / „Stream-Pause“ → Szene Pause + Mikro im Stream stumm
+  (`stream.obs_pause`); „Klaus, ich bin wieder da“ (nur während der Pause) → vorige Szene + Mikro wie vorher. Das Overlay
+  blendet in der Pause seinen kleinen Orb und den Kamera-Rahmen aus. Live getestet 21.10.
 - Einrichtung 21.10.: OBS 32.2.2 (winget), Twitch-Konto „lateniko“ in OBS verbunden, Profil „Unbenannt“ (NVENC,
   1080p60, 6000 kbit/s vom Assistenten, Replay 30 s), Szenen Spiel/Desktop/Pause, Twitch-App „Klaus“ (Client-ID in
   `.env`, Token `data/twitch_token.json`). Am 21.10. waren weder OBS noch

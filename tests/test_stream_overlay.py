@@ -97,6 +97,29 @@ class KameraTests(unittest.TestCase):
         self.assertIsNone(KAMERA.search('öffne die kamera-app'))
 
 
+class PauseTests(unittest.TestCase):
+    def test_minuten(self):
+        self.assertEqual(stream._minuten('brb 5 minuten'), 5)
+        self.assertEqual(stream._minuten('stream pause zehn min'), 10)
+        self.assertEqual(stream._minuten('bin eine halbe stunde weg'), 30)
+        self.assertEqual(stream._minuten('eine Stunde Pause'), 60)
+        self.assertIsNone(stream._minuten('brb'))
+
+    def test_sprachbefehle(self):
+        from assistent import BRB, PAUSE_ENDE
+        for satz in ('brb', 'bin gleich zurück', 'stream pause', 'kurze pause', 'pause-bildschirm'):
+            self.assertTrue(BRB.search(satz), satz)
+        self.assertFalse(BRB.search('mach pause beim lernen'))
+        self.assertTrue(PAUSE_ENDE.search('ich bin wieder da'))
+        self.assertFalse(PAUSE_ENDE.search('bin gleich wieder da'))
+
+    def test_pause_seite_wird_ausgeliefert(self):
+        import http.client
+        c = http.client.HTTPConnection('127.0.0.1', TEST_PORT, timeout=5)
+        c.request('GET', '/pause')
+        self.assertIn('Bin gleich', c.getresponse().read().decode('utf-8'))
+
+
 class BannerBefehlTests(unittest.TestCase):
     def test_banner(self):
         m = STREAM_BANNER.search('zeig im Stream: gleich kommt der Bossfight!')

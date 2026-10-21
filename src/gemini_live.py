@@ -187,10 +187,13 @@ WERKZEUGE = [
          "text": {"type": "STRING"}}, "required": ["aktion"]}},
     {"name": "obs", "description": "Steuert OBS Studio: status, stream_starten (braucht Freigabe), stream_stoppen, aufnahme_starten, "
      "aufnahme_stoppen, replay_speichern (lokaler Clip), szene (wechselt zur Szene 'szene'), kamera_an / kamera_aus (Webcam im "
-     "Stream), kamera_einrichten (Webcam im Klaus-Rahmen oben rechts).",
+     "Stream), kamera_einrichten (Webcam im Klaus-Rahmen oben rechts), pause ('BRB', 'bin gleich zurueck': Pause-Bildschirm "
+     "mit Countdown 'minuten', Mikro im Stream stumm), zurueck ('bin wieder da').",
      "parameters": {"type": "OBJECT", "properties": {
          "aktion": {"type": "STRING", "enum": ["status", "stream_starten", "stream_stoppen", "aufnahme_starten", "aufnahme_stoppen",
-                                                "replay_speichern", "szene", "kamera_an", "kamera_aus", "kamera_einrichten"]},
+                                                "replay_speichern", "szene", "kamera_an", "kamera_aus", "kamera_einrichten",
+                                                "pause", "zurueck"]},
+         "minuten": {"type": "NUMBER", "description": "pause: Countdown in Minuten (optional)"},
          "szene": {"type": "STRING"}}, "required": ["aktion"]}},
     {"name": "bildschirm_sehen", "description": "Schaut auf Nikolas Bildschirm (Bildschirmfoto, Gemini beschreibt es oder beantwortet "
      "eine Frage dazu). an_telegram=true schickt ihm das Foto aufs Handy. Fuer 'was ist auf meinem Bildschirm', 'schick mir einen Screenshot'.",
@@ -572,6 +575,11 @@ class GeminiGespraech:
                 return "Unbekannte Overlay-Aktion."
             if name == "obs":
                 import stream
+                if args.get("aktion") == "pause":
+                    try:
+                        return stream.obs_pause(float(args["minuten"]) if args.get("minuten") else None)
+                    except RuntimeError as e:
+                        return str(e)
                 if args.get("aktion") == "stream_starten":
                     return self.a.stream_starten()
                 return stream.obs_aktion(args.get("aktion", "status"), args.get("szene", ""))
