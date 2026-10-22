@@ -18,7 +18,7 @@ class OverlayServerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         with patch.object(stream_overlay, 'PORT', TEST_PORT):
-            assert stream_overlay.starten()
+            assert stream_overlay.starten(wache=False)
 
     def _get(self, pfad):
         c = http.client.HTTPConnection('127.0.0.1', TEST_PORT, timeout=5)

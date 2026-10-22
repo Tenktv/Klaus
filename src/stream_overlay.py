@@ -95,8 +95,7 @@ class _Anfrage(BaseHTTPRequestHandler):
         start = [("thema", _thema()), ("zustand", _zustand["zustand"]), ("banner", _zustand["banner"])]
         if stream.KANAL:
             start.append(("kanal", stream.KANAL))
-        if _zustand["kamera"] is None:   # nach einem Klaus-Neustart: einmal OBS fragen, ob die Webcam an ist
-            _zustand["kamera"] = stream.kamera_zustand()
+        _zustand["kamera"] = stream.kamera_zustand()   # immer frisch aus OBS (Nikola schaltet sie auch dort selbst)
         start.append(("kamera", _zustand["kamera"]))
         start.append(("pause", _zustand["pause"]))
         try:
@@ -117,7 +116,8 @@ class _Anfrage(BaseHTTPRequestHandler):
                     _hoerer.remove(q)
 
 
-def starten() -> bool:
+def starten(wache: bool = True) -> bool:
+    """wache=False nur fuer Tests (die sollen das echte OBS nicht anfassen)."""
     try:
         server = ThreadingHTTPServer(("127.0.0.1", PORT), _Anfrage)
     except OSError as e:
@@ -125,8 +125,43 @@ def starten() -> bool:
         return False
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, daemon=True, name="stream-overlay").start()
+    if wache:
+        threading.Thread(target=_wache, daemon=True, name="overlay-wache").start()
     print(f"[Overlay] {URL}")
     return True
+
+
+QUELLEN = ("Klaus Overlay", "Klaus Pause")
+
+
+def _wache() -> None:
+    """1) Kurz nach dem Start die Browserquellen in OBS neu laden: hat OBS sie geladen, waehrend Klaus neu startete,
+    bleiben sie sonst leer (OBS versucht es nie von selbst nochmal).
+    2) Alle 3 s, solange ein Overlay verbunden ist: Webcam an/aus und Pause-Szene aus OBS nachziehen - auch wenn
+    Nikola in OBS selbst klickt."""
+    import stream
+
+    time.sleep(3)
+    try:
+        for q in QUELLEN:
+            stream.obs_anfrage("PressInputPropertiesButton", {"inputName": q, "propertyName": "refreshnocache"})
+        print("[Overlay] OBS-Quellen neu geladen")
+    except RuntimeError:
+        pass   # OBS laeuft nicht oder Quelle gibt es (noch) nicht
+    while True:
+        time.sleep(3)
+        if not _hoerer:
+            continue
+        try:
+            szene = stream.obs_anfrage("GetCurrentProgramScene").get("currentProgramSceneName", "")
+        except RuntimeError:
+            continue
+        kamera = stream.kamera_zustand()
+        if kamera != _zustand["kamera"]:
+            senden("kamera", kamera)
+        in_pause = szene == stream.PAUSE_SZENE
+        if in_pause != bool(_zustand["pause"].get("an")):
+            senden("pause", {"an": True, "bis": None} if in_pause else {"an": False})
 
 
 def in_obs_einrichten() -> str:

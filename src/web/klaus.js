@@ -1,7 +1,9 @@
 // Gemeinsam fuer dashboard.html und chat.html: Verbindung zu Python + animierter Orb.
 
 // Python-Objekt `klaus` (siehe fenster.py WebBruecke). Slots mit Rueckgabewert sind asynchron.
+// Ausserhalb von Qt (Stream-Overlay in OBS) gibt es keinen Kanal: dann bleibt das Versprechen einfach offen.
 window.klausBereit = new Promise((fertig) => {
+  if (typeof QWebChannel === "undefined" || typeof qt === "undefined") return;
   new QWebChannel(qt.webChannelTransport, (kanal) => fertig(kanal.objects.klaus));
 });
 
