@@ -58,7 +58,7 @@ overlay: Callable[[str, object], None] = lambda art, daten: None   # Stream-Over
 beschaeftigt: Callable[[], bool] = lambda: False             # laeuft gerade ein Gespraech mit Klaus?
 
 _z = {"chat": None, "verlauf": deque(maxlen=60), "gesehen": set(), "warteschlange": deque(), "viel_los": False,
-      "neu": threading.Event()}
+      "neu": threading.Event(), "geschenke": {}, "scopes": (set(), 0.0), "sender": ""}
 
 
 def _log(text: str) -> None:
@@ -125,7 +125,7 @@ class TwitchChat:
                 roh = socket.create_connection(("irc.chat.twitch.tv", 6697), timeout=20)
                 with ssl.create_default_context().wrap_socket(roh, server_hostname="irc.chat.twitch.tv") as s:
                     s.settimeout(400)   # Twitch schickt etwa alle 5 Minuten PING
-                    for befehl in ("CAP REQ :twitch.tv/tags twitch.tv/membership",
+                    for befehl in ("CAP REQ :twitch.tv/tags twitch.tv/membership twitch.tv/commands",
                                    f"NICK justinfan{random.randint(10000, 99999)}", f"JOIN #{self.kanal}"):
                         s.sendall(f"{befehl}\r\n".encode())
                     self.verbunden, pause = True, 5
@@ -162,6 +162,11 @@ def _ereignis(z: dict, kanal: str) -> None:
     if not nick or nick.startswith("justinfan") or nick in BOTS:
         return
     name = z["tags"].get("display-name") or nick
+    if z["befehl"] == "USERNOTICE":   # Abo, Resub, verschenkte Abos, Raid (kommt von tmi.twitch.tv, Name steht in den Tags)
+        _danke_notice(z["tags"])
+        return
+    if z["befehl"] == "PRIVMSG" and z["tags"].get("bits", "").isdigit() and nick != kanal:
+        danke("bits", name, c=z["tags"]["bits"])
     if z["befehl"] == "PRIVMSG" and not z["text"].startswith("\x01"):   # Stream-Overlay zeigt auch deine eigenen Nachrichten
         _overlay("chat", {"name": name, "text": z["text"][:300], "farbe": z["tags"].get("color", ""),
                           "neu": nick != kanal and nick not in _z["gesehen"]})
@@ -187,6 +192,91 @@ def _ereignis(z: dict, kanal: str) -> None:
             return
         gesprochen = f"{stream_chatbot.gruss(_sprechname(name))} {text}" if neu else f"{_sprechname(name)}: {text}"
         _melden(gesprochen, f"{name}: {z['text']}", vorlesen_immer=neu)
+
+
+# ------------------------------------------------------------------ Danke (Follow, Abo, Raid, Bits)
+DANKE = {
+    "follow": ["Danke für den Follow, {n}!", "{n} folgt jetzt – willkommen in der Crew!", "Yes, {n} ist neu dabei. Danke fürs Folgen!"],
+    "sub": ["Wow, {n} hat abonniert – vielen Dank!", "{n} ist jetzt Sub. Danke dir!"],
+    "resub": ["{n} ist seit {m} Monaten dabei – danke für den Resub!", "Resub von {n}, {m} Monate! Danke dir!"],
+    "subgift": ["{n} verschenkt ein Abo an {r}. Danke!"],
+    "mystery": ["{n} verschenkt {c} Abos – Wahnsinn, danke!"],
+    "raid": ["Raid! {n} kommt mit {c} Leuten vorbei. Willkommen, alle zusammen!"],
+    "bits": ["{n} schickt {c} Bits – danke!"],
+}
+DANKE_KOPF = {"follow": "Neuer Follower", "sub": "Neues Abo", "resub": "Resub", "subgift": "Abo verschenkt",
+              "mystery": "Abos verschenkt", "raid": "Raid", "bits": "Bits"}
+
+
+def danke(art: str, name: str, **werte) -> None:
+    """Klaus bedankt sich laut (auch wenn Vorlesen aus ist) und blendet eine Danke-Karte im Overlay ein."""
+    vorlage = random.choice(DANKE[art])
+    anzeige = vorlage.format(n=name, **werte)
+    gesprochen = vorlage.format(n=_sprechname(name), **{k: _sprechname(str(v)) if k == "r" else v for k, v in werte.items()})
+    _overlay("hinweis", {"kopf": DANKE_KOPF[art], "text": anzeige, "art": "danke"})
+    _log(f"Danke ({art}): {anzeige}")
+    _melden(_vorlesbar(gesprochen) or gesprochen, f"♥ {anzeige}", vorlesen_immer=True)
+
+
+def _danke_notice(tags: dict) -> None:
+    art, name = tags.get("msg-id", ""), tags.get("display-name") or tags.get("login", "")
+    if art == "sub":
+        danke("sub", name)
+    elif art == "resub":
+        danke("resub", name, m=tags.get("msg-param-cumulative-months") or "ein paar")
+    elif art == "submysterygift":   # danach kommen noch N einzelne "subgift" desselben Schenkers -> die nicht einzeln
+        anzahl = int(tags.get("msg-param-mass-gift-count") or 1)
+        _z["geschenke"][name.lower()] = _z["geschenke"].get(name.lower(), 0) + anzahl
+        danke("mystery", name, c=anzahl)
+    elif art == "subgift":
+        if _z["geschenke"].get(name.lower(), 0) > 0:
+            _z["geschenke"][name.lower()] -= 1
+            return
+        danke("subgift", name, r=tags.get("msg-param-recipient-display-name") or "jemanden")
+    elif art == "raid":
+        danke("raid", tags.get("msg-param-displayName") or name, c=tags.get("msg-param-viewerCount") or "ein paar")
+
+
+def _scopes() -> set[str]:
+    """Rechte des Twitch-Tokens (10 min gemerkt)."""
+    import requests
+
+    if time.time() - _z["scopes"][1] < 600:
+        return _z["scopes"][0]
+    r = requests.get("https://id.twitch.tv/oauth2/validate", headers={"Authorization": f"OAuth {_token()}"}, timeout=10)
+    _z["scopes"] = (set(r.json().get("scopes", [])) if r.ok else set(), time.time())
+    return _z["scopes"][0]
+
+
+def _follower_wache() -> None:
+    """Alle 20 s die neuesten Follower abfragen (braucht das Recht moderator:read:followers). Wer beim Start schon folgt
+    oder in dieser Sitzung schon bedankt wurde, wird nicht (nochmal) bedankt - Unfollow/Follow-Spam bringt nichts."""
+    gesehen = None
+    gemeldet = False
+    while True:
+        try:
+            if "moderator:read:followers" not in _scopes():
+                if not gemeldet:
+                    _log("Follower-Dank aus: Twitch-Recht fehlt (einmal 'python src/stream.py anmelden')")
+                    gemeldet = True
+                time.sleep(300)
+                continue
+            r = _helix("GET", "channels/followers", broadcaster_id=_sender_id(), first=20)
+            r.raise_for_status()
+            daten = r.json().get("data", [])
+            if gesehen is None:
+                gesehen = {f["user_id"] for f in daten}
+                _log(f"Follower-Dank an ({r.json().get('total', '?')} Follower)")
+            else:
+                neu = [f for f in reversed(daten) if f["user_id"] not in gesehen]
+                gesehen |= {f["user_id"] for f in neu}
+                for f in neu[:3]:
+                    danke("follow", f["user_name"])
+                if len(neu) > 3:
+                    _melden(f"Und noch {len(neu) - 3} weitere neue Follower – danke euch!", f"+{len(neu) - 3} Follower", vorlesen_immer=True)
+        except Exception as e:
+            _log(f"Follower-Abfrage: {str(e)[:100]}")
+        time.sleep(20)
 
 
 def _sprechname(name: str) -> str:
@@ -257,6 +347,8 @@ def starten() -> bool:
     _z["chat"] = TwitchChat(KANAL)
     _z["chat"].start()
     threading.Thread(target=_vorleser, daemon=True, name="twitch-vorleser").start()
+    if CLIENT_ID and TOKEN_DATEI.exists():
+        threading.Thread(target=_follower_wache, daemon=True, name="twitch-follower").start()
     return True
 
 
@@ -308,9 +400,11 @@ def _helix(methode: str, pfad: str, **params):
 
 
 def _sender_id() -> str:
-    r = _helix("GET", "users")
-    r.raise_for_status()
-    return r.json()["data"][0]["id"]
+    if not _z["sender"]:   # aendert sich nie -> einmal fragen
+        r = _helix("GET", "users")
+        r.raise_for_status()
+        _z["sender"] = r.json()["data"][0]["id"]
+    return _z["sender"]
 
 
 def twitch_status() -> str:
@@ -346,6 +440,9 @@ def twitch_clip(token: str) -> str:
     return f"Clip ist erstellt: clips.twitch.tv/{clip['id']} – Titel und Länge kannst du auf Twitch noch anpassen."
 
 
+RECHTE = "clips:edit moderator:read:followers"   # Clips erstellen + Follower lesen (fuer den Dank), sonst nichts
+
+
 def anmelden() -> None:
     """Geraete-Code-Anmeldung (Twitch DCF, oeffentlicher Client, Recht nur clips:edit)."""
     import webbrowser
@@ -356,7 +453,7 @@ def anmelden() -> None:
         print("Erst TWITCH_CLIENT_ID in die .env eintragen (App auf https://dev.twitch.tv/console, Client-Typ Öffentlich).")
         return
     d = requests.post("https://id.twitch.tv/oauth2/device", timeout=10,
-                      data={"client_id": CLIENT_ID, "scopes": "clips:edit"}).json()
+                      data={"client_id": CLIENT_ID, "scopes": RECHTE}).json()
     if "device_code" not in d:
         print(f"Twitch sagt: {d}")
         return
@@ -366,7 +463,7 @@ def anmelden() -> None:
     while time.time() < ende:
         time.sleep(int(d.get("interval", 5)))
         r = requests.post("https://id.twitch.tv/oauth2/token", timeout=10, data={
-            "client_id": CLIENT_ID, "scopes": "clips:edit", "device_code": d["device_code"],
+            "client_id": CLIENT_ID, "scopes": RECHTE, "device_code": d["device_code"],
             "grant_type": "urn:ietf:params:oauth:grant-type:device_code"})
         if r.status_code == 200:
             _token_speichern(r.json())

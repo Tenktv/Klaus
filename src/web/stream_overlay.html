@@ -59,6 +59,9 @@
   #hinweis .gross { margin-top: 4px; font: 700 40px/1.1 "Rajdhani", sans-serif; letter-spacing: .04em;
     text-shadow: 0 0 22px rgba(var(--rgb), .6); }
   #hinweis.clip { --rgb: 255, 120, 90; }
+  #hinweis.danke { --rgb: 255, 196, 90; min-width: 520px; }   /* Follow, Abo, Raid, Bits */
+  #hinweis.danke .gross { font-size: 46px; }
+  #hinweis.danke .kopf::before { content: "♥ "; color: #ff6a5a; }
   #banner { position: absolute; top: 0; left: 50%; transform: translate(-50%, -110%); padding: 10px 40px 12px;
     font: 700 26px "Rajdhani", sans-serif; letter-spacing: .06em; white-space: nowrap; transition: transform .45s var(--ease); }
   #banner.an { transform: translate(-50%, 0); }
@@ -176,7 +179,7 @@ function verbinden() {
   an("chat", chatZeile);
   an("willkommen", (d) => hinweis("Neu im Chat", "Willkommen, " + d.name + "!"));
   an("clip", (d) => hinweis("Clip", d.text || "Clip gespeichert!", "clip"));
-  an("hinweis", (d) => hinweis(d.kopf || "Klaus", d.text || ""));
+  an("hinweis", (d) => hinweis(d.kopf || "Klaus", d.text || "", d.art || ""));
   an("banner", banner);
   an("pause", (p) => document.body.classList.toggle("pause", !!(p && p.an)));
   q.onerror = () => { q.close(); setTimeout(verbinden, 3000); };   // Klaus neu gestartet -> wieder verbinden
