@@ -75,6 +75,14 @@ class ChatBotTests(unittest.TestCase):
         with patch('ersatz_ki.text', lambda prompt: 'Lisa und Max reden über Valorant.'):
             self.assertEqual(bot.zusammenfassung(), 'Lisa und Max reden über Valorant.')
 
+    def test_klaus_lautstaerke_befehle(self):
+        from assistent import KLAUS_LAUT, STUMM
+        self.assertEqual(KLAUS_LAUT.search('sprich mal etwas leiser').group('r'), 'leiser')
+        self.assertEqual(KLAUS_LAUT.search('du bist zu laut').group('r2'), 'laut')
+        self.assertEqual(KLAUS_LAUT.search('deine lautstärke auf 30 prozent').group('p'), '30')
+        self.assertIsNone(KLAUS_LAUT.search('mach die musik leiser'))
+        self.assertFalse(STUMM.search('sei leiser'))
+
     def test_sprachbefehle(self):
         self.assertTrue(CHAT_LOS.search('was ist im chat los'))
         self.assertTrue(CHAT_LOS.search('fass mir den chat zusammen'))

@@ -116,8 +116,12 @@ WERKZEUGE = [
     {"name": "programm_aktion", "description": "installieren, deinstallieren oder aktualisieren per winget (ID aus programm_suchen). "
      "Braucht seine Freigabe.",
      "parameters": {"type": "OBJECT", "properties": {"aktion": {"type": "STRING"}, "id": {"type": "STRING"}}, "required": ["aktion", "id"]}},
-    {"name": "lautstaerke", "description": "Lautstaerke lesen oder setzen (0-100), oder Ton stumm/an.",
-     "parameters": {"type": "OBJECT", "properties": {"prozent": {"type": "NUMBER"}, "stumm": {"type": "BOOLEAN"}}}},
+    {"name": "lautstaerke", "description": "Lautstaerke lesen oder setzen (0-100), oder Ton stumm/an. nur_klaus=true: nur DEINE "
+     "eigene Stimme (bei 'sprich leiser', 'du bist zu laut', 'sei lauter'), dann richtung leiser/lauter oder prozent. "
+     "Ohne nur_klaus: die ganze PC-Lautstaerke.",
+     "parameters": {"type": "OBJECT", "properties": {"prozent": {"type": "NUMBER"}, "stumm": {"type": "BOOLEAN"},
+                                                     "nur_klaus": {"type": "BOOLEAN"},
+                                                     "richtung": {"type": "STRING", "enum": ["leiser", "lauter"]}}}},
     {"name": "bluetooth", "description": "Bluetooth an oder aus (aus braucht seine Freigabe, trennt Kopfhoerer/Maus).",
      "parameters": {"type": "OBJECT", "properties": {"an": {"type": "BOOLEAN"}}, "required": ["an"]}},
     {"name": "claude_remote_starten", "description": "Oeffnet am PC ein Terminal und startet `claude --remote-control` im Ordner "
@@ -407,6 +411,9 @@ class GeminiGespraech:
             aktion, pid = args.get("aktion", ""), args.get("id", "")
             return a._mit_freigabe("programm", f"{pid} {aktion}", lambda t: rechte.programm(aktion, pid, t), an="winget")
         if name == "lautstaerke":
+            if args.get("nur_klaus"):
+                faktor = {"leiser": 0.7, "lauter": 1 / 0.7}.get(args.get("richtung", ""))
+                return rechte.klaus_lautstaerke(args.get("prozent"), None if args.get("prozent") is not None else faktor)
             if args.get("stumm") is not None:
                 return rechte.stumm(bool(args["stumm"]))
             return rechte.lautstaerke(args.get("prozent"))

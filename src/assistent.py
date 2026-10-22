@@ -132,6 +132,10 @@ CHAT_STILL = re.compile(r"\b(?:twitch-?)?chat\s+(?:nicht mehr vorlesen|vorlesen 
 CHAT_LOS = re.compile(r"\bwas\s+(?:ist|war|geht)\s+(?:gerade\s+|so\s+)?(?:im|in meinem|im twitch-?)\s*chat\b|\bchat\s+zusammenfass\w*|"
                       r"\bfass\w*\s+(?:mir\s+)?(?:den\s+)?chat\s+zusammen\b", re.I)
 CHAT_BEFEHLE = re.compile(r"\bchat-?befehle\s+(?P<an>an|ein|aus|ab)\b|\b(?P<an2>aktivier|deaktivier)\w*\s+(?:die\s+)?chat-?befehle\b", re.I)
+# Nur Klaus' eigene Stimme (Windows-Mixer), nicht die PC-Lautstaerke: "sprich leiser", "du bist zu laut", "deine Lautstaerke 30 Prozent"
+KLAUS_LAUT = re.compile(r"\b(?:sprich|rede|sei|red)\s+(?:mal\s+|bitte\s+|etwas\s+|ein\s+bisschen\s+|ein\s+bissl\s+|noch\s+)*(?P<r>leiser|lauter)\b|"
+                        r"\bdu\s+bist\s+(?:mir\s+)?(?:viel\s+|etwas\s+|zu\s+)*(?P<r2>laut|leise)\b|"
+                        r"\bdeine\s+(?:stimme|lautst(?:ä|ae)rke)\s+(?:auf\s+)?(?:(?P<p>\d{1,3})\s*(?:%|prozent)|(?P<r3>leiser|lauter))", re.I)
 BRB = re.compile(r"\b(?:brb|be right back|bin (?:gleich|kurz) (?:zur(?:ü|ue)ck|wieder da|weg)|(?:stream[- ]?|kurze\s+)pause|"
                  r"pause-?(?:bildschirm|screen|szene))\b", re.I)
 PAUSE_ENDE = re.compile(r"\b(?:ich\s+)?bin\s+(?:wieder\s+)?(?:da|zur(?:ü|ue)ck)\b|\bpause\s+(?:vorbei|beenden|aus|ende)\b|"
@@ -990,6 +994,14 @@ class Assistent:
             self.sage("Okay, ich mach mich klein.", zustand="aktion")
         elif CLIP.search(befehl):
             self.sage(self.clip(), zustand="aktion")
+        elif KLAUS_LAUT.search(befehl):
+            import rechte
+            m = KLAUS_LAUT.search(befehl)
+            richtung = (m.group("r") or m.group("r3") or {"laut": "leiser", "leise": "lauter"}.get((m.group("r2") or "").lower(), "")).lower()
+            if m.group("p"):
+                self.sage(rechte.klaus_lautstaerke(float(m.group("p"))), zustand="aktion")
+            else:
+                self.sage(rechte.klaus_lautstaerke(faktor=0.7 if richtung == "leiser" else 1 / 0.7), zustand="aktion")
         elif PAUSE_ENDE.search(befehl) and __import__("stream").pause_laeuft():
             import stream
             self.sage(stream.obs_aktion("zurueck"), zustand="aktion")

@@ -200,6 +200,43 @@ def lautstaerke(prozent: float | None = None) -> str:
     return f"Lautstärke {round(v.GetMasterVolumeLevelScalar() * 100)} Prozent."
 
 
+def klaus_lautstaerke(prozent: float | None = None, faktor: float | None = None) -> str:
+    """Nur Klaus' eigene Stimme (seine Sitzung im Windows-Lautstaerkemixer) - Spiel, Discord und System bleiben gleich.
+    Windows merkt sich den Wert fuer das Programm, er gilt also auch nach einem Neustart. Im Stream (OBS nimmt den
+    Desktop-Ton auf) ist Klaus damit ebenso leiser."""
+    try:
+        import comtypes
+        comtypes.CoInitialize()   # Aufruf kommt aus Hintergrund-Threads (Assistent, Gemini)
+    except Exception:
+        pass
+    from pycaw.pycaw import AudioUtilities
+
+    def eigene():
+        return [s for s in AudioUtilities.GetAllSessions() if s.Process and s.Process.pid == os.getpid()]
+
+    sitzungen = eigene()
+    if not sitzungen:   # noch nie etwas abgespielt -> kurz Stille ausgeben, damit Windows die Sitzung anlegt
+        import numpy as np
+        import sounddevice as sd
+        sd.play(np.zeros(2400, dtype=np.float32), 24000)
+        sd.wait()
+        sitzungen = eigene()
+    if not sitzungen:
+        return "Ich finde meine Audio-Sitzung gerade nicht."
+    jetzt = sitzungen[0].SimpleAudioVolume.GetMasterVolume()
+    if prozent is not None:
+        neu = prozent / 100
+    elif faktor is not None:
+        neu = jetzt * faktor
+    else:
+        return f"Meine Stimme steht auf {round(jetzt * 100)} Prozent."
+    neu = max(0.05, min(1.0, neu))
+    for s in sitzungen:
+        s.SimpleAudioVolume.SetMasterVolume(neu, None)
+    protokoll(f"Klaus-Lautstärke {round(neu * 100)} %")
+    return f"Okay, meine Stimme ist jetzt auf {round(neu * 100)} Prozent." + (" Lauter geht nicht." if neu >= 1.0 and faktor else "")
+
+
 def stumm(an: bool) -> str:
     _lautsprecher().SetMute(1 if an else 0, None)
     protokoll(f"Ton {'aus' if an else 'an'}")
