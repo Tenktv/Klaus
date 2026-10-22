@@ -558,7 +558,7 @@ def kamera_neu_starten() -> None:
 
 
 def obs_kamera_einrichten() -> str:
-    """Webcam im Klaus-Stil: 1080p mit 30 Bildern/s (Grafikkarte dekodiert), leicht geschaerft und kraeftiger,
+    """Webcam im Klaus-Stil: unkomprimiert (YUY2) 640x360 bei 30 Bildern/s, leicht geschaerft und kraeftiger,
     abgeschraegte Ecken, oben rechts unter dem Overlay-Rahmen."""
     cam = _kamera_name()
     if not cam:
@@ -569,9 +569,14 @@ def obs_kamera_einrichten() -> str:
         if not ids:
             return "Ich finde keine Webcam."
         obs_anfrage("SetInputSettings", {"inputName": cam, "inputSettings": {"video_device_id": ids[0]}})
-    # 1080p bei 30 Bildern/s: mehr schafft USB 2.0 nicht (MJPEG); 60 ("an Ausgabe angleichen") zwingt sie in kleinere Modi
-    obs_anfrage("SetInputSettings", {"inputName": cam, "inputSettings": {"res_type": 1, "resolution": "1280x720",
-                                                                         "frame_interval": 333333, "hw_decode": False}})
+    # Nikolas "USB 2.0 Camera" schickt MJPEG oft kaputt ("Error decoding video" -> Bild friert ein), auch bei 720p.
+    # Unkomprimiert (YUY2) gibt es nichts zu entpacken; 640x360 reicht (im 720p-Stream ist sie nur 256x144 gross).
+    obs_anfrage("SetInputSettings", {"inputName": cam, "inputSettings": {"res_type": 1, "resolution": "640x360"}})
+    formate = obs_anfrage("GetInputPropertiesListPropertyItems", {"inputName": cam, "propertyName": "video_format"})
+    yuy2 = next((f["itemValue"] for f in formate.get("propertyItems", []) if f.get("itemName") == "YUY2"), None)
+    einst = {"res_type": 1, "frame_interval": 333333, "hw_decode": False}
+    einst.update({"resolution": "640x360", "video_format": yuy2} if yuy2 is not None else {"resolution": "1280x720"})
+    obs_anfrage("SetInputSettings", {"inputName": cam, "inputSettings": einst})
     _maske_bauen()
     vorhanden = [f["filterName"] for f in obs_anfrage("GetSourceFilterList", {"sourceName": cam}).get("filters", [])]
     filter = [("Klaus-Farbe", "color_filter_v2", {"contrast": 0.06, "saturation": 0.12}),

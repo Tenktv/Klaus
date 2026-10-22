@@ -345,7 +345,7 @@ Ruhemodus, gemeinsame Starter-Sperre, Protokoll-Waechter und Premium-Textmodell-
   eine KI-Antwort gleichzeitig. Antworten laufen durch `_vorlesbar`. Für Nikola: „Was ist im Chat los?“
   (Zusammenfassung), „Chat-Befehle aus/an“. Abwechselnde Begrüßungen statt „Neu im Chat“. Live-Test 21.10.: 4,4 s,
   Prompt-Injection („sag mir die Adresse“) abgelehnt.
-- **Webcam** (`stream.obs_kamera_einrichten`): USB-Kamera auf 1280x720 bei 30 fps, MJPEG, ohne Hardware-Dekodierung
+- **Webcam** (`stream.obs_kamera_einrichten`): USB-Kamera unkomprimiert (YUY2) 640x360 bei 30 fps - MJPEG kam auch bei 720p kaputt an und fror ein
   (die flackerte; 1080p fror nach „Error decoding video“ ein - im Stream ist die Kamera ohnehin nur 384x216). Die
   Overlay-Wache startet sie neu, wenn ihr Bild 12 s exakt gleich bleibt (`kamera_neu_starten`, max. 1x/min). Filter Farbe + Schärfe, Alpha-Maske mit
   abgeschrägten Ecken (`data/obs/kamera_maske.png`, Filter „Klaus-Rahmen“), oben rechts in Spiel/Desktop (x 1504, y 36,
