@@ -540,6 +540,23 @@ def kamera_zustand() -> dict:
     return {"an": an, **KAMERA}
 
 
+def kamera_bild_kennung() -> str:
+    """Pruefsumme eines kleinen Kamerabilds - aendert sich bei einer laufenden Kamera immer (Sensorrauschen)."""
+    cam = _kamera_name()
+    if not cam:
+        return ""
+    roh = obs_anfrage("GetSourceScreenshot", {"sourceName": cam, "imageFormat": "jpg", "imageWidth": 160}).get("imageData", "")
+    return hashlib.md5(roh.encode()).hexdigest()
+
+
+def kamera_neu_starten() -> None:
+    """Haengende Webcam (z. B. nach "Error decoding video" bei MJPEG ueber USB 2.0): einmal aus und wieder an."""
+    cam = _kamera_name()
+    for _ in range(2):   # der Knopf schaltet um: Deaktivieren, dann Aktivieren
+        obs_anfrage("PressInputPropertiesButton", {"inputName": cam, "propertyName": "activate"})
+        time.sleep(2)
+
+
 def obs_kamera_einrichten() -> str:
     """Webcam im Klaus-Stil: 1080p mit 30 Bildern/s (Grafikkarte dekodiert), leicht geschaerft und kraeftiger,
     abgeschraegte Ecken, oben rechts unter dem Overlay-Rahmen."""
@@ -553,7 +570,7 @@ def obs_kamera_einrichten() -> str:
             return "Ich finde keine Webcam."
         obs_anfrage("SetInputSettings", {"inputName": cam, "inputSettings": {"video_device_id": ids[0]}})
     # 1080p bei 30 Bildern/s: mehr schafft USB 2.0 nicht (MJPEG); 60 ("an Ausgabe angleichen") zwingt sie in kleinere Modi
-    obs_anfrage("SetInputSettings", {"inputName": cam, "inputSettings": {"res_type": 1, "resolution": "1920x1080",
+    obs_anfrage("SetInputSettings", {"inputName": cam, "inputSettings": {"res_type": 1, "resolution": "1280x720",
                                                                          "frame_interval": 333333, "hw_decode": False}})
     _maske_bauen()
     vorhanden = [f["filterName"] for f in obs_anfrage("GetSourceFilterList", {"sourceName": cam}).get("filters", [])]

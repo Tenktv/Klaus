@@ -148,6 +148,7 @@ def _wache() -> None:
         print("[Overlay] OBS-Quellen neu geladen")
     except RuntimeError:
         pass   # OBS laeuft nicht oder Quelle gibt es (noch) nicht
+    bild, gleich, neu_gestartet = "", 0, 0.0
     while True:
         time.sleep(3)
         if not _hoerer:
@@ -159,6 +160,21 @@ def _wache() -> None:
         kamera = stream.kamera_zustand()
         if kamera != _zustand["kamera"]:
             senden("kamera", kamera)
+        # 3) Eingefrorene Webcam: 12 s exakt dasselbe Bild -> neu starten (hoechstens einmal pro Minute)
+        if kamera.get("an"):
+            try:
+                jetzt = stream.kamera_bild_kennung()
+            except RuntimeError:
+                jetzt = ""
+            gleich = gleich + 1 if jetzt and jetzt == bild else 0
+            bild = jetzt
+            if gleich >= 4 and time.time() - neu_gestartet > 60:
+                print("[Overlay] Webcam haengt (Bild unveraendert) - starte sie neu")
+                try:
+                    stream.kamera_neu_starten()
+                except RuntimeError:
+                    pass
+                neu_gestartet, gleich = time.time(), 0
         in_pause = szene == stream.PAUSE_SZENE
         if in_pause != bool(_zustand["pause"].get("an")):
             senden("pause", {"an": True, "bis": None} if in_pause else {"an": False})

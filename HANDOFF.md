@@ -345,7 +345,9 @@ Ruhemodus, gemeinsame Starter-Sperre, Protokoll-Waechter und Premium-Textmodell-
   eine KI-Antwort gleichzeitig. Antworten laufen durch `_vorlesbar`. Für Nikola: „Was ist im Chat los?“
   (Zusammenfassung), „Chat-Befehle aus/an“. Abwechselnde Begrüßungen statt „Neu im Chat“. Live-Test 21.10.: 4,4 s,
   Prompt-Injection („sag mir die Adresse“) abgelehnt.
-- **Webcam** (`stream.obs_kamera_einrichten`): USB-Kamera auf 1920x1080 bei 30 fps (ohne Hardware-Dekodierung: flackerte), Filter Farbe + Schärfe, Alpha-Maske mit
+- **Webcam** (`stream.obs_kamera_einrichten`): USB-Kamera auf 1280x720 bei 30 fps, MJPEG, ohne Hardware-Dekodierung
+  (die flackerte; 1080p fror nach „Error decoding video“ ein - im Stream ist die Kamera ohnehin nur 384x216). Die
+  Overlay-Wache startet sie neu, wenn ihr Bild 12 s exakt gleich bleibt (`kamera_neu_starten`, max. 1x/min). Filter Farbe + Schärfe, Alpha-Maske mit
   abgeschrägten Ecken (`data/obs/kamera_maske.png`, Filter „Klaus-Rahmen“), oben rechts in Spiel/Desktop (x 1504, y 36,
   384x216, 16:9) direkt unter dem Overlay. Das Overlay zeichnet dort Holo-Rahmen, Eckklammern und Schild „LATENIKO · LIVE“,
   der Rahmen leuchtet mit Klaus' Stimme. „Klaus, Kamera an/aus“, „richte die Webcam ein“, `obs`-Aktionen `kamera_*`.
@@ -354,10 +356,12 @@ Ruhemodus, gemeinsame Starter-Sperre, Protokoll-Waechter und Premium-Textmodell-
   Klaus spricht. „Klaus, BRB 5 Minuten“ / „bin gleich zurück“ / „Stream-Pause“ → Szene Pause + Mikro im Stream stumm
   (`stream.obs_pause`); „Klaus, ich bin wieder da“ (nur während der Pause) → vorige Szene + Mikro wie vorher. Das Overlay
   blendet in der Pause seinen kleinen Orb und den Kamera-Rahmen aus. Live getestet 21.10.
-- Einrichtung 21.10.: OBS 32.2.2 (winget), Twitch-Konto „lateniko“ in OBS verbunden, Profil „Unbenannt“ (NVENC,
-  1080p60, 6000 kbit/s vom Assistenten, Replay 30 s), Szenen Spiel/Desktop/Pause, Twitch-App „Klaus“ (Client-ID in
-  `.env`, Token `data/twitch_token.json`). Am 21.10. waren weder OBS noch
-  Streamlabs installiert → Twitch/OBS noch nicht live getestet (nur Unit-Tests `tests/test_stream_spielmodus.py`).
+- Einrichtung 21.10.: OBS 32.2.2 (winget), Twitch-Konto „lateniko“ in OBS verbunden, Profil „Unbenannt“, Szenen
+  Spiel/Desktop/Pause, Twitch-App „Klaus“ (Client-ID in `.env`, Token `data/twitch_token.json`).
+- **Upload/Ping (22.10.):** Nikolas Upload ≈ 5,5 Mbit/s. Der Twitch-Assistent hatte „Enhanced Broadcasting“
+  (Multitrack, 6000+2500+1000+500 kbit/s ≈ 10 Mbit/s, 4 NVENC-Encoder) an → Upload voll, 70 % verworfene Bilder, hoher
+  Spiel-Ping. Jetzt: `Stream1/EnableMultitrackVideo=false`, NVENC 3000 kbit/s, 720p60, `Output/DynamicBitrate=true`.
+  Medal.exe lief nebenher (nimmt/lädt Clips) – beim Streamen aus lassen.
 
 ## 6. Offene Fragen an Nikola
 - Fish Audio: Schlüssel (Plus-Abo wegen kommerzieller Nutzung) eintragen, dann Stimme gemeinsam entwerfen.
