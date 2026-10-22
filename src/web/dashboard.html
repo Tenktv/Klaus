@@ -1896,7 +1896,9 @@ function pegelBalken(box, core) {
 }
 
 // ================================================================ Hightech-Details
-const BOOT_DAUER = 0; // Sofort nutzbar; Verbindungsstatus kommt ausschliesslich aus der Bruecke.
+// Start-Animation (Wunsch Nikola 22.10.2026 wieder an). Die Zeilen sind echte Zustaende aus der Bruecke (ladeBootStatus),
+// keine erfundenen "ONLINE"-Meldungen; der Bildschirm ist darunter schon nutzbar und blendet nach BOOT_DAUER auf.
+const BOOT_DAUER = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 2800;
 let ersterAufbau = true;
 
 function modulId(m) {
@@ -1909,14 +1911,19 @@ function modulId(m) {
 function bootSequenz() {
   const boot = document.getElementById("boot");
   if (!BOOT_DAUER) { boot.remove(); return; }
-  const zeilen = [["ARBEITSBEREICH", "WIRD GELADEN"]];
   const box = boot.querySelector(".boot-zeilen"), balken = boot.querySelector(".boot-balken i");
-  zeilen.forEach(([name, status], i) => setTimeout(() => {
-    const z = el("div");
-    z.innerHTML = `&gt; ${name} ${".".repeat(Math.max(3, 34 - name.length))} <b>${status}</b>`;
+  const tippen = (zeilen) => zeilen.forEach(([name, status, ok], i) => setTimeout(() => {
+    const z = el("div", "", `> ${name} ${".".repeat(Math.max(3, 34 - name.length))} `);
+    const s = el("b", "", status);
+    if (!ok) s.style.color = "var(--bernstein)";   // z. B. Mikrofon aus, Server-Link aus - ehrlich, nicht rot
+    z.append(s);
     box.append(z);
     balken.style.width = `${((i + 1) / zeilen.length) * 100}%`;
-  }, 120 + i * ((BOOT_DAUER - 700) / zeilen.length)));
+  }, 120 + i * ((BOOT_DAUER - 900) / zeilen.length)));
+  let fertig = false;
+  const los = (zeilen) => { if (!fertig) { fertig = true; tippen(zeilen); } };
+  klausBereit.then((k) => k.ladeBootStatus((json) => { try { los(JSON.parse(json)); } catch { los([["HUD-RENDERER", "OK", true]]); } }));
+  setTimeout(() => los([["HUD-RENDERER", "OK", true], ["KLAUS-KERN", "STARTET", true]]), 600);   // Bruecke noch nicht da
   setTimeout(() => {
     const z = el("div"); z.innerHTML = "&gt; <b>WILLKOMMEN ZURÜCK, NIKOLA.</b>"; box.append(z);
   }, BOOT_DAUER - 450);

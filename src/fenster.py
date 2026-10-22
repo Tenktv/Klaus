@@ -321,6 +321,25 @@ class WebBruecke(QObject):
         self.zeige_chat()
 
     @Slot(result=str)
+    def ladeBootStatus(self) -> str:
+        """Echte Zeilen fuer die Boot-Sequenz (nur lokale Pruefungen, kein Netz, keine KI): [[name, status, ok], ...]"""
+        zeilen = [["HUD-RENDERER", "OK", True]]
+        a = self.assistent
+        try:
+            zeilen.append(["MIKROFON", "AUS" if getattr(a, "pausiert", False) else "BEREIT", not getattr(a, "pausiert", False)])
+            zeilen.append(["GEMINI LIVE", "BEREIT" if getattr(a, "gemini", None) else "NICHT EINGERICHTET", bool(getattr(a, "gemini", None))])
+            import gehirn
+            zeilen.append(["GEDÄCHTNISKERN", "GELADEN" if gehirn.FAKTEN_PATH.exists() else "LEER", gehirn.FAKTEN_PATH.exists()])
+            import fernlink
+            zeilen.append(["SERVER-LINK", "VERBINDET" if fernlink.konfiguriert() else "AUS", fernlink.konfiguriert()])
+            import stream
+            if stream.KANAL:
+                zeilen.append(["TWITCH-CHAT", f"#{stream.KANAL.upper()}", True])
+        except Exception as e:
+            zeilen.append(["STATUS", str(e)[:30].upper(), False])
+        return json.dumps(zeilen, ensure_ascii=False)
+
+    @Slot(result=str)
     def ladeBetrieb(self) -> str:
         """Lokaler Live-Zustand fuer das Kontrollzentrum, ohne Netz-/KI-Aufruf."""
         import freigabe
