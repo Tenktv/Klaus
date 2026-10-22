@@ -89,6 +89,8 @@ class _Anfrage(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
+        with _sperre:   # zuerst anmelden: Ereignisse waehrend der (langsamen) OBS-Abfrage unten gehen sonst verloren
+            _hoerer.append(q)
         import stream
         start = [("thema", _thema()), ("zustand", _zustand["zustand"]), ("banner", _zustand["banner"])]
         if stream.KANAL:
@@ -101,8 +103,6 @@ class _Anfrage(BaseHTTPRequestHandler):
             for art, d in start:
                 self.wfile.write(f"event: {art}\ndata: {json.dumps(d, ensure_ascii=False)}\n\n".encode("utf-8"))
             self.wfile.flush()
-            with _sperre:
-                _hoerer.append(q)
             while True:
                 try:
                     self.wfile.write(q.get(timeout=15))
