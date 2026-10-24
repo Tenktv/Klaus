@@ -1,7 +1,7 @@
 # Baut Klaus-Setup.exe (Inno Setup) auf Windows.
 # - Jeder Lauf: Setup.exe als Artefakt zum Herunterladen (Actions -> Lauf -> Artifacts)
-# - Tag v1.2.3: zusaetzlich Release im oeffentlichen Repo Tenktv/Klaus-Download (dort holen Installationen ihre Updates).
-#   Braucht das Secret KLAUS_DOWNLOAD_TOKEN (Fine-grained Token, nur Tenktv/Klaus-Download, Contents: Read and write).
+# - Release (Tag v1.2.3 pushen ODER "Run workflow" mit veroeffentlichen=ja): Release in DIESEM Repo mit Setup.exe und
+#   SHA256 - dort holen Installationen ihre Updates (pc_update.py). Version = Datei VERSION (bzw. der Tag).
 name: Installer
 
 on:
@@ -10,9 +10,13 @@ on:
   pull_request:
     paths: ["installer/**", ".github/workflows/installer.yml", "requirements.txt"]
   workflow_dispatch:
+    inputs:
+      veroeffentlichen:
+        description: "Als Release veroeffentlichen (ja/nein)"
+        default: "nein"
 
 permissions:
-  contents: read
+  contents: write   # fuer das Release in diesem Repo
 
 jobs:
   setup-exe:
@@ -55,13 +59,15 @@ jobs:
           name: Klaus-Setup-${{ env.VERSION }}
           path: installer/Output/Klaus-Setup.exe
 
-      - name: Release im Download-Repo
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Release in diesem Repo
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.veroeffentlichen == 'ja'
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.KLAUS_DOWNLOAD_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if (-not $env:GH_TOKEN) { Write-Host "::warning::Secret KLAUS_DOWNLOAD_TOKEN fehlt - kein Release veroeffentlicht."; exit 0 }
           $hash = (Get-FileHash installer\Output\Klaus-Setup.exe -Algorithm SHA256).Hash.ToLower()
-          gh release create "v$env:VERSION" installer/Output/Klaus-Setup.exe --repo Tenktv/Klaus-Download `
-            --title "Klaus $env:VERSION" --notes "Klaus-Setup.exe herunterladen und starten. SHA256: $hash"
+          $tag = "v$env:VERSION"
+          gh release view $tag --repo $env:GITHUB_REPOSITORY 2>$null
+          if ($LASTEXITCODE -eq 0) { throw "Release $tag gibt es schon - VERSION erhoehen." }
+          gh release create $tag installer/Output/Klaus-Setup.exe --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA `
+            --title "Klaus $env:VERSION" --notes "Klaus-Setup.exe herunterladen und starten (Testversion). SHA256: $hash"

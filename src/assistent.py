@@ -10,6 +10,7 @@ import json
 import os
 import queue
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -1117,7 +1118,7 @@ class Assistent:
     def run(self) -> None:
         try:
             self.zeige("start", "Klaus startet ...")
-            if not llm.ist_verfuegbar():
+            if not llm.ist_verfuegbar() and shutil.which("ollama"):   # ohne Ollama: Cloud-KI (Groq, OpenRouter ...) statt lokal
                 self.zeige("start", "Starte Ollama ...")
                 subprocess.Popen(["ollama", "serve"], creationflags=subprocess.CREATE_NO_WINDOW)
                 for _ in range(30):
