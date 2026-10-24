@@ -570,12 +570,15 @@ SCHLUESSEL = {"gemini": "GEMINI_API_KEY", "groq": "GROQ_API_KEY", "openrouter": 
               "anthropic": "ANTHROPIC_API_KEY", "claude": "ANTHROPIC_API_KEY", "tavily": "TAVILY_API_KEY", "openai": "OPENAI_API_KEY"}
 
 
+def profil_neustart() -> None:
+    """Schluessel werden beim Start gelesen -> Profil kurz neu starten (der Verteiler startet es mit der neuen .env wieder)."""
+    threading.Timer(2, lambda: os._exit(0)).start()
+
+
 def profil_befehle(tg) -> None:
     """Tester-Profil: eigene Schluessel und Name per Telegram (Nachricht wird geloescht, geht nie an die KI)."""
-    import threading as th
-
-    def neu_starten() -> None:   # Schluessel werden beim Start gelesen -> Profil kurz neu starten (Verteiler startet es wieder)
-        th.Timer(2, lambda: os._exit(0)).start()
+    def neu_starten() -> None:
+        profil_neustart()
 
     def schluessel(eingabe: str) -> str:
         teile = eingabe.split()

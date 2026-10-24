@@ -123,7 +123,8 @@ class ProfilBefehleTests(unittest.TestCase):
 
         tg = SimpleNamespace(befehle={}, geheime_befehle=set())
         gespeichert = {}
-        with patch.object(TB, '_env_setzen', gespeichert.__setitem__), patch.object(S.os, '_exit', lambda c: None):
+        neustarts = []
+        with patch.object(TB, '_env_setzen', gespeichert.__setitem__), patch.object(S, 'profil_neustart', lambda: neustarts.append(1)):
             S.profil_befehle(tg)
             self.assertIn('/schluessel', tg.geheime_befehle)
             self.assertIn('So:', tg.befehle['/schluessel']('/schluessel'))
@@ -132,6 +133,7 @@ class ProfilBefehleTests(unittest.TestCase):
             self.assertEqual(gespeichert, {'GROQ_API_KEY': 'gsk_' + 'a' * 30})
             self.assertIn('Luna', tg.befehle['/name']('/name Luna'))
             self.assertIn('alpaca', tg.befehle['/profil']('/profil'))
+        self.assertEqual(len(neustarts), 2)   # nach Schluessel und Name
 
     def test_stdin_updates(self):
         import telegram_bot as TB
