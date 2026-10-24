@@ -282,6 +282,12 @@ def _follower_wache() -> None:
         time.sleep(20)
 
 
+def _assistent() -> str:
+    """Wie der Assistent heisst (KLAUS_NAME, Tester z. B. "Luna")."""
+    import identitaet
+    return identitaet.NAME
+
+
 def _sprechname(name: str) -> str:
     return re.sub(r"[_\d]+", " ", name).strip() or name
 
@@ -301,6 +307,8 @@ def _vorlesbar(text: str) -> str:
         rein.append(w)
     text = " ".join(rein)[:200]
     text = re.sub(r"\b(?:k\W*l\W*a\W*u\W*s|claus|klaas|kraus|klause)\w*", "K.", text, flags=re.I)
+    import identitaet   # eigener Name (Tester: "Luna") - der ist das Weckwort und darf auch nicht vorgelesen werden
+    text = re.sub(rf"\b{identitaet.weckwort_muster()}\w*", identitaet.NAME[:1].upper() + ".", text, flags=re.I)
     text = freigabe.JA.sub("…", text)
     text = freigabe.NEIN.sub("…", text)
     return text.strip()
@@ -734,7 +742,7 @@ def obs_kamera_einrichten() -> str:
 def obs_kamera(an: bool) -> str:
     cam = _kamera_name()
     if not cam:
-        return "In OBS gibt es noch keine Webcam – sag „Klaus, richte die Webcam ein“."
+        return f"In OBS gibt es noch keine Webcam – sag „{_assistent()}, richte die Webcam ein“."
     for szene in KAMERA_SZENEN:
         for i in obs_anfrage("GetSceneItemList", {"sceneName": szene}).get("sceneItems", []):
             if i["sourceName"] == cam:
@@ -801,7 +809,7 @@ def obs_pause(minuten: float | None = None, text: str = "") -> str:
     _pause["an"] = True
     _overlay("pause", {"an": True, "bis": int((time.time() + minuten * 60) * 1000) if minuten else None, "text": text[:40]})
     return (f"Pause-Bildschirm ist drin{f', Countdown {minuten:g} Minuten' if minuten else ''}. "
-            "Dein Mikro ist im Stream stumm. Sag „Klaus, ich bin wieder da“, wenn's weitergeht.")
+            f"Dein Mikro ist im Stream stumm. Sag „{_assistent()}, ich bin wieder da“, wenn's weitergeht.")
 
 
 def obs_zurueck() -> str:
@@ -811,7 +819,7 @@ def obs_zurueck() -> str:
         obs_anfrage("SetInputMute", {"inputName": mikro, "inputMuted": False})
     _pause["an"] = False
     _overlay("pause", {"an": False})
-    _overlay("hinweis", {"kopf": "Klaus", "text": "Er ist zurück!"})
+    _overlay("hinweis", {"kopf": _assistent(), "text": "Er ist zurück!"})
     return f"Willkommen zurück! Szene „{_pause['vorher']}“, dein Mikro ist wieder an."
 
 

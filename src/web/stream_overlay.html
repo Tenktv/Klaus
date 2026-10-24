@@ -112,13 +112,15 @@ const $ = (id) => document.getElementById(id);
 const nur = new URLSearchParams(location.search).get("nur");
 if (nur) document.body.classList.add("nur-" + nur);
 const orb = new KlausOrb($("orb"));
-const KOPF = { hoeren: "Klaus · hört zu", denken: "Klaus · denkt nach", sprechen: "Klaus", aktion: "Klaus · los geht's", fehler: "Klaus · Problem" };
+let NAME = "Klaus";   // kommt per Ereignis "name" (Tester nennen ihren Assistenten z. B. Luna)
+const kopfText = (z) => ({ hoeren: `${NAME} · hört zu`, denken: `${NAME} · denkt nach`, aktion: `${NAME} · los geht's`,
+                           fehler: `${NAME} · Problem` })[z] || NAME;
 const MAX_ZEILEN = 7, ZEILE_MS = 90_000, HINWEIS_MS = 5200;
 let sprachTimer = null;
 
 function zustand(z) {
   orb.setZustand(z);
-  $("sprech-kopf").textContent = KOPF[z] || "Klaus";
+  $("sprech-kopf").textContent = kopfText(z);
   clearTimeout(sprachTimer);
   if (z === "aus") sprachTimer = setTimeout(() => $("sprache").classList.remove("an"), 1500);
   else if ($("untertitel").textContent) $("sprache").classList.add("an");
@@ -179,7 +181,8 @@ function verbinden() {
   an("chat", chatZeile);
   an("willkommen", (d) => hinweis("Neu im Chat", "Willkommen, " + d.name + "!"));
   an("clip", (d) => hinweis("Clip", d.text || "Clip gespeichert!", "clip"));
-  an("hinweis", (d) => hinweis(d.kopf || "Klaus", d.text || "", d.art || ""));
+  an("hinweis", (d) => hinweis(d.kopf || NAME, d.text || "", d.art || ""));
+  an("name", (d) => { NAME = d.name || "Klaus"; $("namensschild").textContent = NAME.toUpperCase(); $("sprech-kopf").textContent = NAME; });
   an("banner", banner);
   an("pause", (p) => document.body.classList.toggle("pause", !!(p && p.an)));
   q.onerror = () => { q.close(); setTimeout(verbinden, 3000); };   // Klaus neu gestartet -> wieder verbinden

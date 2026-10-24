@@ -356,6 +356,14 @@ Ruhemodus, gemeinsame Starter-Sperre, Protokoll-Waechter und Premium-Textmodell-
   Klaus spricht. „Klaus, BRB 5 Minuten“ / „bin gleich zurück“ / „Stream-Pause“ → Szene Pause + Mikro im Stream stumm
   (`stream.obs_pause`); „Klaus, ich bin wieder da“ (nur während der Pause) → vorige Szene + Mikro wie vorher. Das Overlay
   blendet in der Pause seinen kleinen Orb und den Kamera-Rahmen aus. Live getestet 21.10.
+- **Danke** (`stream.danke`): Follows (Helix-Abfrage alle 20 s, Recht `moderator:read:followers`; Bestand beim Start wird
+  nicht bedankt), Abos/Resubs/verschenkte Abos/Raids (IRC USERNOTICE, `twitch.tv/commands`), Bits (PRIVMSG-Tag). Laut +
+  goldene Danke-Karte im Overlay. Twitch-App ist „vertraulich“ → Erneuern braucht `TWITCH_CLIENT_SECRET` in der `.env`.
+- **Eigener Name (Tester, 24.10.)**: Chat-Befehl heißt wie der Assistent (`KLAUS_NAME=Luna` → `!luna Frage`),
+  KI-Persona/Kanal, Overlay-/Pause-Beschriftungen, Ansagen; der Name wird beim Vorlesen wie „Klaus“ entfernt (Weckwort).
+- **Farbrad (24.10.)**: Design-Menü → „Eigene Farbe“ (Farbton/Sättigung im Rad, Helligkeit per Regler, Live-Vorschau,
+  „Übernehmen“). `fenster.setze_thema("#rrggbb")` speichert `thema` + `eigene_farbe`, färbt Panel, Mini-Orb, Overlay und
+  Pause-Seite. Gemini-Werkzeug `design` hat `farbe` („mach dich himmelblau“).
 - Einrichtung 21.10.: OBS 32.2.2 (winget), Twitch-Konto „lateniko“ in OBS verbunden, Profil „Unbenannt“, Szenen
   Spiel/Desktop/Pause, Twitch-App „Klaus“ (Client-ID in `.env`, Token `data/twitch_token.json`).
 - **Upload/Ping (22.10.):** Nikolas Upload ≈ 5,5 Mbit/s. Der Twitch-Assistent hatte „Enhanced Broadcasting“

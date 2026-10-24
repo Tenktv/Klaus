@@ -92,7 +92,10 @@ class _Anfrage(BaseHTTPRequestHandler):
         with _sperre:   # zuerst anmelden: Ereignisse waehrend der (langsamen) OBS-Abfrage unten gehen sonst verloren
             _hoerer.append(q)
         import stream
-        start = [("thema", _thema()), ("zustand", _zustand["zustand"]), ("banner", _zustand["banner"])]
+        import identitaet
+        import stream_chatbot
+        start = [("name", {"name": identitaet.NAME, "befehl": stream_chatbot.befehl_name()}),   # Tester: eigener Name
+                 ("thema", _thema()), ("zustand", _zustand["zustand"]), ("banner", _zustand["banner"])]
         if stream.KANAL:
             start.append(("kanal", stream.KANAL))
         _zustand["kamera"] = stream.kamera_zustand()   # immer frisch aus OBS (Nikola schaltet sie auch dort selbst)

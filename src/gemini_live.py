@@ -65,9 +65,12 @@ WERKZEUGE = [
          "typ": {"type": "STRING", "enum": WIDGET_TYPEN},
          "richtung": {"type": "STRING", "enum": ["links", "rechts", "oben", "unten", "mitte"]}},
          "required": ["aktion"]}},
-    {"name": "design", "description": "Wechselt die Farbpalette des Desktops.",
+    {"name": "design", "description": "Wechselt die Farbe von Klaus (Panel, Mini-Kreis, Stream-Overlay). Entweder ein fertiges Design "
+     "(name) oder eine beliebige eigene Farbe als farbe='#rrggbb' (z. B. 'mach dich himmelblau' -> #5ab4ff, 'dunkelrot' -> #b3262e). "
+     "Lieber kraeftige, nicht zu dunkle Farben - sie leuchten auf dunklem Grund.",
      "parameters": {"type": "OBJECT", "properties": {"name": {"type": "STRING", "enum": [
-         "jarvis", "ironman", "matrix", "synthwave", "gold", "arktis", "weiter"]}}, "required": ["name"]}},
+         "jarvis", "ironman", "matrix", "synthwave", "gold", "arktis", "weiter"]},
+         "farbe": {"type": "STRING", "description": "eigene Farbe #rrggbb (statt name)"}}}},
     {"name": "merken", "description": "Merkt sich dauerhaft einen Fakt ueber den Nutzer. Nur wenn er das ausdruecklich will.",
      "parameters": {"type": "OBJECT", "properties": {"fakt": {"type": "STRING", "description":
          "Kurzer Satz in der dritten Person, z. B. 'Nikola trinkt keinen Kaffee.'"}}, "required": ["fakt"]}},
@@ -504,8 +507,11 @@ class GeminiGespraech:
                 b.panel.emit(json.dumps({k: v for k, v in args.items() if v}))
                 return "Erledigt."
             if name == "design":
-                b.thema.emit(args.get("name", "weiter"))
-                return "Design gewechselt."
+                farbe = str(args.get("farbe", "")).strip()
+                if farbe and not re.fullmatch(r"#?[0-9a-fA-F]{6}", farbe):
+                    return "Die Farbe muss als #rrggbb kommen."
+                b.thema.emit(("#" + farbe.lstrip("#")) if farbe else args.get("name", "weiter"))
+                return "Farbe gewechselt."
             if name == "merken":
                 gehirn.merke(args.get("fakt", ""))
                 b.gedaechtnis.emit()

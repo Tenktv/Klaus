@@ -59,11 +59,11 @@
   <h1 id="titel">Bin gleich<br>zurück</h1>
   <div id="zeit"></div>
   <div class="holo info">
-    <div class="kopf">Klaus hält die Stellung</div>
-    <p>Schreibt in den Chat – Klaus liest mit.<br>Fragen an ihn: <code>!klaus deine Frage</code> · <code>!fakt</code> · <code>!hype</code></p>
+    <div class="kopf" id="stellung">Klaus hält die Stellung</div>
+    <p>Schreibt in den Chat – <span class="name">Klaus</span> liest mit.<br>Fragen: <code id="frage-befehl">!klaus deine Frage</code> · <code>!fakt</code> · <code>!hype</code></p>
   </div>
 </div>
-<div class="holo" id="sprache"><div class="kopf">Klaus</div><div id="untertitel"></div></div>
+<div class="holo" id="sprache"><div class="kopf name">Klaus</div><div id="untertitel"></div></div>
 <div class="boden"></div>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -84,6 +84,11 @@ function verbinden() {
   const q = new EventSource("/ereignisse");
   const an = (art, fn) => q.addEventListener(art, (e) => { try { fn(JSON.parse(e.data)); } catch (f) { console.error(art, f); } });
   an("thema", (n) => wendeThemaAn(n));
+  an("name", (d) => {   // Tester: eigener Name statt Klaus
+    document.querySelectorAll(".name").forEach((e) => { e.textContent = d.name; });
+    $("stellung").textContent = d.name + " hält die Stellung";
+    $("frage-befehl").textContent = "!" + d.befehl + " deine Frage";
+  });
   an("pause", (p) => { if (p) { bis = p.bis || null; if (p.text) $("titel").textContent = p.text; zeit(); } });
   an("kanal", (k) => { $("kopf").textContent = k + " · Stream-Pause"; });
   an("zustand", (z) => {

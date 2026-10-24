@@ -146,6 +146,11 @@ class WebBruecke(QObject):
     def ladeThema(self) -> str:
         return daten.lade_einstellungen().get("thema", "jarvis")
 
+    @Slot(result=str)
+    def ladeEigeneFarbe(self) -> str:
+        """Zuletzt im Farbrad gewaehlte Farbe ("#rrggbb") oder ""."""
+        return daten.lade_einstellungen().get("eigene_farbe", "")
+
     @Slot(str)
     def setzeThema(self, name: str) -> None:
         setze_thema(name)
@@ -422,17 +427,42 @@ THEMEN = {
 }
 
 
+# Gedaempfte Hauptfarben, wie sie das Panel wirklich zeigt (klaus.js wendeThemaAn "accent") - fuer den Mini-Orb
+AKZENT = {"jarvis": (189, 199, 190), "ironman": (217, 166, 148), "matrix": (171, 194, 164), "synthwave": (193, 179, 199),
+          "gold": (213, 186, 133), "arktis": (188, 200, 208)}
+EIGENE_FARBE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def thema_farbe(name: str) -> tuple:
+    """Hauptfarbe (r, g, b) eines Themas oder einer eigenen Farbe "#rrggbb"."""
+    if EIGENE_FARBE.match(name or ""):
+        return tuple(int(name[i:i + 2], 16) for i in (1, 3, 5))
+    return AKZENT.get(name, AKZENT["gold"])
+
+
 def setze_thema(name: str) -> str:
-    """Design wechseln, speichern und an alle offenen Klaus-Seiten melden. "weiter" = naechstes."""
+    """Design wechseln, speichern und an alle offenen Klaus-Seiten melden. "weiter" = naechstes.
+    name: Thema aus THEMEN oder eigene Farbe "#rrggbb" (Farbrad). Gilt auch fuer Mini-Orb und Stream-Overlay."""
     if name == "weiter":
         namen = list(THEMEN)
         jetzt = daten.lade_einstellungen().get("thema", "jarvis")
         name = namen[(namen.index(jetzt) + 1) % len(namen)] if jetzt in namen else namen[0]
-    if name not in THEMEN:
+    if EIGENE_FARBE.match(name or ""):
+        name = name.lower()
+        daten.speichere_einstellung("eigene_farbe", name)   # damit das Farbrad sie beim naechsten Oeffnen wieder zeigt
+    elif name not in THEMEN:
         return ""
     daten.speichere_einstellung("thema", name)
     for b in WebBruecke.alle:
         b.thema.emit(name)
+    MiniOrb.HAUPT = thema_farbe(name)
+    for orb in MiniOrb.alle:
+        orb.update()
+    try:
+        import stream_overlay
+        stream_overlay.senden("thema", name)
+    except Exception:
+        pass
     return name
 
 
@@ -785,8 +815,9 @@ class MiniOrb(QWidget):
 
     GROESSE, ORB = 104, 96   # Fenster / Reaktor (gezeichnet in 600er-Einheiten wie web/klaus.js)
     # Farben wie im Panel (klaus.js, Thema gold): Hauptfarbe, Ausfuehren gruen, Fehler rot, gedimmt bei stumm/Mikro aus
-    HAUPT = (213, 186, 133)
-    FARBEN = {"sprechen": (187, 164, 117), "aktion": (157, 197, 170), "fertig": (157, 197, 170), "fehler": (237, 156, 145),
+    HAUPT = (213, 186, 133)   # wird von setze_thema() auf das gewaehlte Design / die eigene Farbe gesetzt
+    alle: list["MiniOrb"] = []
+    FARBEN = {"aktion": (157, 197, 170), "fertig": (157, 197, 170), "fehler": (237, 156, 145),
               "freigabe": (226, 184, 119)}
     GEDIMMT = (120, 120, 128)
     TEMPO = {"aus": 1, "start": 1.4, "hoeren": 1.6, "denken": 7, "sprechen": 2, "aktion": 3.2, "freigabe": 0.6, "fehler": 0.4}
@@ -808,6 +839,8 @@ class MiniOrb(QWidget):
         self._druck = self._start = None
         self._gezogen = False
         self.blase = MiniBlase()
+        MiniOrb.HAUPT = thema_farbe(daten.lade_einstellungen().get("thema", "gold"))
+        MiniOrb.alle.append(self)
         self.dreh = QTimer(self, interval=50)   # 20 Bilder/s (~2,8 ms je Bild), nur solange Klaus hoert/denkt/spricht; in Ruhe steht das Bild
         self.dreh.timeout.connect(self._drehen)
         self.oben = QTimer(self, interval=3000)  # randlose Spiele schieben sich gern davor -> wieder nach vorne
@@ -888,6 +921,8 @@ class MiniOrb(QWidget):
     def _farbe(self) -> tuple:
         if self.stumm or self.mikro_aus:
             return self.GEDIMMT
+        if self.zustand == "sprechen":   # wie im Panel: Hauptfarbe etwas dunkler
+            return tuple(int(w * 0.88) for w in self.HAUPT)
         return self.FARBEN.get(self.zustand, self.HAUPT)
 
     @staticmethod

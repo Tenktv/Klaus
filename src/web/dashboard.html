@@ -838,6 +838,18 @@
     transition: background .15s, border-color .15s; }
   .design-wahl i { width: 10px; height: 10px; transform: rotate(45deg); background: var(--farbe); box-shadow: 0 0 10px var(--farbe); }
   .design-wahl:hover, .design-wahl.aktiv { border-color: var(--farbe); background: rgba(255, 255, 255, .04); }
+  .design-liste { display: flex; flex-direction: column; gap: 6px; }
+  /* Farbrad: eigene Farbe (Farbton = Winkel, Saettigung = Abstand zur Mitte, Helligkeit = Regler) */
+  .farbrad { display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 2px 6px 2px 16px; margin-left: 4px;
+    border-left: 1px solid rgba(255, 255, 255, .08); }
+  .farbrad-kopf { align-self: stretch; font-family: var(--display); font-weight: 600; font-size: 11px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--text-dim); }
+  .farbrad canvas { width: 168px; height: 168px; border-radius: 50%; cursor: crosshair; touch-action: none; }
+  .farbrad input[type=range] { width: 168px; accent-color: var(--farbe); }
+  .farbrad-zeile { align-self: stretch; display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 12px;
+    color: var(--text-dim); }
+  .farbrad-zeile i { width: 14px; height: 14px; transform: rotate(45deg); background: var(--farbe); box-shadow: 0 0 12px var(--farbe); }
+  .farbrad .design-wahl { align-self: stretch; justify-content: center; }
 
   /* Web-Widget: Platzhalter, ueber den Python die Browser-Ansicht legt */
   .w-inhalt.web-inhalt { padding: 0; overflow: hidden; }
@@ -1840,20 +1852,92 @@ function katalogZu() {
 }
 
 // Design-Auswahl in der Kopfleiste
+let designVorher = null;   // Farbrad-Vorschau: so war es vor dem Oeffnen (Schliessen ohne "Uebernehmen" -> zurueck)
+
 function designMenue() {
   const box = document.getElementById("designs");
   const offen = box.classList.toggle("offen");
   webVerdecken(offen);
-  if (offen) {
-    box.innerHTML = "";
-    for (const [name, t] of Object.entries(THEMEN)) {
-      const k = el("button", "design-wahl" + (name === aktuellesThema ? " aktiv" : ""));
-      k.style.setProperty("--farbe", `rgb(${t.haupt.join(",")})`);
-      k.append(el("i"), el("span", "", t.titel));
-      k.onclick = () => { klaus.setzeThema(name); box.classList.remove("offen"); webVerdecken(false); };
-      box.append(k);
-    }
+  if (!offen) {
+    if (designVorher && designVorher !== aktuellesThema) wendeThemaAn(designVorher);
+    designVorher = null;
+    return;
   }
+  designVorher = aktuellesThema;
+  const schliessen = () => { designVorher = null; box.classList.remove("offen"); webVerdecken(false); };
+  box.innerHTML = "";
+  const liste = el("div", "design-liste");
+  for (const [name, t] of Object.entries(THEMEN)) {
+    const k = el("button", "design-wahl" + (name === aktuellesThema ? " aktiv" : ""));
+    k.style.setProperty("--farbe", `rgb(${t.haupt.join(",")})`);
+    k.append(el("i"), el("span", "", t.titel));
+    k.onclick = () => { klaus.setzeThema(name); schliessen(); };
+    liste.append(k);
+  }
+  box.append(liste, farbrad(schliessen));
+}
+
+// Farbrad fuer eine eigene Farbe. Vorschau sofort im Panel, gespeichert erst mit "Uebernehmen" (Python: setze_thema).
+function farbrad(schliessen) {
+  const wrap = el("div", "farbrad"), c = el("canvas"), regler = el("input"), probe = el("i"), wert = el("span");
+  const zeile = el("div", "farbrad-zeile"), ok = el("button", "design-wahl", "Übernehmen");
+  regler.type = "range"; regler.min = 30; regler.max = 100;
+  zeile.append(probe, wert);
+  wrap.append(el("div", "farbrad-kopf", "Eigene Farbe"), c, regler, zeile, ok);
+  const px = Math.round(168 * Math.min(2, devicePixelRatio || 1));
+  c.width = c.height = px;
+  const ctx = c.getContext("2d"), m = px / 2, r = px / 2 - 2;
+  let h = 0, s = 0.4, v = 1;
+
+  const zuHex = () => {
+    const f = (n) => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+    return "#" + [f(5), f(3), f(1)].map((x) => Math.round(x * 255).toString(16).padStart(2, "0")).join("");
+  };
+  const vonHex = (hex) => {
+    const [rr, gg, bb] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+    const max = Math.max(rr, gg, bb), d = max - Math.min(rr, gg, bb);
+    v = max; s = max ? d / max : 0;
+    h = !d ? 0 : max === rr ? 60 * (((gg - bb) / d) % 6) : max === gg ? 60 * ((bb - rr) / d + 2) : 60 * ((rr - gg) / d + 4);
+    if (h < 0) h += 360;
+  };
+  const zeichnen = () => {
+    ctx.clearRect(0, 0, px, px);
+    const ton = ctx.createConicGradient(0, m, m);
+    for (let i = 0; i <= 12; i++) ton.addColorStop(i / 12, `hsl(${i * 30}, 100%, 50%)`);
+    ctx.fillStyle = ton; ctx.beginPath(); ctx.arc(m, m, r, 0, Math.PI * 2); ctx.fill();
+    const weiss = ctx.createRadialGradient(m, m, 0, m, m, r);
+    weiss.addColorStop(0, "rgba(255,255,255,1)"); weiss.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = weiss; ctx.fill();
+    ctx.fillStyle = `rgba(0,0,0,${1 - v})`; ctx.fill();
+    const a = (h * Math.PI) / 180, x = m + Math.cos(a) * s * r, y = m + Math.sin(a) * s * r;
+    ctx.lineWidth = px / 80; ctx.strokeStyle = "#000"; ctx.beginPath(); ctx.arc(x, y, px / 22, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = px / 140; ctx.stroke();
+    const hex = zuHex();
+    wrap.style.setProperty("--farbe", hex);
+    wert.textContent = hex.toUpperCase();
+    regler.value = Math.round(v * 100);
+    return hex;
+  };
+  const vorschau = () => wendeThemaAn(zeichnen());   // nur hier im Panel, noch nicht gespeichert
+
+  const waehlen = (e) => {
+    const b = c.getBoundingClientRect(), skala = px / b.width;
+    const dx = (e.clientX - b.left) * skala - m, dy = (e.clientY - b.top) * skala - m;
+    h = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360;
+    s = Math.min(1, Math.hypot(dx, dy) / r);
+    vorschau();
+  };
+  c.onpointerdown = (e) => { c.setPointerCapture(e.pointerId); waehlen(e); };
+  c.onpointermove = (e) => { if (c.hasPointerCapture(e.pointerId)) waehlen(e); };
+  regler.oninput = () => { v = regler.value / 100; vorschau(); };
+  ok.onclick = () => { klaus.setzeThema(zuHex()); schliessen(); };
+
+  if (/^#[0-9a-f]{6}$/i.test(aktuellesThema)) { vonHex(aktuellesThema); zeichnen(); }
+  else {
+    zeichnen();
+    klaus.ladeEigeneFarbe?.((hex) => { if (/^#[0-9a-f]{6}$/i.test(hex || "")) { vonHex(hex); zeichnen(); } });
+  }
+  return wrap;
 }
 
 

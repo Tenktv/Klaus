@@ -26,10 +26,12 @@ const ORB_FARBEN = {
 let aktuellesThema = "jarvis";
 
 // Setzt die CSS-Variablen (--rgb, --rgb2, --bg, --glow, --text) und die Orb-Farben
+// name: ein Thema aus THEMEN oder eine eigene Farbe "#rrggbb" (Farbrad im Design-Menue, Wunsch Nikola 24.10.2026)
 function wendeThemaAn(name) {
   const accent = { jarvis: [189, 199, 190], ironman: [217, 166, 148], matrix: [171, 194, 164], synthwave: [193, 179, 199], gold: [213, 186, 133], arktis: [188, 200, 208] };
-  const t = { ...(THEMEN[name] || THEMEN.jarvis), haupt: accent[name] || accent.gold, zweit: [226, 184, 119], bg: "#191918", glow: "#35302a", text: "#f1ede4" };
-  aktuellesThema = THEMEN[name] ? name : "jarvis";
+  const eigen = /^#[0-9a-f]{6}$/i.test(name || "") ? [1, 3, 5].map((i) => parseInt(name.slice(i, i + 2), 16)) : null;
+  const t = { ...(THEMEN[name] || THEMEN.jarvis), haupt: eigen || accent[name] || accent.gold, zweit: [226, 184, 119], bg: "#191918", glow: "#35302a", text: "#f1ede4" };
+  aktuellesThema = eigen ? name.toLowerCase() : THEMEN[name] ? name : "jarvis";
   const s = document.documentElement.style;
   const hex = (rgb) => "#" + rgb.map((w) => w.toString(16).padStart(2, "0")).join("");
   s.setProperty("--rgb", t.haupt.join(", "));
