@@ -28,3 +28,5 @@ src/genshin_agent/logs/
 src/genshin_agent/stop.request
 data/twitch_token.json
 data/stream.json
+*.rar
+data/obs/

@@ -96,7 +96,7 @@ def key(vk, up=False):
     _send(event)
 
 
-def mouse(flags, dx=0, dy=0):
+def mouse(flags, dx=0, dy=0, data=0):
     event = Input(type=0)
-    event.payload.mouse = Mouse(dx, dy, 0, flags, 0, 0)
+    event.payload.mouse = Mouse(dx, dy, data, flags, 0, 0)
     _send(event)

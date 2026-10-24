@@ -62,7 +62,8 @@ class VerteilerTests(unittest.TestCase):
         env = pv.profil_ordner('tim') / '.env'
         self.assertIn('TELEGRAM_NUTZER=42', env.read_text())
         self.assertIn('KLAUS_PC_PORT=9', env.read_text())
-        self.assertEqual(stat.S_IMODE(env.stat().st_mode), 0o600)
+        if os.name != 'nt':   # Unix-Dateirechte gibt es unter Windows so nicht (der Verteiler laeuft auf dem Linux-Server)
+            self.assertEqual(stat.S_IMODE(env.stat().st_mode), 0o600)
         self.assertIn('tim', self.gestartet)
         self.assertIn('PIN', self.letzte())
 
