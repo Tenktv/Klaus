@@ -1,0 +1,67 @@
+# Baut Klaus-Setup.exe (Inno Setup) auf Windows.
+# - Jeder Lauf: Setup.exe als Artefakt zum Herunterladen (Actions -> Lauf -> Artifacts)
+# - Tag v1.2.3: zusaetzlich Release im oeffentlichen Repo Tenktv/Klaus-Download (dort holen Installationen ihre Updates).
+#   Braucht das Secret KLAUS_DOWNLOAD_TOKEN (Fine-grained Token, nur Tenktv/Klaus-Download, Contents: Read and write).
+name: Installer
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths: ["installer/**", ".github/workflows/installer.yml", "requirements.txt"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  setup-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version bestimmen
+        shell: pwsh
+        run: |
+          $v = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME.TrimStart('v') } else { (Get-Content VERSION -Raw).Trim() }
+          "VERSION=$v" >> $env:GITHUB_ENV
+          Write-Host "Version $v"
+
+      - name: Dateien fuer den Installer sammeln (ohne Server, Tests, persoenliche Daten)
+        shell: pwsh
+        run: |
+          git archive --format=zip -o klaus.zip HEAD
+          Expand-Archive klaus.zip build\klaus
+          Remove-Item -Recurse -Force build\klaus\server, build\klaus\tests, build\klaus\.github -ErrorAction SilentlyContinue
+          Get-ChildItem build\klaus\data -Force | Where-Object Name -ne '.gitkeep' | Remove-Item -Recurse -Force
+          Get-ChildItem build\klaus -Filter *.md | Where-Object Name -ne 'README.md' | Remove-Item -Force
+          Set-Content -Path build\klaus\VERSION -Value $env:VERSION -NoNewline
+          if (Test-Path build\klaus\.env) { throw ".env darf nie in den Installer" }
+
+      - name: Python-Dateien pruefen
+        shell: pwsh
+        run: python -m compileall -q build\klaus\src
+
+      - name: Setup.exe bauen
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc /Q "/DAppVersion=$env:VERSION" "/DQuelle=..\build\klaus" installer\klaus.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC fehlgeschlagen" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Klaus-Setup-${{ env.VERSION }}
+          path: installer/Output/Klaus-Setup.exe
+
+      - name: Release im Download-Repo
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.KLAUS_DOWNLOAD_TOKEN }}
+        run: |
+          if (-not $env:GH_TOKEN) { Write-Host "::warning::Secret KLAUS_DOWNLOAD_TOKEN fehlt - kein Release veroeffentlicht."; exit 0 }
+          $hash = (Get-FileHash installer\Output\Klaus-Setup.exe -Algorithm SHA256).Hash.ToLower()
+          gh release create "v$env:VERSION" installer/Output/Klaus-Setup.exe --repo Tenktv/Klaus-Download `
+            --title "Klaus $env:VERSION" --notes "Klaus-Setup.exe herunterladen und starten. SHA256: $hash"

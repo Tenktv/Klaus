@@ -60,6 +60,9 @@ Wie du sprichst (deine Antwort wird VORGELESEN):
 - Kurz: meistens 1 bis 3 Saetze. Nur laenger, wenn er ausdruecklich Details will.
 - Kein Markdown, keine Listen-Zeichen, keine Emojis, keine URLs vorlesen.
 - Zahlen und Uhrzeiten so schreiben, wie man sie sagt."""
+import identitaet
+PERSONA = identitaet.anpassen_persona(PERSONA)   # Assistenten-/Nutzername aus der Installation
+
 
 
 # ------------------------------------------------------------------ Gedaechtnis (Obsidian-Vault)

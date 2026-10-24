@@ -110,3 +110,15 @@ gedacht. Eine KI am Telefon muss sich als KI zu erkennen geben (EU AI Act).
 - Weltkarten-Raster (`src/web/vendor/weltkarte.js`): erzeugt aus [world.geo.json](https://github.com/johan/world.geo.json)
 - Vor einem Verkauf zu ersetzen: edge-tts (inoffizieller Endpunkt), Piper-Stimmen (teils GPL), Marvel-Bezüge
   (Details in [HANDOFF.md](HANDOFF.md))
+
+
+## Installer, Name, Stimmen
+- **Klaus-Setup.exe**: gebaut von `.github/workflows/installer.yml` (Inno Setup, `installer/klaus.iss` + `installer/einrichten.ps1`).
+  Fragt den Namen des Assistenten (Weckwort), deinen Namen und optional Gemini-/Fish-Schluessel ab, installiert ohne
+  Admin-Rechte nach `%LOCALAPPDATA%\Programs\Klaus`, richtet Python und Pakete ein.
+  Release: Tag `vX.Y.Z` pushen -> Setup.exe erscheint im oeffentlichen Repo `Tenktv/Klaus-Download`
+  (Secret `KLAUS_DOWNLOAD_TOKEN` noetig). Installierte Versionen holen sich Updates von dort (`pc_update.py`, SHA256-geprueft).
+- **Stimmen** (`stimmwahl.py`): Gemini-Stimmen, Microsoft-Stimmen, Anime-Stil (Anime-Maedchen, Anime-Junge, Anime-Held,
+  Anime-Boesewicht, Sensei, Chibi), lokale Piper-Stimmen (`data/stimmen/*.onnx`) und eigene: Variante mit Tonhoehe/Tempo,
+  fertige Stimme von fish.audio per Link, Stimme beschreiben (Fish Voice Design), Sprachprobe in `data/stimmen/eigene/<Name>.mp3`.
+  Umschalten per Sprache oder `/stimme <Name>`, Liste mit `/stimmen`.

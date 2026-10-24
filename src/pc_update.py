@@ -6,11 +6,17 @@ Alle 30 Minuten (erstes Mal 3 Minuten nach dem Start): neue Commits auf origin/m
     holen (nur fast-forward) -> requirements.txt geaendert? pip install -> Test (alles kompilieren, assistent laden)
     -> Erfolg: Neustart der App, danach Meldung "Update ... laeuft"   |   Fehler: zurueck auf die alte Version + Meldung.
 Lokale Aenderungen am Code verhindern das Update (es wird nichts ueberschrieben). Aus: KLAUS_AUTO_UPDATE=0 in der .env.
+
+Installiert ueber Klaus-Setup.exe (kein .git-Ordner): stattdessen neueste Version aus dem oeffentlichen Repo
+KLAUS_UPDATE_REPO (Standard Tenktv/Klaus-Download) - Setup.exe laden, SHA256 pruefen, still installieren (/UPDATE=1);
+der Installer beendet Klaus, behaelt .env/data und startet ihn danach neu.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -31,6 +37,86 @@ TEST = ("import glob, py_compile, sys; sys.path.insert(0, 'src'); "
         "[py_compile.compile(f, doraise=True) for f in glob.glob('src/*.py')]; ")
 TEST = TEST + FLAKES + "import assistent; print('TEST_OK')"
 _OHNE_FENSTER = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+UPDATE_REPO = os.getenv("KLAUS_UPDATE_REPO", "Tenktv/Klaus-Download").strip()
+
+
+# ------------------------------------------------------------------ Installierte Version (Klaus-Setup.exe, ohne git)
+def installiert() -> bool:
+    return not (BASE_DIR / ".git").exists()
+
+
+def version() -> str:
+    try:
+        return (BASE_DIR / "VERSION").read_text(encoding="utf-8").strip() or "0.0.0"
+    except OSError:
+        return "0.0.0"
+
+
+def _zahlen(text: str) -> tuple[int, ...]:
+    return tuple(int(x) for x in re.findall(r"\d+", text)[:3]) or (0,)
+
+
+def neues_release() -> dict | None:
+    """Neuere Klaus-Setup.exe im Download-Repo? -> {tag, url, sha256} oder None."""
+    import requests
+
+    r = requests.get(f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest", timeout=15,
+                     headers={"Accept": "application/vnd.github+json"})
+    if r.status_code != 200:
+        return None
+    d = r.json()
+    tag = str(d.get("tag_name") or "")
+    if _zahlen(tag) <= _zahlen(version()):
+        return None
+    datei = next((a for a in d.get("assets") or [] if str(a.get("name", "")).lower() == "klaus-setup.exe"), None)
+    pruef = re.search(r"SHA256:\s*([0-9a-f]{64})", str(d.get("body") or ""), re.I)
+    if not datei or not pruef:   # ohne Pruefsumme installiere ich nichts
+        return None
+    return {"tag": tag, "url": datei["browser_download_url"], "sha256": pruef.group(1).lower()}
+
+
+def release_einspielen(rel: dict) -> tuple[bool, str]:
+    import tempfile
+
+    import requests
+
+    ziel = Path(tempfile.gettempdir()) / f"Klaus-Setup-{re.sub(r'[^0-9A-Za-z.]', '', rel['tag'])}.exe"
+    summe = hashlib.sha256()
+    with requests.get(rel["url"], stream=True, timeout=(15, 300)) as r:
+        r.raise_for_status()
+        with open(ziel, "wb") as f:
+            for stueck in r.iter_content(1 << 20):
+                summe.update(stueck)
+                f.write(stueck)
+    if summe.hexdigest() != rel["sha256"]:
+        ziel.unlink(missing_ok=True)
+        return False, f"Update {rel['tag']} abgebrochen: die heruntergeladene Datei ist beschädigt (Prüfsumme falsch)."
+    MARKER.parent.mkdir(exist_ok=True)
+    MARKER.write_text(json.dumps({"alt": version(), "neu": rel["tag"], "art": "release"}), encoding="utf-8")
+    subprocess.Popen([str(ziel), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/UPDATE=1"], cwd=str(ziel.parent),
+                     creationflags=_OHNE_FENSTER | getattr(subprocess, "DETACHED_PROCESS", 0))
+    return True, f"Update {version()} → {rel['tag']} wird installiert, Klaus startet gleich neu."
+
+
+def release_schritt(assistent) -> bool:
+    rel = neues_release()
+    if not rel or not ruhig(assistent):
+        return False
+    if os.getenv("KLAUS_UPDATE_FREIGABE", "0").strip() == "1" and rel["tag"] != _gefragt["stand"]:
+        import freigabe
+
+        _gefragt["stand"] = rel["tag"]
+        token = freigabe.anfragen("pc_update", f"Klaus auf Version {rel['tag']} aktualisieren", an="Klaus am PC (Download)")
+        if not token:
+            return False
+        freigabe.pruefe(token, "pc_update")
+    elif os.getenv("KLAUS_UPDATE_FREIGABE", "0").strip() == "1":
+        return False
+    gestartet, text = release_einspielen(rel)
+    _melden(assistent, text)
+    if gestartet:
+        threading.Timer(3, lambda: os._exit(0)).start()   # der Installer beendet Klaus ohnehin und startet ihn neu
+    return gestartet
 
 
 def an() -> bool:
@@ -109,6 +195,8 @@ def nach_neustart() -> str | None:
         d = json.loads(MARKER.read_text(encoding="utf-8"))
     finally:
         MARKER.unlink(missing_ok=True)
+    if d.get("art") == "release":
+        return f"✅ Klaus ist aktualisiert: Version {d['alt']} → {d['neu'].lstrip('v')}."
     try:
         zeilen = _git("log", "--oneline", "--no-decorate", f"{d['alt']}..{d['neu']}").splitlines()
     except Exception:
@@ -168,6 +256,8 @@ def schritt(assistent) -> bool:
     """Ein Durchlauf. -> True, wenn neu gestartet wird (testbar ohne Schleife)."""
     if not an():
         return False
+    if installiert():
+        return release_schritt(assistent)
     neu = neue_commits()
     if not neu or not ruhig(assistent) or not freigegeben(neu):
         return False

@@ -27,7 +27,9 @@ import llm
 import voice
 
 # "Klaus, ..." am Anfang oder "..., Klaus" am Ende. Whisper schreibt den Namen manchmal anders.
-NAME = r"(?:klaus|claus|klaas|kraus|klause)"
+import identitaet
+
+NAME = identitaet.weckwort_muster()   # Standard: klaus|claus|klaas|kraus|klause (KLAUS_NAME in der .env)
 WECKWORT_VORNE = re.compile(rf"^\W*(?:(?:hey|hallo|hi|ok|okay|he|du)\W+)?{NAME}\b\W*(?P<rest>.*)$", re.I | re.S)
 WECKWORT_HINTEN = re.compile(rf"^(?P<rest>.*?)\W+{NAME}\W*$", re.I | re.S)
 

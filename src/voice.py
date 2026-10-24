@@ -80,6 +80,9 @@ Stelle pro Antwort hoechstens eine gezielte Rueckfrage, um den Plan zu schaerfen
 (z.B. Seiten, Stil, Farben, Inhalte, Kontaktmoeglichkeiten, Technik).
 Du baust nichts selbst. Wenn der Plan rund ist, schlage vor, ihn an Claude zu uebergeben
 (der Nutzer sagt dann "an Claude geben")."""
+import identitaet
+SYSTEM = identitaet.anpassen(SYSTEM)
+
 
 PROMPT_BAUEN = """Fasse das bisherige Gespraech zu einem vollstaendigen Arbeitsauftrag fuer Claude Code
 (einen KI-Programmierer) zusammen. Claude arbeitet in einem leeren Projektordner.
@@ -106,7 +109,9 @@ def sprich(text: str, stumm: bool, on_pegel=None, abbruch=None) -> None:
         return
     text = re.sub(r"[*#_`>]", "", text)
     # Gewaehlte Stimme, sonst lokale Piper-Ersatzstimme. Keine ununterbrechbare Windows-TTS.
-    for kennung in dict.fromkeys([KLAUS_STIMME, ERSATZ_STIMME]):
+    import stimmwahl
+    gewaehlt = stimmwahl.lokale_kennung()   # in Telegram/Panel gewaehlte Stimme (Gemini-Stimmen gibt es lokal nicht)
+    for kennung in dict.fromkeys([k for k in (gewaehlt, KLAUS_STIMME, ERSATZ_STIMME) if k]):
         try:
             stimme.sprich(kennung, text, on_pegel=on_pegel, abbruch=abbruch)
             return

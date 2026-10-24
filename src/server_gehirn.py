@@ -384,6 +384,10 @@ def bauen(innen: bool = True):
                "\n☁️ " + server_claude.status()
 
     tg.befehle["/claude"] = lambda _e: server_claude.status()
+    # Stimmen liegen am PC (dort wird gesprochen): /stimmen zeigt alle, /stimme <Name> schaltet um
+    tg.befehle["/stimmen"] = lambda _e: pc_werkzeug("stimme", {"aktion": "zeigen"})
+    tg.befehle["/stimme"] = lambda e: pc_werkzeug("stimme", {"aktion": "wechseln", "name": e.split(maxsplit=1)[1]}) \
+        if len(e.split()) > 1 else pc_werkzeug("stimme", {"aktion": "zeigen"})
     tg.befehle["/pc"] = lambda _e: pc_status_text()
     tg.befehle["/claude_token"] = lambda e: server_claude.token_setzen(e, TB._env_setzen)
     tg.geheime_befehle.add("/claude_token")
