@@ -44,6 +44,7 @@ except ImportError:
 
 KANAL = os.getenv("TWITCH_KANAL", "").strip().lstrip("#").lower()
 CLIENT_ID = os.getenv("TWITCH_CLIENT_ID", "").strip()
+CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET", "").strip()   # nur bei App-Typ "Vertraulich": Twitch will es zum Erneuern
 OBS_ADRESSE = os.getenv("OBS_ADRESSE", "ws://127.0.0.1:4455").strip()
 OBS_PASSWORT = os.getenv("OBS_PASSWORT", "").strip()
 
@@ -275,7 +276,9 @@ def _follower_wache() -> None:
                 if len(neu) > 3:
                     _melden(f"Und noch {len(neu) - 3} weitere neue Follower – danke euch!", f"+{len(neu) - 3} Follower", vorlesen_immer=True)
         except Exception as e:
-            _log(f"Follower-Abfrage: {str(e)[:100]}")
+            _log(f"Follower-Abfrage: {str(e)[:160]}")
+            if isinstance(e, RuntimeError) and "Twitch" in str(e):
+                time.sleep(600)   # Anmeldung/Geheimnis fehlt: nicht alle 20 s dieselbe Meldung ins Log
         time.sleep(20)
 
 
@@ -372,23 +375,42 @@ def _token_speichern(d: dict) -> None:
                                        "ablauf": time.time() + int(d.get("expires_in", 3600)) - 60}), encoding="utf-8")
 
 
+_token_sperre = threading.Lock()
+
+
+def _token_lesen() -> dict:
+    try:
+        return json.loads(TOKEN_DATEI.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise RuntimeError("Twitch ist noch nicht verbunden: einmal „python src/stream.py anmelden“ ausführen.")
+
+
 def _token() -> str:
+    """Gueltiges Zugangsticket; laeuft es ab (nach ein paar Stunden), wird es mit dem Erneuerungsticket erneuert.
+    Erneuerungstickets gelten nur einmal -> Sperre, und vor dem Aufgeben nochmal die Datei lesen (ein anderer
+    Klaus-Prozess kann gerade erneuert haben)."""
     import requests
 
     if not CLIENT_ID:
         raise RuntimeError("Für Clips fehlt TWITCH_CLIENT_ID in der .env.")
-    try:
-        t = json.loads(TOKEN_DATEI.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        raise RuntimeError("Twitch ist noch nicht verbunden: einmal „python src/stream.py anmelden“ ausführen.")
-    if time.time() < t.get("ablauf", 0):
-        return t["access_token"]
-    r = requests.post("https://id.twitch.tv/oauth2/token", timeout=10, data={
-        "grant_type": "refresh_token", "refresh_token": t.get("refresh_token", ""), "client_id": CLIENT_ID})
-    if r.status_code != 200:
+    with _token_sperre:
+        t = _token_lesen()
+        if time.time() < t.get("ablauf", 0):
+            return t["access_token"]
+        daten = {"grant_type": "refresh_token", "refresh_token": t.get("refresh_token", ""), "client_id": CLIENT_ID}
+        if CLIENT_SECRET:
+            daten["client_secret"] = CLIENT_SECRET
+        r = requests.post("https://id.twitch.tv/oauth2/token", timeout=10, data=daten)
+        if r.status_code == 200:
+            _token_speichern(r.json())
+            return r.json()["access_token"]
+        t = _token_lesen()
+        if time.time() < t.get("ablauf", 0):
+            return t["access_token"]
+        if "client secret" in r.text.lower():
+            raise RuntimeError("Twitch will zum Erneuern das App-Geheimnis: TWITCH_CLIENT_SECRET in die .env "
+                               "(dev.twitch.tv → Konsole → Anwendungen → Verwalten → „Neues Geheimnis“).")
         raise RuntimeError("Twitch-Anmeldung abgelaufen: „python src/stream.py anmelden“ nochmal ausführen.")
-    _token_speichern(r.json())
-    return r.json()["access_token"]
 
 
 def _helix(methode: str, pfad: str, **params):

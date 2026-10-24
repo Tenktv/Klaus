@@ -67,5 +67,44 @@ class DankeTests(unittest.TestCase):
         self.assertEqual(self.gesagt(), ['Danke für den Follow, Neu!'])
 
 
+class TokenTests(unittest.TestCase):
+    def setUp(self):
+        import json
+        import tempfile
+        import time
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.datei = Path(self.tmp.name) / 't.json'
+        self.datei.write_text(json.dumps({'access_token': 'alt', 'refresh_token': 'r1', 'ablauf': time.time() - 10}))
+        patch.object(stream, 'TOKEN_DATEI', self.datei).start()
+        patch.object(stream, 'CLIENT_ID', 'cid').start()
+        self.addCleanup(patch.stopall)
+
+    def test_erneuern_mit_geheimnis(self):
+        gesendet = {}
+        def post(url, timeout, data):
+            gesendet.update(data)
+            return MagicMock(status_code=200, json=lambda: {'access_token': 'neu', 'refresh_token': 'r2', 'expires_in': 14000})
+        with patch.object(stream, 'CLIENT_SECRET', 'geheim'), patch('requests.post', post):
+            self.assertEqual(stream._token(), 'neu')
+        self.assertEqual(gesendet['client_secret'], 'geheim')
+        self.assertIn('r2', self.datei.read_text())
+
+    def test_ohne_geheimnis_klare_meldung(self):
+        with patch.object(stream, 'CLIENT_SECRET', ''), \
+                patch('requests.post', lambda *a, **k: MagicMock(status_code=400, text='{"message":"missing client secret"}')):
+            with self.assertRaisesRegex(RuntimeError, 'TWITCH_CLIENT_SECRET'):
+                stream._token()
+
+    def test_anderer_prozess_hat_schon_erneuert(self):
+        import json
+        import time
+        def post(*a, **k):   # Erneuerungsticket schon verbraucht - inzwischen steht ein frisches in der Datei
+            self.datei.write_text(json.dumps({'access_token': 'vom_anderen', 'refresh_token': 'r3', 'ablauf': time.time() + 999}))
+            return MagicMock(status_code=400, text='{"message":"Invalid refresh token"}')
+        with patch('requests.post', post):
+            self.assertEqual(stream._token(), 'vom_anderen')
+
+
 if __name__ == '__main__':
     unittest.main()

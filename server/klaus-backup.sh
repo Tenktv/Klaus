@@ -30,6 +30,46 @@ if [ "$(date +%u)" = 7 ] || [ "${WWW:-0}" = 1 ] || ! ls "$REPO"/www-*.age.teil-*
   tar -czf - -C / var/www | age -r "$REC" | split -b 45M - "$REPO/www-$TAG.age.teil-"
 fi
 
+# 2c) taeglich: Minecraft-Welt (Paper in /opt/minecraft, seit 23.10.2026) - nur Welten + Einstellungen, keine Programmdateien.
+#     Laeuft der Server, vorher per RCON alles speichern und das Schreiben anhalten (sonst halb geschriebene Regionen).
+mc_rcon() {
+  python3 - "$@" <<'PY'
+import socket, struct, sys
+props = {}
+for zeile in open("/opt/minecraft/server.properties", encoding="utf-8"):
+    if "=" in zeile and not zeile.startswith("#"):
+        k, v = zeile.split("=", 1)
+        props[k.strip()] = v.strip()
+def senden(s, nr, art, text):
+    daten = struct.pack("<ii", nr, art) + text.encode() + b"\0\0"
+    s.sendall(struct.pack("<i", len(daten)) + daten)
+def lesen(s):
+    laenge = struct.unpack("<i", s.recv(4))[0]
+    daten = b""
+    while len(daten) < laenge:
+        daten += s.recv(laenge - len(daten))
+    return daten
+s = socket.create_connection(("127.0.0.1", int(props.get("rcon.port", "25575"))), timeout=60)
+senden(s, 1, 3, props.get("rcon.password", ""))
+if struct.unpack("<i", lesen(s)[:4])[0] == -1:
+    sys.exit("RCON-Anmeldung abgelehnt")
+for befehl in sys.argv[1:]:
+    senden(s, 2, 2, befehl)
+    print(lesen(s)[8:-2].decode(errors="replace").strip())
+PY
+}
+if [ -d /opt/minecraft ]; then
+  MC_LAEUFT=0; systemctl is-active -q minecraft && MC_LAEUFT=1
+  [ "$MC_LAEUFT" = 1 ] && mc_rcon "save-off" "save-all flush" > /dev/null
+  rm -f "$REPO"/mc-"$TAG".age.teil-*
+  MC_FEHLER=0
+  tar -czf - -C /opt --exclude='minecraft/libraries' --exclude='minecraft/cache' --exclude='minecraft/versions' \
+      --exclude='minecraft/logs' --exclude='minecraft/.cache' --exclude='minecraft/*.jar' minecraft \
+    | age -r "$REC" | split -b 45M - "$REPO/mc-$TAG.age.teil-" || MC_FEHLER=1
+  [ "$MC_LAEUFT" = 1 ] && mc_rcon "save-on" > /dev/null   # immer wieder einschalten, auch wenn tar fehlschlug
+  [ "$MC_FEHLER" = 0 ] || { echo "FEHLER: Minecraft-Sicherung"; exit 1; }
+fi
+
 # 2b) PC-Archive (vom PC selbst verschluesselt, der Server kann sie nicht lesen) mitnehmen, letzte 7 Tage
 rm -f "$REPO"/pc-*.age
 cp -f /home/klaus/backup-pc/pc-*.age "$REPO"/ 2>/dev/null || true
@@ -37,6 +77,7 @@ cp -f /home/klaus/backup-pc/pc-*.age "$REPO"/ 2>/dev/null || true
 # 3) Aufraeumen: 14 Tagesstaende, 2 Website-Staende
 ls -1 "$REPO"/tag-*.age 2>/dev/null | sort | head -n -14 | xargs -r rm -f
 ls -1 "$REPO"/www-*.age.teil-* 2>/dev/null | sed -E 's/.*www-([0-9-]+)\.age.*/\1/' | sort -u | head -n -2 | while read d; do rm -f "$REPO"/www-"$d".age.teil-*; done
+ls -1 "$REPO"/mc-*.age.teil-* 2>/dev/null | sed -E 's/.*mc-([0-9-]+)\.age.*/\1/' | sort -u | head -n -3 | while read d; do rm -f "$REPO"/mc-"$d".age.teil-*; done
 
 cat > "$REPO/WIEDERHERSTELLEN.md" <<'EOF'
 # Klaus-Backup wiederherstellen
@@ -44,6 +85,8 @@ Alles hier ist mit age verschluesselt. Den Schluessel hat nur Nikola (Datei KLAU
 Taeglich (Datenbank + Konfiguration):  age -d -i schluessel.txt tag-DATUM.tar.gz.age | tar xz -C /tmp/wiederherstellung
 PC (Gedaechtnis, data, .env):          age -d -i schluessel.txt pc-DATUM.tar.gz.age | tar xz -C /tmp/wiederherstellung   (vault/, data/, env/.env)
 Website (Teile zusammensetzen):         cat www-DATUM.age.teil-* | age -d -i schluessel.txt | tar xz -C /tmp/wiederherstellung
+Minecraft-Welt (letzte 3 Tage):         cat mc-DATUM.age.teil-* | age -d -i schluessel.txt | tar xz -C /tmp/wiederherstellung
+                                        (Server stoppen: systemctl stop minecraft; dann world*/ nach /opt/minecraft, chown minecraft)
 Datenbank zurueck:                      docker exec -i backend-db-1 psql -U postgres < tmp/klaus_bk/postgres.sql   (postgres.sql liegt im Archiv)
 EOF
 
