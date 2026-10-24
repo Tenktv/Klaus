@@ -48,7 +48,7 @@ Name: "{userdesktop}\Klaus"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parame
 
 [Run]
 ; Python, Pakete, Stimme - beim ersten Mal ein paar Minuten (Fenster zeigt den Fortschritt), bei Updates nur, was sich geaendert hat
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\installer\einrichten.ps1"" -Ordner ""{app}"" {code:UpdateSchalter}"; StatusMsg: "Richte Klaus ein (Python und Pakete) ..."; Flags: waituntilterminated
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\installer\einrichten.ps1"" -Ordner ""{app}"" {code:UpdateSchalter} {code:OllamaSchalter}"; StatusMsg: "Richte Klaus ein (Python und Pakete) ..."; Flags: waituntilterminated
 Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\src\klaus_app.py"""; WorkingDir: "{app}"; Description: "Klaus jetzt starten"; Flags: nowait postinstall
 
 [UninstallRun]
@@ -61,6 +61,11 @@ Type: filesandordirs; Name: "{app}\.venv"
 var
   NamenSeite: TInputQueryWizardPage;
   SchluesselSeite: TInputQueryWizardPage;
+  EigeneKiSeite: TInputQueryWizardPage;
+  LokalSeite: TInputOptionWizardPage;
+
+const
+  OLLAMA_MODELL = 'qwen2.5:7b-instruct-q4_K_M';
 
 function IstUpdate(): Boolean;
 begin
@@ -72,6 +77,12 @@ begin
   if IstUpdate() then Result := '-Update' else Result := '';
 end;
 
+function OllamaSchalter(Param: String): String;
+begin
+  Result := '';
+  if (not IstUpdate()) and LokalSeite.Values[0] then Result := '-Ollama -OllamaModell ' + OLLAMA_MODELL;
+end;
+
 procedure InitializeWizard();
 begin
   NamenSeite := CreateInputQueryPage(wpSelectDir, 'Dein Assistent', 'Wie soll er heißen, und wie heißt du?',
@@ -81,15 +92,40 @@ begin
   NamenSeite.Values[0] := 'Klaus';
   NamenSeite.Values[1] := GetUserNameString();
 
-  SchluesselSeite := CreateInputQueryPage(NamenSeite.ID, 'Schlüssel (optional)', 'Für Gespräche und besondere Stimmen',
-    'Gemini-Schlüssel (kostenlos: aistudio.google.com/apikey) für natürliche Gespräche. Fish-Audio-Schlüssel (fish.audio → API) für eigene Stimmen und Figuren-Stimmen. Beides geht auch später.');
+  SchluesselSeite := CreateInputQueryPage(NamenSeite.ID, 'KI-Schlüssel', 'Womit soll dein Assistent denken? (alles optional, mindestens eins empfohlen)',
+    'Du nutzt deine eigenen Konten. Gemini (aistudio.google.com/apikey, kostenlos) = natürliche Sprachgespräche. ' +
+    'Groq (console.groq.com/keys, kostenlos) und OpenRouter (openrouter.ai/keys, Gratis-Modelle) = Ersatz, wenn Gemini ausfällt, ' +
+    'und Antworten ohne Gemini. Fish Audio (fish.audio → API) = eigene Stimmen und Figuren-Stimmen. Alles auch später im Startmenü unter „Einstellungen“.');
   SchluesselSeite.Add('Gemini API-Schlüssel:', False);
+  SchluesselSeite.Add('Groq API-Schlüssel:', False);
+  SchluesselSeite.Add('OpenRouter API-Schlüssel:', False);
   SchluesselSeite.Add('Fish Audio API-Schlüssel:', False);
+
+  EigeneKiSeite := CreateInputQueryPage(SchluesselSeite.ID, 'Eigener KI-Anbieter (optional)', 'OpenAI, Mistral, DeepSeek, LM Studio … – alles im OpenAI-Format',
+    'Adresse der API, z. B. https://api.openai.com/v1 oder für LM Studio http://localhost:1234/v1. Leer lassen, wenn du keinen weiteren Anbieter willst.');
+  EigeneKiSeite.Add('API-Adresse:', False);
+  EigeneKiSeite.Add('API-Schlüssel (bei LM Studio leer lassen):', False);
+  EigeneKiSeite.Add('Modell(e), kommagetrennt (z. B. gpt-4o-mini):', False);
+
+  LokalSeite := CreateInputOptionPage(EigeneKiSeite.ID, 'Lokale KI (optional)', 'Ganz ohne Internet und ohne Konto denken',
+    'Installiert Ollama und das Modell ' + OLLAMA_MODELL + ' (ca. 5 GB). Läuft am besten mit einer Grafikkarte ab 8 GB. ' +
+    'Der Assistent nutzt die lokale KI, wenn keine Cloud-KI antwortet.', False, False);
+  LokalSeite.Add('Ollama und das lokale Modell installieren');
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+  if (CurPageID = LokalSeite.ID) and (not LokalSeite.Values[0]) and (Trim(SchluesselSeite.Values[0]) = '') and
+     (Trim(SchluesselSeite.Values[1]) = '') and (Trim(SchluesselSeite.Values[2]) = '') and (Trim(EigeneKiSeite.Values[0]) = '') then
+    Result := MsgBox('Ohne KI-Schlüssel und ohne lokale KI kann dein Assistent nicht antworten. ' +
+                     'Du kannst Schlüssel später im Startmenü unter „Einstellungen“ eintragen. Trotzdem weiter?', mbConfirmation, MB_YESNO) = IDYES;
 end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
-  Result := IstUpdate() and ((PageID = NamenSeite.ID) or (PageID = SchluesselSeite.ID));
+  Result := IstUpdate() and ((PageID = NamenSeite.ID) or (PageID = SchluesselSeite.ID) or (PageID = EigeneKiSeite.ID) or
+                             (PageID = LokalSeite.ID));
 end;
 
 function Bereinigt(Wert: String): String;
@@ -101,20 +137,28 @@ end;
 
 procedure EnvSchreiben();
 var
-  Datei, Name: String;
+  Datei, Name, EigenKey: String;
   Zeilen: TArrayOfString;
 begin
   Datei := ExpandConstant('{app}\.env');
   if FileExists(Datei) then Exit;   { bestehende Einstellungen nie ueberschreiben }
   Name := Bereinigt(NamenSeite.Values[0]);
   if Name = '' then Name := 'Klaus';
-  SetArrayLength(Zeilen, 6);
+  EigenKey := Bereinigt(EigeneKiSeite.Values[1]);
+  if (EigenKey = '') and (Bereinigt(EigeneKiSeite.Values[0]) <> '') then EigenKey := 'lokal';   { LM Studio & Co. brauchen keinen }
+  SetArrayLength(Zeilen, 12);
   Zeilen[0] := '# Klaus - Einstellungen (vom Installer angelegt). Vorlage mit allen Optionen: .env.example';
   Zeilen[1] := 'KLAUS_NAME=' + Name;
   Zeilen[2] := 'KLAUS_NUTZER=' + Bereinigt(NamenSeite.Values[1]);
   Zeilen[3] := 'GEMINI_API_KEY=' + Bereinigt(SchluesselSeite.Values[0]);
-  Zeilen[4] := 'FISH_API_KEY=' + Bereinigt(SchluesselSeite.Values[1]);
-  Zeilen[5] := 'KLAUS_AUTO_UPDATE=1';
+  Zeilen[4] := 'GROQ_API_KEY=' + Bereinigt(SchluesselSeite.Values[1]);
+  Zeilen[5] := 'OPENROUTER_API_KEY=' + Bereinigt(SchluesselSeite.Values[2]);
+  Zeilen[6] := 'FISH_API_KEY=' + Bereinigt(SchluesselSeite.Values[3]);
+  Zeilen[7] := 'ERSATZ_KI_URL=' + Bereinigt(EigeneKiSeite.Values[0]);
+  Zeilen[8] := 'ERSATZ_KI_KEY=' + EigenKey;
+  Zeilen[9] := 'ERSATZ_KI_MODELLE=' + Bereinigt(EigeneKiSeite.Values[2]);
+  Zeilen[10] := 'OLLAMA_MODEL=' + OLLAMA_MODELL;
+  Zeilen[11] := 'KLAUS_AUTO_UPDATE=1';
   SaveStringsToUTF8File(Datei, Zeilen, False);   { erste Zeile ist ein Kommentar - ein BOM davor stoert nicht }
 end;
 

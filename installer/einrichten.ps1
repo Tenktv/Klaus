@@ -3,7 +3,8 @@
 #   2. .venv anlegen, Pakete aus requirements.txt (nur wenn sich die Liste geaendert hat)
 #   3. lokale Ersatzstimme (Piper) laden, Browser fuer das Browser-Werkzeug
 # -Update: stilles Update - nur was sich geaendert hat, Fenster bleibt nicht offen.
-param([Parameter(Mandatory = $true)][string]$Ordner, [switch]$Update)
+# -Ollama: lokale KI (Ollama + Modell) installieren.
+param([Parameter(Mandatory = $true)][string]$Ordner, [switch]$Update, [switch]$Ollama, [string]$OllamaModell = "qwen2.5:7b-instruct-q4_K_M")
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -63,10 +64,23 @@ try {
         & $venvPy -m piper.download_voices --download-dir (Join-Path $Ordner "data\stimmen") de_DE-thorsten-high
     }
 
-    Schritt "Fertig"
-    if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
-        Write-Host "Tipp: Fuer Antworten ganz ohne Internet zusaetzlich Ollama installieren (ollama.com)." -ForegroundColor Yellow
+    if ($Ollama) {
+        Schritt "Lokale KI: Ollama und Modell $OllamaModell (ca. 5 GB, dauert)"
+        $ollamaExe = Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe"
+        if (-not (Test-Path $ollamaExe) -and -not (Get-Command ollama -ErrorAction SilentlyContinue)) {
+            $setup = Join-Path $env:TEMP "OllamaSetup.exe"
+            Invoke-WebRequest "https://ollama.com/download/OllamaSetup.exe" -OutFile $setup
+            Start-Process $setup -Wait -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"
+        }
+        if (-not (Test-Path $ollamaExe)) { $ollamaExe = (Get-Command ollama -ErrorAction SilentlyContinue).Source }
+        if (-not $ollamaExe) { throw "Ollama liess sich nicht installieren." }
+        Start-Process $ollamaExe -ArgumentList "serve" -WindowStyle Hidden | Out-Null
+        Start-Sleep -Seconds 5
+        & $ollamaExe pull $OllamaModell
+        if ($LASTEXITCODE -ne 0) { Write-Host "Modell konnte nicht geladen werden - spaeter mit: ollama pull $OllamaModell" -ForegroundColor Yellow }
     }
+
+    Schritt "Fertig"
     Stop-Transcript | Out-Null
     if (-not $Update) { Start-Sleep -Seconds 3 }
     exit 0

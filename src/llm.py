@@ -8,6 +8,7 @@ Konfiguration ueber .env:
 """
 
 import json
+import re
 import os
 
 import requests
@@ -40,7 +41,23 @@ def frage(prompt: str, system: str = "", als_json: bool = False, temperatur: flo
 
 
 def chat(nachrichten: list[dict], als_json: bool = False, temperatur: float = 0.4):
-    """Wie frage(), aber mit ganzem Gespraechsverlauf (role/content-Liste)."""
+    """Wie frage(), aber mit ganzem Gespraechsverlauf (role/content-Liste).
+    Lokal ueber Ollama; laeuft das nicht, ueber die Cloud-KI mit eigenen Schluesseln (ersatz_ki: Groq, OpenRouter, OpenAI-kompatibel)."""
+    try:
+        return _ollama(nachrichten, als_json, temperatur)
+    except requests.RequestException:
+        import ersatz_ki
+
+        if not ersatz_ki.bereit():
+            raise
+        text = (ersatz_ki.chat(nachrichten)["message"].get("content") or "").strip()
+        if not als_json:
+            return text
+        treffer = re.search(r"\{.*\}", text, re.S)
+        return json.loads(treffer.group(0) if treffer else text)
+
+
+def _ollama(nachrichten: list[dict], als_json: bool, temperatur: float):
     body = {
         "model": OLLAMA_MODEL,
         "stream": False,
