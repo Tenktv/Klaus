@@ -63,6 +63,7 @@ var
   SchluesselSeite: TInputQueryWizardPage;
   EigeneKiSeite: TInputQueryWizardPage;
   LokalSeite: TInputOptionWizardPage;
+  UpdateSeite: TInputQueryWizardPage;
 
 const
   OLLAMA_MODELL = 'qwen2.5:7b-instruct-q4_K_M';
@@ -111,6 +112,11 @@ begin
     'Installiert Ollama und das Modell ' + OLLAMA_MODELL + ' (ca. 5 GB). Läuft am besten mit einer Grafikkarte ab 8 GB. ' +
     'Der Assistent nutzt die lokale KI, wenn keine Cloud-KI antwortet.', False, False);
   LokalSeite.Add('Ollama und das lokale Modell installieren');
+
+  UpdateSeite := CreateInputQueryPage(LokalSeite.ID, 'Automatische Updates (Testphase)', 'Neue Versionen kommen von GitHub',
+    'Solange Klaus nur getestet wird, liegen die Updates in einem privaten GitHub-Repo. Trag hier den Update-Token ein, ' +
+    'den du von Nikola bekommen hast (nur Lesezugriff). Leer lassen = keine automatischen Updates.');
+  UpdateSeite.Add('Update-Token:', True);
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -125,7 +131,7 @@ end;
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
   Result := IstUpdate() and ((PageID = NamenSeite.ID) or (PageID = SchluesselSeite.ID) or (PageID = EigeneKiSeite.ID) or
-                             (PageID = LokalSeite.ID));
+                             (PageID = LokalSeite.ID) or (PageID = UpdateSeite.ID));
 end;
 
 function Bereinigt(Wert: String): String;
@@ -146,7 +152,7 @@ begin
   if Name = '' then Name := 'Klaus';
   EigenKey := Bereinigt(EigeneKiSeite.Values[1]);
   if (EigenKey = '') and (Bereinigt(EigeneKiSeite.Values[0]) <> '') then EigenKey := 'lokal';   { LM Studio & Co. brauchen keinen }
-  SetArrayLength(Zeilen, 12);
+  SetArrayLength(Zeilen, 13);
   Zeilen[0] := '# Klaus - Einstellungen (vom Installer angelegt). Vorlage mit allen Optionen: .env.example';
   Zeilen[1] := 'KLAUS_NAME=' + Name;
   Zeilen[2] := 'KLAUS_NUTZER=' + Bereinigt(NamenSeite.Values[1]);
@@ -159,6 +165,7 @@ begin
   Zeilen[9] := 'ERSATZ_KI_MODELLE=' + Bereinigt(EigeneKiSeite.Values[2]);
   Zeilen[10] := 'OLLAMA_MODEL=' + OLLAMA_MODELL;
   Zeilen[11] := 'KLAUS_AUTO_UPDATE=1';
+  Zeilen[12] := 'KLAUS_UPDATE_TOKEN=' + Bereinigt(UpdateSeite.Values[0]);
   SaveStringsToUTF8File(Datei, Zeilen, False);   { erste Zeile ist ein Kommentar - ein BOM davor stoert nicht }
 end;
 

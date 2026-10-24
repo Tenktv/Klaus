@@ -8,7 +8,7 @@ Alle 30 Minuten (erstes Mal 3 Minuten nach dem Start): neue Commits auf origin/m
 Lokale Aenderungen am Code verhindern das Update (es wird nichts ueberschrieben). Aus: KLAUS_AUTO_UPDATE=0 in der .env.
 
 Installiert ueber Klaus-Setup.exe (kein .git-Ordner): stattdessen neueste Version aus dem oeffentlichen Repo
-KLAUS_UPDATE_REPO (Standard Tenktv/Klaus-Download) - Setup.exe laden, SHA256 pruefen, still installieren (/UPDATE=1);
+KLAUS_UPDATE_REPO (Standard Tenktv/Klaus; privat -> KLAUS_UPDATE_TOKEN) - Setup.exe laden, SHA256 pruefen, still installieren (/UPDATE=1);
 der Installer beendet Klaus, behaelt .env/data und startet ihn danach neu.
 """
 from __future__ import annotations
@@ -37,7 +37,15 @@ TEST = ("import glob, py_compile, sys; sys.path.insert(0, 'src'); "
         "[py_compile.compile(f, doraise=True) for f in glob.glob('src/*.py')]; ")
 TEST = TEST + FLAKES + "import assistent; print('TEST_OK')"
 _OHNE_FENSTER = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-UPDATE_REPO = os.getenv("KLAUS_UPDATE_REPO", "Tenktv/Klaus-Download").strip()
+UPDATE_REPO = os.getenv("KLAUS_UPDATE_REPO", "Tenktv/Klaus").strip()
+UPDATE_TOKEN = os.getenv("KLAUS_UPDATE_TOKEN", "").strip()   # nur noetig, solange das Repo privat ist (Lesezugriff reicht)
+
+
+def _kopf(datei: bool = False) -> dict:
+    k = {"Accept": "application/octet-stream" if datei else "application/vnd.github+json"}
+    if UPDATE_TOKEN:
+        k["Authorization"] = f"Bearer {UPDATE_TOKEN}"
+    return k
 
 
 # ------------------------------------------------------------------ Installierte Version (Klaus-Setup.exe, ohne git)
@@ -60,8 +68,7 @@ def neues_release() -> dict | None:
     """Neuere Klaus-Setup.exe im Download-Repo? -> {tag, url, sha256} oder None."""
     import requests
 
-    r = requests.get(f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest", timeout=15,
-                     headers={"Accept": "application/vnd.github+json"})
+    r = requests.get(f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest", timeout=15, headers=_kopf())
     if r.status_code != 200:
         return None
     d = r.json()
@@ -72,7 +79,8 @@ def neues_release() -> dict | None:
     pruef = re.search(r"SHA256:\s*([0-9a-f]{64})", str(d.get("body") or ""), re.I)
     if not datei or not pruef:   # ohne Pruefsumme installiere ich nichts
         return None
-    return {"tag": tag, "url": datei["browser_download_url"], "sha256": pruef.group(1).lower()}
+    # privates Repo: ueber die API-Adresse der Datei laden (mit Token), oeffentlich: direkter Download-Link
+    return {"tag": tag, "url": datei["url"] if UPDATE_TOKEN else datei["browser_download_url"], "sha256": pruef.group(1).lower()}
 
 
 def release_einspielen(rel: dict) -> tuple[bool, str]:
@@ -82,7 +90,7 @@ def release_einspielen(rel: dict) -> tuple[bool, str]:
 
     ziel = Path(tempfile.gettempdir()) / f"Klaus-Setup-{re.sub(r'[^0-9A-Za-z.]', '', rel['tag'])}.exe"
     summe = hashlib.sha256()
-    with requests.get(rel["url"], stream=True, timeout=(15, 300)) as r:
+    with requests.get(rel["url"], stream=True, timeout=(15, 300), headers=_kopf(datei=True) if UPDATE_TOKEN else None) as r:
         r.raise_for_status()
         with open(ziel, "wb") as f:
             for stueck in r.iter_content(1 << 20):
