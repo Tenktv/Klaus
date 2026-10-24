@@ -407,7 +407,7 @@ def bauen(innen: bool = True):
 
         tg.befehle["/einladen"] = lambda e: pv.einladen(e.split(maxsplit=1)[1] if len(e.split()) > 1 else "")
         tg.befehle["/tester"] = lambda _e: pv.liste()
-        tg.befehle["/tester_entfernen"] = lambda e: pv.entfernen(e.split()[1]) if len(e.split()) > 1 else "So: /tester_entfernen <ID>"
+        tg.befehle["/tester_entfernen"] = lambda e: pv.entfernen(e.split()[1]) if len(e.split()) > 1 else "So: /tester_entfernen <profil>"
 
     tg.befehle["/briefing"] = briefing.befehl
     tg.deklarationen.append({"name": "briefing", "description": "Morgen-Briefing jetzt (Wetter, Termine heute, Nachrichten) oder "
@@ -606,6 +606,7 @@ def profil_befehle(tg) -> None:
         z.append(f"{'✅' if os.getenv('ALPACA_API_KEY', '').strip() else '–'} alpaca (/alpaca_schluessel)")
         z.append(f"Name des Assistenten: {os.getenv('KLAUS_NAME', 'Klaus')} (/name)")
         z.append("Dein PC ist noch nicht verbunden (kommt in Etappe 2).")
+        z.append("Passwort ändern: /passwort <alt> <neu> · Abmelden: /logout")
         return "\n".join(z)
 
     tg.befehle["/schluessel"] = schluessel

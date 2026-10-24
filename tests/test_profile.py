@@ -24,87 +24,133 @@ class VerteilerTests(unittest.TestCase):
             p = patch.object(pv, name, wert)
             p.start()
             self.addCleanup(p.stop)
-        self.gesendet = []
+        self.gesendet, self.geloescht = [], []
 
         def api(methode, frist=30, **d):
             if methode == 'getMe':
                 return {'username': 'KlausTestBot'}
-            self.gesendet.append((methode, d))
+            (self.geloescht if methode == 'deleteMessage' else self.gesendet).append(d)
             return {}
         for p in (patch.object(pv, '_api', api), patch.dict(os.environ, {'TESTER_BOT_TOKEN': '123:abc'})):
             p.start()
             self.addCleanup(p.stop)
         self.gestartet = []
-        p = patch.object(pv.Arbeiter, 'starten', lambda a: self.gestartet.append(a.uid))
-        p.start()
-        self.addCleanup(p.stop)
+        for p in (patch.object(pv.Arbeiter, 'starten', lambda a: self.gestartet.append(a.name)),
+                  patch.object(pv.Arbeiter, 'laeuft', lambda a: True)):
+            p.start()
+            self.addCleanup(p.stop)
         self.v = pv.Verteiler()
 
-    def nachricht(self, uid, text):
-        return {'update_id': 1, 'message': {'message_id': 5, 'chat': {'type': 'private'}, 'from': {'id': uid, 'first_name': 'Tim'},
-                                            'text': text}}
+    def msg(self, uid, text, mid=5):
+        return {'update_id': 1, 'message': {'message_id': mid, 'chat': {'type': 'private', 'id': uid},
+                                            'from': {'id': uid, 'first_name': 'Tim'}, 'text': text}}
 
-    def code(self):
-        text = pv.einladen('Tim')
-        return text.split('start=')[1].split()[0]
+    def letzte(self):
+        return self.gesendet[-1]['text']
 
-    def test_einladung_und_profil(self):
-        code = self.code()
-        self.assertIn('t.me/KlausTestBot?start=', pv.einladen('X'))
-        self.v.update(self.nachricht(42, f'/start {code}'))
-        self.assertIn('42', json.loads(pv.REGISTER.read_text()))
-        env = pv.profil_ordner(42) / '.env'
-        inhalt = env.read_text()
-        self.assertIn('TELEGRAM_NUTZER=42', inhalt)
-        self.assertIn('KLAUS_PROFIL=1', inhalt)
-        self.assertIn('KLAUS_PC_PORT=9', inhalt)            # nie Nikolas PC-Tunnel
+    def anlegen(self, uid=42, name='tim', pw='Geheim123'):
+        code = pv.einladen('Tim').split('start=')[1].split()[0]
+        self.v.update(self.msg(uid, f'/start {code}'))
+        self.v.update(self.msg(uid, f'{name} {pw}', mid=6))
+
+    def test_einladung_profilname_passwort(self):
+        self.anlegen()
+        r = json.loads(pv.REGISTER.read_text())
+        self.assertEqual(r['tim']['telegram'], 42)
+        self.assertNotIn('Geheim123', pv.REGISTER.read_text())           # nur Hash
+        self.assertIn({'chat_id': 42, 'message_id': 6}, self.geloescht)   # Passwort-Nachricht geloescht
+        env = pv.profil_ordner('tim') / '.env'
+        self.assertIn('TELEGRAM_NUTZER=42', env.read_text())
+        self.assertIn('KLAUS_PC_PORT=9', env.read_text())
         self.assertEqual(stat.S_IMODE(env.stat().st_mode), 0o600)
-        self.assertEqual(self.gestartet, [42])
-        self.assertIn('PIN', self.gesendet[-1][1]['text'])
+        self.assertIn('tim', self.gestartet)
+        self.assertIn('PIN', self.letzte())
 
-    def test_code_nur_einmal_und_abgelaufen(self):
-        code = self.code()
-        self.v.update(self.nachricht(42, f'/start {code}'))
-        self.v.update(self.nachricht(43, f'/start {code}'))
-        self.assertNotIn('43', json.loads(pv.REGISTER.read_text()))
-        self.assertIn('ungültig', self.gesendet[-1][1]['text'])
-        alt = self.code()
-        d = json.loads(pv.EINLADUNGEN.read_text())
-        d[alt]['erstellt'] = time.time() - pv.CODE_GUELTIG_S - 1
-        pv._schreiben(pv.EINLADUNGEN, d)
-        self.v.update(self.nachricht(44, f'/start {alt}'))
-        self.assertNotIn('44', json.loads(pv.REGISTER.read_text()))
+    def test_schwaches_passwort_und_vergebener_name(self):
+        code = pv.einladen().split('start=')[1].split()[0]
+        self.v.update(self.msg(42, f'/start {code}'))
+        self.v.update(self.msg(42, 'tim kurz'))
+        self.assertIn('8 Zeichen', self.letzte())
+        self.v.update(self.msg(42, 'Tim! Geheim123'))
+        self.assertIn('a–z', self.letzte())
+        self.v.update(self.msg(42, 'tim Geheim123'))
+        self.assertIn('tim', json.loads(pv.REGISTER.read_text()))
+        code2 = pv.einladen().split('start=')[1].split()[0]
+        self.v.update(self.msg(43, f'/start {code2}'))
+        self.v.update(self.msg(43, 'tim Anders456'))
+        self.assertIn('vergeben', self.letzte())
 
-    def test_fremde_werden_abgewiesen_bekannte_weitergeleitet(self):
-        self.v.update(self.nachricht(7, 'hallo'))
-        self.assertIn('eingeladene Tester', self.gesendet[-1][1]['text'])
-        self.assertFalse(pv.ORDNER.exists() and (pv.ORDNER / '7').exists())
-        code = self.code()
-        self.v.update(self.nachricht(42, f'/start {code}'))
+    def test_code_nur_einmal(self):
+        code = pv.einladen().split('start=')[1].split()[0]
+        self.v.update(self.msg(42, f'/start {code}'))
+        self.v.update(self.msg(42, 'tim Geheim123'))
+        self.v.update(self.msg(43, f'/start {code}'))
+        self.assertIn('ungültig', self.letzte())
+
+    def test_login_von_anderem_konto_und_warnung(self):
+        self.anlegen()
+        self.v.update(self.msg(99, '/login tim Geheim123', mid=9))
+        self.assertIn({'chat_id': 99, 'message_id': 9}, self.geloescht)
+        r = json.loads(pv.REGISTER.read_text())
+        self.assertEqual(r['tim']['telegram'], 99)
+        self.assertIn('TELEGRAM_NUTZER=99', (pv.profil_ordner('tim') / '.env').read_text())
+        warnungen = [g for g in self.gesendet if g['chat_id'] == 42 and 'anderen Telegram-Konto' in g['text']]
+        self.assertEqual(len(warnungen), 1)
         weiter = []
-        with patch.object(pv.Arbeiter, 'senden', lambda a, u: weiter.append((a.uid, u))):
-            self.v.update(self.nachricht(42, 'Wie wird das Wetter?'))
-            self.v.update({'update_id': 2, 'callback_query': {'from': {'id': 42}, 'data': 'ja:x'}})
-        self.assertEqual([w[0] for w in weiter], [42, 42])
+        with patch.object(pv.Arbeiter, 'senden', lambda a, u: weiter.append(a.name)):
+            self.v.update(self.msg(99, 'Wie wird das Wetter?'))
+            self.v.update(self.msg(42, 'Hallo?'))                       # altes Konto ist abgemeldet
+        self.assertEqual(weiter, ['tim'])
+        self.assertIn('/login', self.letzte())
 
-    def test_gesperrte_profile_werden_beendet(self):
-        code = self.code()
-        self.v.update(self.nachricht(42, f'/start {code}'))
+    def test_falsches_passwort_sperrt_nach_fuenf(self):
+        self.anlegen()
+        for _ in range(5):
+            self.v.update(self.msg(77, '/login tim Falsch999'))
+        self.assertIn('stimmt nicht', self.gesendet[-1]['text'])
+        self.v.update(self.msg(77, '/login tim Geheim123'))
+        self.assertIn('gesperrt', self.letzte())
+        self.assertEqual(json.loads(pv.REGISTER.read_text())['tim']['telegram'], 42)
+        self.v.update(self.msg(78, '/login tim Geheim123'))              # Profil selbst ist auch gesperrt
+        self.assertIn('gesperrt', self.letzte())
+
+    def test_logout_und_passwort_aendern(self):
+        self.anlegen()
+        self.v.update(self.msg(42, '/passwort Falsch999 Neu12345'))
+        self.assertIn('stimmt nicht', self.letzte())
+        self.v.update(self.msg(42, '/passwort Geheim123 Neu12345'))
+        self.assertIn('geändert', self.letzte())
+        self.v.update(self.msg(42, '/logout'))
+        self.assertIsNone(json.loads(pv.REGISTER.read_text())['tim']['telegram'])
+        self.assertIn('TELEGRAM_NUTZER=0', (pv.profil_ordner('tim') / '.env').read_text())
+        self.v.update(self.msg(42, '/login tim Geheim123'))
+        self.assertIn('stimmt nicht', self.letzte())
+        self.v.update(self.msg(42, '/login tim Neu12345'))
+        self.assertIn('Angemeldet', self.letzte())
+
+    def test_fremde_und_gesperrte_profile(self):
+        self.v.update(self.msg(7, 'hallo'))
+        self.assertIn('/login', self.letzte())
+        self.anlegen()
         gestoppt = []
-        with patch.object(pv.Arbeiter, 'stoppen', lambda a: gestoppt.append(a.uid)), \
+        with patch.object(pv.Arbeiter, 'stoppen', lambda a: gestoppt.append(a.name)), \
                 patch.object(pv.subprocess, 'run', lambda *a, **k: SimpleNamespace(stdout='abc')):
-            self.assertIn('gesperrt', pv.entfernen('42'))
+            self.assertIn('gesperrt', pv.entfernen('tim'))
             self.v.abgleich()
-        self.assertEqual(gestoppt, [42])
-        self.assertNotIn(42, self.v.arbeiter)
+        self.assertEqual(gestoppt, ['tim'])
+        self.v.update(self.msg(42, 'hallo'))
+        self.assertIn('/login', self.letzte())
+
+    def test_ungueltige_namen_nie_als_pfad(self):
+        with self.assertRaises(ValueError):
+            pv.profil_ordner('../nikola')
 
     def test_umgebung_ohne_nikolas_schluessel(self):
-        a = pv.Arbeiter(42)
+        a = pv.Arbeiter('tim')
         with patch.dict(os.environ, {'GEMINI_API_KEY': 'geheim', 'ALPACA_SECRET_KEY': 'geheim', 'CLAUDE_CODE_OAUTH_TOKEN': 'x'}):
             env = a.umgebung()
-        self.assertEqual(env['HOME'], str(pv.profil_ordner(42)))
+        self.assertEqual(env['HOME'], str(pv.profil_ordner('tim')))
         self.assertFalse(any('geheim' in v or v == 'x' for v in env.values()))
-        self.assertEqual(env['KLAUS_PROFIL'], '1')
 
     def test_code_kopie_ohne_env_und_daten(self):
         ziel = Path(self.tmp.name) / 'z'
@@ -122,18 +168,17 @@ class ProfilBefehleTests(unittest.TestCase):
         import telegram_bot as TB
 
         tg = SimpleNamespace(befehle={}, geheime_befehle=set())
-        gespeichert = {}
-        neustarts = []
+        gespeichert, neustarts = {}, []
         with patch.object(TB, '_env_setzen', gespeichert.__setitem__), patch.object(S, 'profil_neustart', lambda: neustarts.append(1)):
             S.profil_befehle(tg)
             self.assertIn('/schluessel', tg.geheime_befehle)
             self.assertIn('So:', tg.befehle['/schluessel']('/schluessel'))
-            self.assertIn('kein', tg.befehle['/schluessel']('/schluessel gemini kurz').lower() + 'kein')
+            self.assertIn('nichts gespeichert', tg.befehle['/schluessel']('/schluessel gemini kurz'))
             self.assertIn('gespeichert', tg.befehle['/schluessel']('/schluessel Groq gsk_' + 'a' * 30))
             self.assertEqual(gespeichert, {'GROQ_API_KEY': 'gsk_' + 'a' * 30})
             self.assertIn('Luna', tg.befehle['/name']('/name Luna'))
-            self.assertIn('alpaca', tg.befehle['/profil']('/profil'))
-        self.assertEqual(len(neustarts), 2)   # nach Schluessel und Name
+            self.assertIn('/logout', tg.befehle['/profil']('/profil'))
+        self.assertEqual(len(neustarts), 2)
 
     def test_stdin_updates(self):
         import telegram_bot as TB
