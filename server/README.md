@@ -51,3 +51,14 @@ freitags ab 22:30 Uhr (Zustand in `data/analysen.json`). Strategien merken sich 
 auf dem Server (Projekte in `~/projekte/<name>`, Ergebnis als ZIP per Telegram). Einrichten als Benutzer klaus:
 `curl -fsSL https://claude.ai/install.sh | bash`, dann am PC `claude setup-token` und den Token per Telegram
 `/claude_token <token>` schicken (wird sofort geloescht). `/pc` zeigt PC- und Claude-Status, `/claude` nur Claude.
+
+## Tester-Profile (24.10.2026)
+`src/profile_verteiler.py` als Dienst `klaus-profile` (`server/klaus-profile.service` nach `/etc/systemd/system/`).
+Ein gemeinsamer **Tester-Bot** (neu bei @BotFather, Token als `TESTER_BOT_TOKEN` in Nikolas `.env`). Nikola laedt im
+eigenen Klaus mit `/einladen <Name>` ein (Link, 7 Tage, einmalig), `/tester` zeigt alle, `/tester_entfernen <ID>` sperrt.
+Jeder Tester bekommt `~/profile/<telegram-id>/` mit eigener `.env`, eigenem `data/`, eigenem HOME (Claude-Anmeldung) und
+einen eigenen Prozess (`server_gehirn.py` mit `KLAUS_PROFIL=1`, Nachrichten ueber stdin). Schluessel traegt der Tester
+selbst ein: `/schluessel gemini|groq|openrouter|fish|anthropic|tavily|openai <schluessel>`, `/alpaca_schluessel`,
+`/claude_token`, `/name <Name>`, `/profil`. Code: Nikolas Stand, bei neuem Git-Stand werden die Profile neu gestartet.
+Noch nicht: Verbindung zum PC des Testers (Etappe 2). Alle Profile laufen als Benutzer klaus (Testphase).
+Einrichten: `systemctl enable --now klaus-profile`, Log: `journalctl -u klaus-profile`, je Profil `~/profile/<id>/data/klaus.log`.

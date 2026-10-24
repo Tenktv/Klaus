@@ -232,7 +232,8 @@ class TelegramKlaus:
         self.zuletzt = 0.0               # deine letzte Nachricht
         self.offset = 0
         self.wartet_pin: str | None = None   # Freigabe-ID, fuer die gerade die PIN abgefragt wird
-        self.pin_neu = False                 # nach dem Koppeln: naechste Nachricht ist die neue PIN
+        # nach dem Koppeln (bzw. neues Tester-Profil ohne PIN): naechste Nachricht ist die neue PIN
+        self.pin_neu = not self.pin and os.getenv("KLAUS_PROFIL", "").strip() == "1"
         self.fehlversuche, self.gesperrt_bis = 0, 0.0
         self.freigabe_nachrichten: dict[str, int] = {}
         self._sperre = threading.Lock()
@@ -397,6 +398,18 @@ class TelegramKlaus:
             except Exception as e:
                 print(f"[Telegram] {str(e)[:120]}")
                 time.sleep(10)
+
+    def run_von_stdin(self) -> None:
+        """Tester-Profil: der Verteiler (profile_verteiler.py) liest den gemeinsamen Bot und schickt Updates als JSON-Zeilen."""
+        import sys
+
+        print("[Telegram] Profil laeuft - Nachrichten kommen vom Verteiler", flush=True)
+        for zeile in sys.stdin:
+            try:
+                u = json.loads(zeile)
+            except ValueError:
+                continue
+            threading.Thread(target=self._update, args=(u,), daemon=True).start()
 
     def _update(self, u: dict) -> None:
         try:

@@ -1,0 +1,22 @@
+[Unit]
+Description=Klaus Tester-Profile (gemeinsamer Tester-Bot, ein Klaus je Tester)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Environment=TZ=Europe/Berlin
+User=klaus
+WorkingDirectory=/home/klaus/klaus
+ExecStart=/home/klaus/klaus/.venv/bin/python -u src/profile_verteiler.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/klaus
+ProtectHome=false
+# Speicher begrenzen: jedes Profil ist ein eigener Python-Prozess
+MemoryMax=3G
+
+[Install]
+WantedBy=multi-user.target

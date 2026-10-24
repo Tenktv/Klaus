@@ -9,6 +9,7 @@ Klaus - Gehirn auf dem Server (ohne Fenster, Mikro und Lautsprecher). Laeuft als
 """
 import hmac
 import json
+import re
 import os
 import sys
 import threading
@@ -56,7 +57,10 @@ import freigabe
 import telegram_bot as TB
 
 TOKEN = os.getenv("KLAUS_LINK_TOKEN", "").strip()
-RUECK_PORT, SERVER_PORT = 7701, 7702
+RUECK_PORT = int(os.getenv("KLAUS_PC_PORT", "7701"))      # Tunnel zum PC
+SERVER_PORT = int(os.getenv("KLAUS_SERVER_PORT", "7702"))  # Meldungen vom PC
+# Tester-Profil (profile_verteiler.py): eigener Ordner, eigene .env, Nachrichten kommen ueber stdin statt getUpdates
+PROFIL = os.getenv("KLAUS_PROFIL", "").strip() == "1"
 LOKAL = {"kalender_lesen", "termin_eintragen", "zeit_frei", "recherche", "markt_analyse"}
 GEDAECHTNIS = BASE_DIR / "data" / "gedaechtnis_cache.txt"
 
@@ -127,7 +131,7 @@ def pc_werkzeug(name: str, args: dict) -> str:
 
 def bauen(innen: bool = True):
     """Verdrahtet Assistent + Telegram + Tunnel-Gegenstellen. innen=False: ohne den Server fuer Meldungen vom PC (Tests)."""
-    if not TOKEN:
+    if not TOKEN and not PROFIL:
         sys.exit("KLAUS_LINK_TOKEN fehlt")
     a = ServerAssistent()
     tg = TB.TelegramKlaus(a)
@@ -137,10 +141,11 @@ def bauen(innen: bool = True):
     # Werkzeuge: Daten-Werkzeuge hier, Rest auf dem PC; dazu das Selbst-Update (nur auf dem Server)
     import selbst_update
 
-    tg.deklarationen.append({"name": "update_einspielen", "description": "Klaus' eigenen Code auf dem Server aktualisieren (neuer Stand "
-                             "aus GitHub). Zeigt die neuen Aenderungen, braucht Nikolas Freigabe (Knopf + PIN), testet vor dem "
-                             "Uebernehmen und bleibt bei einem Fehler auf der alten Version. Nur wenn Nikola ein Update will.",
-                             "parameters": {"type": "OBJECT", "properties": {}}})
+    if not PROFIL:   # Tester-Profile aktualisiert der Verteiler mit Nikolas Stand
+        tg.deklarationen.append({"name": "update_einspielen", "description": "Klaus' eigenen Code auf dem Server aktualisieren (neuer "
+                                 "Stand aus GitHub). Zeigt die neuen Aenderungen, braucht Nikolas Freigabe (Knopf + PIN), testet vor "
+                                 "dem Uebernehmen und bleibt bei einem Fehler auf der alten Version. Nur wenn Nikola ein Update will.",
+                                 "parameters": {"type": "OBJECT", "properties": {}}})
 
     def update_werkzeug() -> str:
         try:
@@ -395,6 +400,15 @@ def bauen(innen: bool = True):
                              "Claude in der Cloud (Server) bereit ist. Vor PC-Aufgaben nutzen, wenn unklar ist, ob der PC laeuft.",
                              "parameters": {"type": "OBJECT", "properties": {}}})
 
+    if PROFIL:
+        profil_befehle(tg)
+    else:   # Nikola verwaltet die Tester (profile_verteiler.py)
+        import profile_verteiler as pv
+
+        tg.befehle["/einladen"] = lambda e: pv.einladen(e.split(maxsplit=1)[1] if len(e.split()) > 1 else "")
+        tg.befehle["/tester"] = lambda _e: pv.liste()
+        tg.befehle["/tester_entfernen"] = lambda e: pv.entfernen(e.split()[1]) if len(e.split()) > 1 else "So: /tester_entfernen <ID>"
+
     tg.befehle["/briefing"] = briefing.befehl
     tg.deklarationen.append({"name": "briefing", "description": "Morgen-Briefing jetzt (Wetter, Termine heute, Nachrichten) oder "
                              "Uhrzeit/an/aus einstellen. Fuer 'Briefing', 'was steht heute an und wie ist das Wetter'.",
@@ -552,7 +566,66 @@ def bauen(innen: bool = True):
     return a, tg
 
 
+SCHLUESSEL = {"gemini": "GEMINI_API_KEY", "groq": "GROQ_API_KEY", "openrouter": "OPENROUTER_API_KEY", "fish": "FISH_API_KEY",
+              "anthropic": "ANTHROPIC_API_KEY", "claude": "ANTHROPIC_API_KEY", "tavily": "TAVILY_API_KEY", "openai": "OPENAI_API_KEY"}
+
+
+def profil_befehle(tg) -> None:
+    """Tester-Profil: eigene Schluessel und Name per Telegram (Nachricht wird geloescht, geht nie an die KI)."""
+    import threading as th
+
+    def neu_starten() -> None:   # Schluessel werden beim Start gelesen -> Profil kurz neu starten (Verteiler startet es wieder)
+        th.Timer(2, lambda: os._exit(0)).start()
+
+    def schluessel(eingabe: str) -> str:
+        teile = eingabe.split()
+        if len(teile) != 3 or teile[1].lower() not in SCHLUESSEL:
+            return "So: /schluessel <anbieter> <schlüssel> – Anbieter: " + ", ".join(sorted(set(SCHLUESSEL) - {"claude"}))
+        wert = teile[2].strip()
+        if not re.fullmatch(r"[A-Za-z0-9_\-.:]{10,300}", wert):
+            return "Das sieht nicht nach einem Schlüssel aus – nichts gespeichert."
+        TB._env_setzen(SCHLUESSEL[teile[1].lower()], wert)
+        neu_starten()
+        return f"🔑 {teile[1].capitalize()}-Schlüssel gespeichert, deine Nachricht ist gelöscht. Ich starte kurz neu (ein paar Sekunden)."
+
+    def name(eingabe: str) -> str:
+        teile = eingabe.split(maxsplit=1)
+        if len(teile) != 2 or not re.fullmatch(r"[\wÄÖÜäöüß \-]{2,30}", teile[1].strip()):
+            return "So: /name <Name deines Assistenten>, z. B. /name Luna"
+        TB._env_setzen("KLAUS_NAME", teile[1].strip())
+        neu_starten()
+        return f"Ab gleich heiße ich {teile[1].strip()}."
+
+    def profil(_e: str) -> str:
+        z = ["👤 Dein Profil:"]
+        for kurz, var in sorted({k: v for k, v in SCHLUESSEL.items() if k != "claude"}.items()):
+            z.append(f"{'✅' if os.getenv(var, '').strip() else '–'} {kurz}")
+        z.append(f"{'✅' if os.getenv('ALPACA_API_KEY', '').strip() else '–'} alpaca (/alpaca_schluessel)")
+        z.append(f"Name des Assistenten: {os.getenv('KLAUS_NAME', 'Klaus')} (/name)")
+        z.append("Dein PC ist noch nicht verbunden (kommt in Etappe 2).")
+        return "\n".join(z)
+
+    tg.befehle["/schluessel"] = schluessel
+    tg.geheime_befehle.add("/schluessel")
+    tg.befehle["/name"] = name
+    tg.befehle["/profil"] = tg.befehle["/hilfe"] = profil
+
+
 def main() -> None:
+    if PROFIL:   # Tester-Profil: ohne Tunnel-Gegenstelle, ohne Selbst-Update, Nachrichten vom Verteiler
+        a, tg = bauen(innen=False)
+        print("[Server] Tester-Profil laeuft", flush=True)
+        import briefing
+        import strategien
+        import watchlist
+        import analysen
+
+        briefing.starte(tg.senden)
+        watchlist.starte(tg.senden)
+        strategien.starte(tg.senden)
+        analysen.starte(tg.senden)
+        tg.run_von_stdin()
+        return
     a, tg = bauen()
     print(f"[Server] Klaus-Gehirn laeuft (Telegram, Werkzeuge lokal: {sorted(LOKAL)})", flush=True)
     import briefing
