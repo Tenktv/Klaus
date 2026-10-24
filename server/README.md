@@ -51,3 +51,17 @@ freitags ab 22:30 Uhr (Zustand in `data/analysen.json`). Strategien merken sich 
 auf dem Server (Projekte in `~/projekte/<name>`, Ergebnis als ZIP per Telegram). Einrichten als Benutzer klaus:
 `curl -fsSL https://claude.ai/install.sh | bash`, dann am PC `claude setup-token` und den Token per Telegram
 `/claude_token <token>` schicken (wird sofort geloescht). `/pc` zeigt PC- und Claude-Status, `/claude` nur Claude.
+
+## Tester-Profile (24.10.2026)
+`src/profile_verteiler.py` als Dienst `klaus-profile` (`server/klaus-profile.service` nach `/etc/systemd/system/`).
+Ein gemeinsamer **Tester-Bot** (neu bei @BotFather, Token als `TESTER_BOT_TOKEN` in Nikolas `.env`). Nikola laedt im
+eigenen Klaus mit `/einladen <Name>` ein (Link, 7 Tage, einmalig), `/tester` zeigt alle, `/tester_entfernen <profil>` sperrt.
+Der Tester waehlt beim Einloesen **Profilname + Passwort** (scrypt-Hash in `~/profile/profile.json`) und meldet sich
+spaeter mit `/login <profil> <passwort>` an - auch von einem anderen Telegram-Konto (das alte bekommt eine Warnung);
+`/logout`, `/passwort <alt> <neu>`; 5 Fehlversuche -> 15 Minuten Sperre (je Telegram-Konto und je Profil).
+Jedes Profil: `~/profile/<name>/` mit eigener `.env`, `data/`, HOME (Claude-Anmeldung) und eigenem Prozess
+(`server_gehirn.py`, `KLAUS_PROFIL=1`, Nachrichten ueber stdin; antwortet an das angemeldete Konto). Schluessel traegt der
+Tester selbst ein: `/schluessel gemini|groq|openrouter|fish|anthropic|tavily|openai <schluessel>`, `/alpaca_schluessel`,
+`/claude_token`, `/name <Name>`, `/profil`. Code: Nikolas Stand, neuer Git-Stand -> Profile starten neu.
+Noch nicht: Verbindung zum PC des Testers (Etappe 2). Alle Profile laufen als Benutzer klaus (Testphase).
+Einrichten: `systemctl enable --now klaus-profile`, Log: `journalctl -u klaus-profile`, je Profil `~/profile/<name>/data/klaus.log`.
