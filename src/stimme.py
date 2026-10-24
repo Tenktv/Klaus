@@ -31,12 +31,17 @@ _piper_cache: dict = {}
 
 
 def _edge(name: str, text: str) -> tuple[np.ndarray, int]:
+    """name: Stimme, optional mit Tonhoehe/Tempo: "de-DE-SeraphinaMultilingualNeural@+38Hz@+12%" (Anime-Stil, stimmwahl.py)."""
     import edge_tts
     import miniaudio
 
+    stimme, _, rest = name.partition("@")
+    tonhoehe, _, tempo = rest.partition("@")
+    extra = {k: v for k, v in (("pitch", tonhoehe), ("rate", tempo)) if v}
+
     async def laden() -> bytes:
         mp3 = b""
-        async for teil in edge_tts.Communicate(text, name).stream():
+        async for teil in edge_tts.Communicate(text, stimme, **extra).stream():
             if teil["type"] == "audio":
                 mp3 += teil["data"]
         return mp3
