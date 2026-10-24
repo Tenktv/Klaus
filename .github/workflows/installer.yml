@@ -7,6 +7,8 @@ name: Installer
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    paths: ["installer/**", ".github/workflows/installer.yml", "requirements.txt"]
   workflow_dispatch:
 
 permissions:
