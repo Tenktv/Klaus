@@ -45,6 +45,13 @@ SUCHE = re.compile(r"^(?:kannst du\s+)?(?:such|suche|google|googel)\s+(?:mal\s+)
 PLANEN = re.compile(r"\b(website|webseite|homepage|landing ?page|onlineshop|planen|bauen|programmier\w*)\b", re.I)
 STILL = re.compile(r"^\W*(danke|nichts|schon gut|stopp?|vergiss es|egal|tsch(ü|ue)ss|bis sp(ä|ae)ter)\b", re.I)
 # "mach den Chat auf", "oeffne das Chatfenster", "Chat zu" - ohne KI, damit es auch ohne Gemini geht
+# "verbinde Twitch", "verbinde mich mit YouTube", "oeffne die Verbindungen" -> Fenster, Schluessel tippt man nur dort
+VERBINDEN = re.compile(r"\b(?:verbind|verkn(?:ü|ue)pf|koppel)\w*\s+(?:(?:mich|dich|uns)\s+)?(?:mit\s+)?(?:(?:meinem|meiner|mein|dem|der)\s+)?"
+                       r"(?:konto\s+(?:bei|auf)\s+)?(?P<p>twitch|you\s?tube|x|twitter|insta(?:gram)?|discord|tiktok|linkedin|facebook|"
+                       r"threads|bluesky|snapchat|reddit|kick)\b"
+                       r"|\b(?:(?:ö|oe)ffne|zeig)\w*\s+(?:mir\s+)?(?:die\s+|meine\s+)?verbindungen\b"
+                       r"|\bverbindungen\s+(?:(?:ö|oe)ffnen|einrichten|verwalten)\b", re.I)
+
 _CHAT = r"chat(?:-?fenster)?"
 CHAT_ZU = re.compile(rf"\bmach\w*\s+(?:mir\s+)?(?:den|das)?\s*{_CHAT}\s+(?:zu|weg)\b"
                      rf"|\bschlie(?:ss|ß)\w*\s+(?:den|das)?\s*{_CHAT}\b|\b{_CHAT}\s+(?:zu|weg|schlie(?:ss|ß)en)\b", re.I)
@@ -175,6 +182,7 @@ class Bruecke(QObject):
     pc_nutzung = Signal(str)  # "Klaus benutzt gerade den PC" als JSON: {aktiv, arten, was, rest} (pc_zugriff.py)
     mini = Signal(bool)  # Spielmodus an/aus (klaus_app.Spielmodus)
     chat = Signal(str)  # Twitch-Chat-Zeile als Sprechblase am Mini-Orb (stream.py)
+    verbindungen = Signal(str)  # Fenster "Verbindungen" oeffnen (Plattform-ID oder "") - "verbinde Twitch"
     chat_fenster = Signal(bool)  # Klaus-Chatfenster oeffnen (True) / schliessen (False) - "mach den Chat auf"
 
 
@@ -1058,7 +1066,23 @@ class Assistent:
             teile.append(self._mit_freigabe("clip", "Twitch-Clip der letzten Sekunden erstellen (öffentlich sichtbar)",
                                             stream.twitch_clip, an=f"twitch.tv/{stream.KANAL}"))
         return " ".join(teile) or ("Clippen geht noch nicht: OBS läuft nicht (Replay-Puffer) und Twitch ist nicht verbunden "
-                                   "(„python src/stream.py anmelden“).")
+                                   "(Taskleiste → Verbindungen → Twitch → „Bei Twitch anmelden“).")
+
+    def verbindungen_oeffnen(self, plattform: str) -> str:
+        """Fenster "Verbindungen" - per Sprache, Gemini-Werkzeug oder Telegram. Schluessel nie ueber die KI."""
+        import verbindungen
+
+        plattform = re.sub(r"\s+", "", plattform.lower())
+        pid = verbindungen.finde(plattform)
+        if self.b:
+            self.b.verbindungen.emit(plattform)
+        if not plattform:
+            return "Hier sind deine Verbindungen."
+        if not pid or pid.startswith("webhook"):
+            return (f"Für {plattform.title()} nimmst du „Andere Plattform“: mit einem Webhook von Zapier, Make oder IFTTT. "
+                    "Die Schritte stehen im Fenster.")
+        return (f"Ich hab dir das Fenster für {verbindungen.anzeige_name(pid)} aufgemacht. Trag deine Daten dort ein – "
+                "mir musst du keine Schlüssel sagen.")
 
     def stream_banner(self, text: str) -> str:
         """Banner oben im Stream-Overlay (Nikolas eigene Worte; leer = weg)."""
@@ -1419,6 +1443,10 @@ class Assistent:
             self.sage(antwort, zustand="aktion")
             return
 
+        verbinden = VERBINDEN.search(befehl)
+        if verbinden:
+            self.sage(self.verbindungen_oeffnen(verbinden.group("p") or ""), zustand="aktion")
+            return
         if CHAT_ZU.search(befehl) or CHAT_AUF.search(befehl):
             auf = not CHAT_ZU.search(befehl)
             self.b.chat_fenster.emit(auf)

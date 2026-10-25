@@ -64,6 +64,7 @@ var
   EigeneKiSeite: TInputQueryWizardPage;
   LokalSeite: TInputOptionWizardPage;
   UpdateSeite: TInputQueryWizardPage;
+  StreamSeite: TInputQueryWizardPage;
 
 const
   OLLAMA_MODELL = 'qwen2.5:7b-instruct-q4_K_M';
@@ -113,7 +114,12 @@ begin
     'Der Assistent nutzt die lokale KI, wenn keine Cloud-KI antwortet.', False, False);
   LokalSeite.Add('Ollama und das lokale Modell installieren');
 
-  UpdateSeite := CreateInputQueryPage(LokalSeite.ID, 'Automatische Updates (Testphase)', 'Neue Versionen kommen von GitHub',
+  StreamSeite := CreateInputQueryPage(LokalSeite.ID, 'Streaming (optional)', 'Soll dein Assistent deinen Chat mitlesen?',
+    'Mit deinem Twitch-Kanalnamen liest er den Chat mit, begrüßt neue Leute und liest vor. YouTube, X, Instagram, Discord ' +
+    'und andere Plattformen verbindest du später selbst: Taskleisten-Symbol → „Verbindungen“ oder sag „verbinde YouTube“.');
+  StreamSeite.Add('Twitch-Kanalname (z. B. deinkanal):', False);
+
+  UpdateSeite := CreateInputQueryPage(StreamSeite.ID, 'Automatische Updates (Testphase)', 'Neue Versionen kommen von GitHub',
     'Solange Klaus nur getestet wird, liegen die Updates in einem privaten GitHub-Repo. Trag hier den Update-Token ein, ' +
     'den du von Nikola bekommen hast (nur Lesezugriff). Leer lassen = keine automatischen Updates.');
   UpdateSeite.Add('Update-Token:', True);
@@ -131,7 +137,7 @@ end;
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
   Result := IstUpdate() and ((PageID = NamenSeite.ID) or (PageID = SchluesselSeite.ID) or (PageID = EigeneKiSeite.ID) or
-                             (PageID = LokalSeite.ID) or (PageID = UpdateSeite.ID));
+                             (PageID = LokalSeite.ID) or (PageID = StreamSeite.ID) or (PageID = UpdateSeite.ID));
 end;
 
 function Bereinigt(Wert: String): String;
@@ -143,7 +149,7 @@ end;
 
 procedure EnvSchreiben();
 var
-  Datei, Name, EigenKey: String;
+  Datei, Name, EigenKey, Kanal: String;
   Zeilen: TArrayOfString;
 begin
   Datei := ExpandConstant('{app}\.env');
@@ -152,7 +158,13 @@ begin
   if Name = '' then Name := 'Klaus';
   EigenKey := Bereinigt(EigeneKiSeite.Values[1]);
   if (EigenKey = '') and (Bereinigt(EigeneKiSeite.Values[0]) <> '') then EigenKey := 'lokal';   { LM Studio & Co. brauchen keinen }
-  SetArrayLength(Zeilen, 13);
+  Kanal := Lowercase(Bereinigt(StreamSeite.Values[0]));
+  StringChangeEx(Kanal, 'https://', '', True);
+  StringChangeEx(Kanal, 'www.', '', True);
+  StringChangeEx(Kanal, 'twitch.tv/', '', True);
+  StringChangeEx(Kanal, '@', '', True);
+  StringChangeEx(Kanal, '/', '', True);
+  SetArrayLength(Zeilen, 14);
   Zeilen[0] := '# Klaus - Einstellungen (vom Installer angelegt). Vorlage mit allen Optionen: .env.example';
   Zeilen[1] := 'KLAUS_NAME=' + Name;
   Zeilen[2] := 'KLAUS_NUTZER=' + Bereinigt(NamenSeite.Values[1]);
@@ -166,6 +178,7 @@ begin
   Zeilen[10] := 'OLLAMA_MODEL=' + OLLAMA_MODELL;
   Zeilen[11] := 'KLAUS_AUTO_UPDATE=1';
   Zeilen[12] := 'KLAUS_UPDATE_TOKEN=' + Bereinigt(UpdateSeite.Values[0]);
+  Zeilen[13] := 'TWITCH_KANAL=' + Kanal;
   SaveStringsToUTF8File(Datei, Zeilen, False);   { erste Zeile ist ein Kommentar - ein BOM davor stoert nicht }
 end;
 

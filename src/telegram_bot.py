@@ -654,6 +654,8 @@ class TelegramKlaus:
     # Stichworte -> Werkzeuge. Die Ersatz-KI hat ein kleines Minutenbudget; mehr als das Passende zu schicken waere Verschwendung.
     WERKZEUG_GRUPPEN = [
         (r"stimme|klingst|klingen|sprecher|anime|voice|fish|synchron|jjk|charakter|figur", ["stimme"]),
+        (r"twitch|youtube|instagram|insta\b|discord|tiktok|linkedin|twitter|tweet|\bx\b|post(e|en|e mal)?\b|verbind|plattform|"
+         r"webhook|follower|abonnent", ["verbindungen", "posten", "youtube", "twitch"]),
         (r"kalender|termin|morgen|heute|uhr|woche|frei|verabred|seminar", ["kalender_lesen", "termin_eintragen", "zeit_frei"]),
         (r"aktie|b(ö|oe)rse|kurs|depot|bitcoin|dax|nvidia|tesla|apple|analys|chart|markt|trading", ["markt_analyse", "papier_order", "depot_status"]),
         (r"cfd|hebel|demo|capital|gold|forex|devisen|eurusd|short|leerverkauf|us100|nasdaq|dax", ["cfd_demo"]),
