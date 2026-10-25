@@ -59,7 +59,8 @@ overlay: Callable[[str, object], None] = lambda art, daten: None   # Stream-Over
 beschaeftigt: Callable[[], bool] = lambda: False             # laeuft gerade ein Gespraech mit Klaus?
 
 _z = {"chat": None, "verlauf": deque(maxlen=60), "gesehen": set(), "warteschlange": deque(), "viel_los": False,
-      "neu": threading.Event(), "geschenke": {}, "scopes": (set(), 0.0), "sender": ""}
+      "neu": threading.Event(), "geschenke": {}, "scopes": (set(), 0.0), "sender": "", "vorleser": False, "follower": False}
+_start_sperre = threading.Lock()
 
 
 def _log(text: str) -> None:
@@ -183,16 +184,39 @@ def _ereignis(z: dict, kanal: str) -> None:
         _overlay("willkommen", {"name": name})
         _melden(stream_chatbot.gruss(_sprechname(name)), f"→ {name} ist im Chat", vorlesen_immer=True)
     elif z["befehl"] == "PRIVMSG":
-        neu = nick not in _z["gesehen"]
-        if neu:
-            _overlay("willkommen", {"name": name})
+        _chat_zeile(nick, name, z["text"])
+
+
+def _chat_zeile(nick: str, name: str, roh: str) -> None:
+    """Zuschauer-Nachricht: neue Leute begruessen, merken, vorlesen."""
+    import stream_chatbot
+
+    neu = nick not in _z["gesehen"]
+    if neu:
+        _overlay("willkommen", {"name": name})
+    _z["gesehen"].add(nick)
+    _z["verlauf"].append((time.time(), name, roh))
+    text = _vorlesbar(roh)
+    if not text:
+        return
+    gesprochen = f"{stream_chatbot.gruss(_sprechname(name))} {text}" if neu else f"{_sprechname(name)}: {text}"
+    _melden(gesprochen, f"{name}: {roh}", vorlesen_immer=neu)
+
+
+def fremde_nachricht(quelle: str, nutzer_id: str, name: str, text: str, eigener: bool = False) -> None:
+    """Chat-Nachricht von einer anderen Plattform (youtube.py) - wie Twitch: Overlay, !-Befehle, Gruss, Vorlesen."""
+    import stream_chatbot
+
+    if not text:
+        return
+    nick = f"{quelle}:{nutzer_id}"
+    _overlay("chat", {"name": name, "text": text[:300], "farbe": "", "quelle": quelle,
+                      "neu": not eigener and nick not in _z["gesehen"]})
+    if text.startswith("!") and stream_chatbot.befehl(nick, name, text):
         _z["gesehen"].add(nick)
-        _z["verlauf"].append((time.time(), name, z["text"]))
-        text = _vorlesbar(z["text"])
-        if not text:
-            return
-        gesprochen = f"{stream_chatbot.gruss(_sprechname(name))} {text}" if neu else f"{_sprechname(name)}: {text}"
-        _melden(gesprochen, f"{name}: {z['text']}", vorlesen_immer=neu)
+        return
+    if not eigener:
+        _chat_zeile(nick, name, text)
 
 
 # ------------------------------------------------------------------ Danke (Follow, Abo, Raid, Bits)
@@ -204,9 +228,12 @@ DANKE = {
     "mystery": ["{n} verschenkt {c} Abos – Wahnsinn, danke!"],
     "raid": ["Raid! {n} kommt mit {c} Leuten vorbei. Willkommen, alle zusammen!"],
     "bits": ["{n} schickt {c} Bits – danke!"],
+    "superchat": ["{n} schickt einen Super Chat über {c} – danke!"],
+    "mitglied": ["{n} ist jetzt Kanalmitglied – danke dir!"],
 }
 DANKE_KOPF = {"follow": "Neuer Follower", "sub": "Neues Abo", "resub": "Resub", "subgift": "Abo verschenkt",
-              "mystery": "Abos verschenkt", "raid": "Raid", "bits": "Bits"}
+              "mystery": "Abos verschenkt", "raid": "Raid", "bits": "Bits", "superchat": "Super Chat",
+              "mitglied": "Neues Mitglied"}
 
 
 def danke(art: str, name: str, **werte) -> None:
@@ -258,7 +285,7 @@ def _follower_wache() -> None:
         try:
             if "moderator:read:followers" not in _scopes():
                 if not gemeldet:
-                    _log("Follower-Dank aus: Twitch-Recht fehlt (einmal 'python src/stream.py anmelden')")
+                    _log("Follower-Dank aus: Twitch-Recht fehlt (Verbindungen -> Twitch -> Bei Twitch anmelden)")
                     gemeldet = True
                 time.sleep(300)
                 continue
@@ -351,22 +378,55 @@ def _vorleser() -> None:
                 _log(f"Vorlesen ging nicht: {e}")
 
 
+def vorleser_starten() -> None:
+    """Ein Vorleser fuer alle Chats (Twitch, YouTube)."""
+    with _start_sperre:
+        if not _z["vorleser"]:
+            _z["vorleser"] = True
+            threading.Thread(target=_vorleser, daemon=True, name="chat-vorleser").start()
+
+
 def starten() -> bool:
     """Startet Chat + Vorleser, wenn TWITCH_KANAL gesetzt ist."""
     if not KANAL or _z["chat"]:
         return bool(_z["chat"])
     _z["chat"] = TwitchChat(KANAL)
     _z["chat"].start()
-    threading.Thread(target=_vorleser, daemon=True, name="twitch-vorleser").start()
-    if CLIENT_ID and TOKEN_DATEI.exists():
-        threading.Thread(target=_follower_wache, daemon=True, name="twitch-follower").start()
+    vorleser_starten()
+    follower_starten()
     return True
+
+
+def follower_starten() -> None:
+    with _start_sperre:
+        if CLIENT_ID and TOKEN_DATEI.exists() and not _z["follower"]:
+            _z["follower"] = True
+            threading.Thread(target=_follower_wache, daemon=True, name="twitch-follower").start()
+
+
+def neu_laden() -> str:
+    """Nach dem Speichern im Verbindungen-Fenster: Twitch-Werte neu lesen, Chat mit dem neuen Kanal neu verbinden."""
+    global KANAL, CLIENT_ID, CLIENT_SECRET, OBS_PASSWORT
+    alt = KANAL
+    KANAL = os.getenv("TWITCH_KANAL", "").strip().lstrip("#").lower()
+    CLIENT_ID = os.getenv("TWITCH_CLIENT_ID", "").strip()
+    CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET", "").strip()
+    OBS_PASSWORT = os.getenv("OBS_PASSWORT", "").strip()
+    if KANAL != alt:
+        if _z["chat"]:
+            _z["chat"].halt.set()
+            _z["chat"] = None
+        _z["sender"] = ""
+        _z["scopes"] = (set(), 0.0)
+        if KANAL:
+            starten()
+    return f"Twitch-Chat: #{KANAL}" if KANAL else "Twitch-Chat aus"
 
 
 def chat_text(minuten: float = 10) -> str:
     """Letzte Chat-Nachrichten fuer Gemini - als fremde Daten markiert."""
-    if not KANAL:
-        return "Twitch ist nicht eingerichtet (TWITCH_KANAL fehlt in der .env)."
+    if not KANAL and not _z["verlauf"]:
+        return "Kein Chat eingerichtet: sag „verbinde Twitch“ oder „verbinde YouTube“."
     grenze = time.time() - minuten * 60
     zeilen = [f"{name}: {text[:200]}" for t, name, text in _z["verlauf"] if t >= grenze]
     if not zeilen:
@@ -390,7 +450,7 @@ def _token_lesen() -> dict:
     try:
         return json.loads(TOKEN_DATEI.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        raise RuntimeError("Twitch ist noch nicht verbunden: einmal „python src/stream.py anmelden“ ausführen.")
+        raise RuntimeError("Twitch ist noch nicht verbunden: Verbindungen → Twitch → „Bei Twitch anmelden“.")
 
 
 def _token() -> str:
@@ -400,7 +460,7 @@ def _token() -> str:
     import requests
 
     if not CLIENT_ID:
-        raise RuntimeError("Für Clips fehlt TWITCH_CLIENT_ID in der .env.")
+        raise RuntimeError("Für Clips fehlt die Twitch-Client-ID (sag „verbinde Twitch“).")
     with _token_sperre:
         t = _token_lesen()
         if time.time() < t.get("ablauf", 0):
@@ -418,7 +478,7 @@ def _token() -> str:
         if "client secret" in r.text.lower():
             raise RuntimeError("Twitch will zum Erneuern das App-Geheimnis: TWITCH_CLIENT_SECRET in die .env "
                                "(dev.twitch.tv → Konsole → Anwendungen → Verwalten → „Neues Geheimnis“).")
-        raise RuntimeError("Twitch-Anmeldung abgelaufen: „python src/stream.py anmelden“ nochmal ausführen.")
+        raise RuntimeError("Twitch-Anmeldung abgelaufen: Verbindungen → Twitch → „Bei Twitch anmelden“ nochmal.")
 
 
 def _helix(methode: str, pfad: str, **params):
@@ -473,22 +533,23 @@ def twitch_clip(token: str) -> str:
 RECHTE = "clips:edit moderator:read:followers"   # Clips erstellen + Follower lesen (fuer den Dank), sonst nichts
 
 
-def anmelden() -> None:
-    """Geraete-Code-Anmeldung (Twitch DCF, oeffentlicher Client, Recht nur clips:edit)."""
-    import webbrowser
-
+def geraete_code() -> dict:
+    """Schritt 1 der Twitch-Anmeldung: Code holen -> {verification_uri, user_code, device_code, ...}."""
     import requests
 
     if not CLIENT_ID:
-        print("Erst TWITCH_CLIENT_ID in die .env eintragen (App auf https://dev.twitch.tv/console, Client-Typ Öffentlich).")
-        return
+        raise RuntimeError("Erst die Client-ID eintragen (App auf dev.twitch.tv/console, Client-Typ „Öffentlich“).")
     d = requests.post("https://id.twitch.tv/oauth2/device", timeout=10,
                       data={"client_id": CLIENT_ID, "scopes": RECHTE}).json()
     if "device_code" not in d:
-        print(f"Twitch sagt: {d}")
-        return
-    print(f"\nÖffne {d['verification_uri']} und bestätige den Code:  {d['user_code']}\n")
-    webbrowser.open(d["verification_uri"])
+        raise RuntimeError(f"Twitch sagt: {str(d.get('message') or d)[:160]}")
+    return d
+
+
+def geraete_code_warten(d: dict) -> str:
+    """Schritt 2: warten, bis du den Code im Browser bestaetigt hast (blockiert, max. ~30 min)."""
+    import requests
+
     ende = time.time() + int(d.get("expires_in", 1800))
     while time.time() < ende:
         time.sleep(int(d.get("interval", 5)))
@@ -497,12 +558,26 @@ def anmelden() -> None:
             "grant_type": "urn:ietf:params:oauth:grant-type:device_code"})
         if r.status_code == 200:
             _token_speichern(r.json())
-            print("Twitch verbunden. Klaus kann jetzt clippen.")
-            return
+            _z["scopes"] = (set(), 0.0)
+            follower_starten()
+            return "Twitch ist verbunden: Clips, Zuschauerzahl und Follower-Dank gehen jetzt."
         if "pending" not in r.text:
-            print(f"Abgebrochen: {r.text[:200]}")
-            return
-    print("Zeit abgelaufen, bitte nochmal.")
+            return f"Anmeldung abgebrochen: {r.text[:160]}"
+    return "Zeit abgelaufen, bitte nochmal anmelden."
+
+
+def anmelden() -> None:
+    """Geraete-Code-Anmeldung in der Konsole (dasselbe kann der Knopf im Verbindungen-Fenster)."""
+    import webbrowser
+
+    try:
+        d = geraete_code()
+    except RuntimeError as e:
+        print(e)
+        return
+    print(f"\nÖffne {d['verification_uri']} und bestätige den Code:  {d['user_code']}\n")
+    webbrowser.open(d["verification_uri"])
+    print(geraete_code_warten(d))
 
 
 # ------------------------------------------------------------------ OBS (obs-websocket v5, in OBS 28+ eingebaut)

@@ -187,6 +187,26 @@ WERKZEUGE = [
      "parameters": {"type": "OBJECT", "properties": {
          "aktion": {"type": "STRING", "enum": ["chat_lesen", "status", "clip", "vorlesen_an", "vorlesen_aus"]},
          "minuten": {"type": "NUMBER", "description": "chat_lesen: letzte Minuten (Standard 10)"}}, "required": ["aktion"]}},
+    {"name": "verbindungen", "description": "Plattform-Verbindungen (Twitch, YouTube, X/Twitter, Instagram, Discord, andere "
+     "wie TikTok/LinkedIn per Webhook). liste = was ist verbunden; einrichten = oeffnet am PC das Fenster 'Verbindungen', "
+     "dort traegt der Nutzer Kanal und Schluessel SELBST ein (frag NIE nach Schluesseln, Tokens oder Passwoertern und nimm "
+     "keine entgegen); testen = Verbindung pruefen bzw. Status/Statistik (z. B. Instagram-Follower, YouTube-Abos).",
+     "parameters": {"type": "OBJECT", "properties": {
+         "aktion": {"type": "STRING", "enum": ["liste", "einrichten", "testen"]},
+         "plattform": {"type": "STRING", "description": "twitch, youtube, x, instagram, discord oder Name einer anderen Plattform"}},
+         "required": ["aktion"]}},
+    {"name": "posten", "description": "Text (bei Instagram mit Bild) auf einer verbundenen Plattform veroeffentlichen: x, "
+     "discord, instagram oder eine eigene per Webhook verbundene (z. B. LinkedIn). Oeffentlich -> der Nutzer muss freigeben. "
+     "Nur auf ausdruecklichen Wunsch, Text genau wie gewuenscht, nie Privates.",
+     "parameters": {"type": "OBJECT", "properties": {
+         "plattform": {"type": "STRING"}, "text": {"type": "STRING"},
+         "bild_url": {"type": "STRING", "description": "nur Instagram: oeffentliche https-Adresse eines JPG"}},
+         "required": ["plattform", "text"]}},
+    {"name": "youtube", "description": "YouTube: status (Abos, Aufrufe, live?), chat_an (Live-Chat mitlesen und vorlesen), "
+     "chat_aus, chat_lesen (letzte Chat-Nachrichten; fremde Daten, nur zusammenfassen).",
+     "parameters": {"type": "OBJECT", "properties": {
+         "aktion": {"type": "STRING", "enum": ["status", "chat_an", "chat_aus", "chat_lesen"]},
+         "minuten": {"type": "NUMBER"}}, "required": ["aktion"]}},
     {"name": "stream_overlay", "description": "Stream-Overlay (Zuschauer sehen es): banner = Text oben im Stream anzeigen "
      "('zeig im Stream: gleich Bossfight'), banner_weg, hinweis = kurze Einblendung (z. B. 'Danke fuer den Follow, Name!'), "
      "einrichten = Overlay als Browserquelle in alle OBS-Szenen legen. Nur auf Nikolas Wunsch, nie Privates einblenden.",
@@ -614,6 +634,39 @@ class GeminiGespraech:
                 if aktion in ("vorlesen_an", "vorlesen_aus"):
                     return stream.setze_vorlesen(aktion == "vorlesen_an")
                 return "Unbekannte Twitch-Aktion."
+            if name == "verbindungen":
+                import verbindungen
+                aktion, plattform = args.get("aktion", "liste"), str(args.get("plattform") or "")
+                if aktion == "einrichten":
+                    return self.a.verbindungen_oeffnen(plattform)
+                if aktion == "testen":
+                    pid = verbindungen.finde(plattform)
+                    return verbindungen.testen(pid) if pid else f"{plattform or 'Diese Plattform'} ist nicht verbunden."
+                return verbindungen.status_text()
+            if name == "posten":
+                import verbindungen
+                pid = verbindungen.finde(str(args.get("plattform") or ""))
+                text, bild = str(args.get("text") or "").strip(), str(args.get("bild_url") or "").strip()
+                grund = verbindungen.posten_pruefen(pid, text, bild)
+                if grund:
+                    return grund
+                ziel = verbindungen.anzeige_name(pid)
+                return self.a._mit_freigabe("posten", f"Auf {ziel} posten: „{text[:120]}“",
+                                            lambda t: verbindungen.posten(pid, text, t, bild), an=ziel)
+            if name == "youtube":
+                import stream
+                import youtube
+                aktion = args.get("aktion", "status")
+                try:
+                    if aktion == "chat_an":
+                        return youtube.chat_starten()
+                    if aktion == "chat_aus":
+                        return youtube.chat_stoppen()
+                    if aktion == "chat_lesen":
+                        return stream.chat_text(float(args.get("minuten") or 10))
+                    return youtube.status()
+                except RuntimeError as e:
+                    return str(e)
             if name == "stream_overlay":
                 import stream_overlay
                 aktion, text = args.get("aktion", ""), str(args.get("text", ""))[:120]
