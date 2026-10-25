@@ -30,7 +30,19 @@ let aktuellesThema = "jarvis";
 function wendeThemaAn(name) {
   const accent = { jarvis: [189, 199, 190], ironman: [217, 166, 148], matrix: [171, 194, 164], synthwave: [193, 179, 199], gold: [213, 186, 133], arktis: [188, 200, 208] };
   const eigen = /^#[0-9a-f]{6}$/i.test(name || "") ? [1, 3, 5].map((i) => parseInt(name.slice(i, i + 2), 16)) : null;
-  const t = { ...(THEMEN[name] || THEMEN.jarvis), haupt: eigen || accent[name] || accent.gold, zweit: [226, 184, 119], bg: "#191918", glow: "#35302a", text: "#f1ede4" };
+  const basis = THEMEN[name] || THEMEN.jarvis;
+  // Ganzes Design, nicht nur der Kern: Hintergrund, Flaechen, Rahmen und Text werden leicht in der Designfarbe getoent
+  // (Rot/Gruen/Bernstein fuer Fehler, Fertig und Freigabe bleiben fest). Eigene Farbe: Palette daraus abgeleitet.
+  const leuchtend = eigen || basis.haupt;
+  const mische = (farbe, grund, anteil) => farbe.map((w, i) => Math.round(w * anteil + grund[i] * (1 - anteil)));
+  const zweit = eigen ? [eigen[2], eigen[0], eigen[1]].map((w, i) => Math.round(w * 0.6 + [226, 184, 119][i] * 0.4))
+                      : mische(basis.zweit, [226, 184, 119], 0.55);
+  const t = { haupt: eigen || accent[name] || accent.gold, zweit,
+              bg: mische(leuchtend, [17, 17, 16], 0.06), tief: mische(leuchtend, [22, 22, 21], 0.07),
+              glas: mische(leuchtend, [31, 31, 29], 0.08), hoch: mische(leuchtend, [37, 37, 35], 0.09),
+              meldung: mische(leuchtend, [46, 44, 40], 0.14), glow: mische(leuchtend, [24, 24, 22], 0.3),
+              text: mische(leuchtend, [243, 240, 233], 0.07), dim: mische(leuchtend, [206, 200, 189], 0.1),
+              leise: mische(leuchtend, [168, 163, 153], 0.12), hell: mische(eigen || accent[name] || accent.gold, [236, 231, 220], 0.45) };
   aktuellesThema = eigen ? name.toLowerCase() : THEMEN[name] ? name : "jarvis";
   const s = document.documentElement.style;
   const hex = (rgb) => "#" + rgb.map((w) => w.toString(16).padStart(2, "0")).join("");
@@ -38,9 +50,11 @@ function wendeThemaAn(name) {
   s.setProperty("--rgb2", t.zweit.join(", "));
   s.setProperty("--cyan", hex(t.haupt));
   s.setProperty("--bernstein", hex(t.zweit));
-  s.setProperty("--bg", t.bg);
-  s.setProperty("--glow", t.glow);
-  s.setProperty("--text", t.text);
+  for (const [variable, wert] of [["--bg", t.bg], ["--tief", t.tief], ["--glas", t.glas], ["--hoch", t.hoch], ["--meldung", t.meldung],
+                                  ["--glow", t.glow], ["--text", t.text], ["--text-dim", t.dim], ["--leise", t.leise], ["--hell", t.hell]]) {
+    s.setProperty(variable, hex(wert));
+  }
+  t.bg = hex(t.bg);
   for (const z of ["aus", "start", "hoeren"]) ORB_FARBEN[z] = t.haupt;
   ORB_FARBEN.sprechen = t.haupt.map((w) => Math.round(w * 0.88));
   ORB_FARBEN.denken = t.haupt;   // Stark: das Auge bleibt beim Denken in der Hauptfarbe
