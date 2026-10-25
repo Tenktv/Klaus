@@ -121,7 +121,7 @@ begin
 
   UpdateSeite := CreateInputQueryPage(StreamSeite.ID, 'Automatische Updates (Testphase)', 'Neue Versionen kommen von GitHub',
     'Solange Klaus nur getestet wird, liegen die Updates in einem privaten GitHub-Repo. Trag hier den Update-Token ein, ' +
-    'den du von Nikola bekommen hast (nur Lesezugriff). Leer lassen = keine automatischen Updates.');
+    'den du von Nikola bekommen hast (nur Lesezugriff). Hast du keinen, leer lassen – nachtragen geht später in den Einstellungen (.env).');
   UpdateSeite.Add('Update-Token:', True);
 end;
 
