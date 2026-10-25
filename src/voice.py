@@ -123,6 +123,25 @@ def sprich(text: str, stumm: bool, on_pegel=None, abbruch=None) -> None:
 
 
 # ----------------------------------------------------------------- Stimme rein
+def _whisper_laden(WhisperModel, modell: str, **optionen):
+    """Laedt das Whisper-Modell. Ist der Download beim ersten Start abgebrochen (model.bin fehlt im Cache),
+    wird der kaputte Cache-Ordner geloescht und einmal neu geladen - sonst startet Klaus nie wieder."""
+    try:
+        return WhisperModel(modell, **optionen)
+    except RuntimeError as e:
+        m = re.search(r"in model '([^']+)'", str(e))
+        if "model.bin" not in str(e) or not m:
+            raise
+        ordner = Path(m.group(1))
+        while ordner.parent != ordner and not ordner.name.startswith("models--"):
+            ordner = ordner.parent
+        if not ordner.name.startswith("models--"):
+            raise
+        print(f"  Download der Spracherkennung war unvollstaendig - lade neu ({ordner.name})")
+        shutil.rmtree(ordner, ignore_errors=True)
+        return WhisperModel(modell, **optionen)
+
+
 class Ohr:
     def __init__(self, freihand: bool = True) -> None:
         import numpy as np
@@ -139,7 +158,7 @@ class Ohr:
             # medium/large sind auf der CPU zu langsam fuers Gespraech -> small
             cpu_modell = WHISPER_MODEL if WHISPER_MODEL in ("tiny", "base", "small") else "small"
             print(f"  (Grafikkarte nicht nutzbar: {str(e)[:80]})")
-            self.model = WhisperModel(cpu_modell, device="cpu", compute_type="int8")
+            self.model = _whisper_laden(WhisperModel, cpu_modell, device="cpu", compute_type="int8")
             print(f"  -> laeuft auf der CPU ({cpu_modell})")
         self.geraet = self._finde_mikro()
         self.freihand = freihand

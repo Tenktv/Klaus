@@ -20,13 +20,14 @@ from pathlib import Path
 
 from PySide6.QtCore import QBuffer, QFileInfo, QIODevice, QObject, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtWebChannel import QWebChannel
-from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
+from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineScript
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtGui import QColor, QPainter, QPen, QRadialGradient
 from PySide6.QtWidgets import QApplication, QFileIconProvider, QWidget
 
 import apps
 import daten
+import identitaet
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 STARTMENUE = [
@@ -550,8 +551,67 @@ class LogSeite(QWebEnginePage):
             print(f"[JS] {Path(quelle).name}:{zeile} {text}")
 
 
+# Eigener Name (KLAUS_NAME, z. B. "Lumine") und eigener Nutzername (KLAUS_NUTZER): ueberall in der Oberflaeche statt
+# "Klaus"/"Nikola" - Texte, Tooltips, Platzhalter, auch was spaeter dazukommt. Nur sichtbarer Text; Code, Klassen, IDs bleiben.
+NAME_SKRIPT = """
+(() => {
+  const PAARE = %s.map(([muster, ersatz]) => [new RegExp(muster, "g"), ersatz]);
+  const ersetze = s => PAARE.reduce((t, [r, e]) => t.replace(r, e), s);
+  const knoten = n => {
+    if (n.nodeType === 3) { const t = ersetze(n.nodeValue); if (t !== n.nodeValue) n.nodeValue = t; return; }
+    if (n.nodeType !== 1 || n.tagName === "SCRIPT" || n.tagName === "STYLE") return;
+    for (const a of ["title", "placeholder", "aria-label"]) {
+      const v = n.getAttribute(a);
+      if (v && ersetze(v) !== v) n.setAttribute(a, ersetze(v));
+    }
+    n.childNodes.forEach(knoten);
+  };
+  const los = () => {
+    document.title = ersetze(document.title);
+    const stil = document.createElement("style");
+    stil.textContent = %s;
+    document.head.append(stil);
+    knoten(document.body);
+    new MutationObserver(liste => liste.forEach(m => m.type === "childList" ? m.addedNodes.forEach(knoten) : knoten(m.target)))
+      .observe(document.body, {childList: true, subtree: true, characterData: true,
+                               attributes: true, attributeFilter: ["title", "placeholder", "aria-label"]});
+  };
+  document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", los) : los();
+})();
+"""
+
+
+def name_skript() -> str:
+    """JavaScript fuer die Web-Seiten - "" wenn alles beim Standard (Klaus / Nikola) bleibt."""
+    paare, stil = [], ""
+    if identitaet.NAME != identitaet.STANDARD_NAME:
+        gross = identitaet.NAME.upper()
+        paare += [[r"\bKlaus\b", identitaet.NAME], [r"\bKLAUS\b", gross], [r"K\.L\.A\.U\.S\.", ".".join(gross) + "."]]
+        stil = (f".klaus::before {{ content: {json.dumps(gross)} !important; }} "
+                ".boot-unter { visibility: hidden; }")   # "KLESRO LOGISTIC AUTONOMOUS UTILITY SYSTEM" passt nur zu K.L.A.U.S.
+    if identitaet.fremder_nutzer():
+        paare += [[r"\bNikola\b", identitaet.NUTZER], [r"\bNIKOLA\b", identitaet.NUTZER.upper()]]
+    if not paare:
+        return ""
+    return NAME_SKRIPT % (json.dumps(paare, ensure_ascii=False), json.dumps(stil))
+
+
+def _name_einsetzen(seite: QWebEnginePage) -> None:
+    quelle = name_skript()
+    if not quelle:
+        return
+    skript = QWebEngineScript()
+    skript.setName("klaus-name")
+    skript.setSourceCode(quelle)
+    skript.setInjectionPoint(QWebEngineScript.DocumentReady)
+    skript.setWorldId(QWebEngineScript.MainWorld)
+    skript.setRunsOnSubFrames(False)
+    seite.scripts().insert(skript)
+
+
 def _web_ansicht(ansicht: QWebEngineView, seite: str, bruecke: WebBruecke, abfrage: str = "") -> None:
     ansicht.setPage(LogSeite(ansicht))
+    _name_einsetzen(ansicht.page())
     kanal = QWebChannel(ansicht.page())
     kanal.registerObject("klaus", bruecke)
     ansicht.page().setWebChannel(kanal)

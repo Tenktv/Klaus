@@ -941,7 +941,7 @@ class Assistent:
     # ---------------------------------------------------------------- Bausteine
     def zeige(self, zustand: str, text: str | None = None) -> None:
         if text is not None:
-            self.b.text.emit(text)
+            self.b.text.emit(identitaet.anpassen(text))   # "Bereit – sag „Klaus“" -> eigener Name
         self.b.zustand.emit(zustand)
 
     def per_telegram(self) -> bool:
