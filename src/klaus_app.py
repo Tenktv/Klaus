@@ -175,6 +175,14 @@ class Steuerung(QObject):
         setze_thema(name)
 
     @Slot(bool)
+    def chat_fenster(self, auf: bool) -> None:
+        """'Klaus, mach den Chat auf' / '... Chat zu' (Sprache, Werkzeug oder Telegram)."""
+        if auf:
+            self.chat.zeige()
+        else:
+            self.chat.hide()
+
+    @Slot(bool)
     def stumm_geaendert(self, an: bool) -> None:
         self._setze_haken(0, an)
         if self.spielmodus:
@@ -445,6 +453,7 @@ def main() -> None:
     bruecke.nachricht.connect(steuerung.nachricht)
     bruecke.zustand.connect(steuerung.zustand)
     bruecke.thema.connect(steuerung.thema)
+    bruecke.chat_fenster.connect(steuerung.chat_fenster)
     bruecke.thema.connect(zweit_bruecke.thema)
     bruecke.panel.connect(panel_bruecke.panelBefehl)
     bruecke.holo.connect(panel_bruecke.holo)

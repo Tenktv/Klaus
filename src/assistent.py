@@ -44,6 +44,13 @@ OEFFNE = [
 SUCHE = re.compile(r"^(?:kannst du\s+)?(?:such|suche|google|googel)\s+(?:mal\s+)?(?:nach\s+)?(?P<was>.+?)[.!?]*$", re.I)
 PLANEN = re.compile(r"\b(website|webseite|homepage|landing ?page|onlineshop|planen|bauen|programmier\w*)\b", re.I)
 STILL = re.compile(r"^\W*(danke|nichts|schon gut|stopp?|vergiss es|egal|tsch(ü|ue)ss|bis sp(ä|ae)ter)\b", re.I)
+# "mach den Chat auf", "oeffne das Chatfenster", "Chat zu" - ohne KI, damit es auch ohne Gemini geht
+_CHAT = r"chat(?:-?fenster)?"
+CHAT_ZU = re.compile(rf"\bmach\w*\s+(?:mir\s+)?(?:den|das)?\s*{_CHAT}\s+(?:zu|weg)\b"
+                     rf"|\bschlie(?:ss|ß)\w*\s+(?:den|das)?\s*{_CHAT}\b|\b{_CHAT}\s+(?:zu|weg|schlie(?:ss|ß)en)\b", re.I)
+CHAT_AUF = re.compile(rf"\bmach\w*\s+(?:mir\s+)?(?:den|das|ein)?\s*{_CHAT}\s+auf\b"
+                      rf"|\b(?:oeffne|öffne|zeig|hol)\w*\s+(?:mir\s+)?(?:den|das|ein)?\s*{_CHAT}\b"
+                      rf"|\b{_CHAT}\s+(?:auf|oeffnen|öffnen|zeigen)\b", re.I)
 DESIGN = re.compile(r"\b(farb\w*|design\w*|thema|theme|look|stil|modus|palette)\b", re.I)
 # Gesprochene Woerter -> Design-Variante (Namen wie in fenster.THEMEN)
 DESIGN_WOERTER = [
@@ -168,6 +175,7 @@ class Bruecke(QObject):
     pc_nutzung = Signal(str)  # "Klaus benutzt gerade den PC" als JSON: {aktiv, arten, was, rest} (pc_zugriff.py)
     mini = Signal(bool)  # Spielmodus an/aus (klaus_app.Spielmodus)
     chat = Signal(str)  # Twitch-Chat-Zeile als Sprechblase am Mini-Orb (stream.py)
+    chat_fenster = Signal(bool)  # Klaus-Chatfenster oeffnen (True) / schliessen (False) - "mach den Chat auf"
 
 
 class Pipeline:
@@ -1409,6 +1417,12 @@ class Assistent:
             self.b.panel.emit(json.dumps(aktion))
             self.zeige("aktion", antwort)
             self.sage(antwort, zustand="aktion")
+            return
+
+        if CHAT_ZU.search(befehl) or CHAT_AUF.search(befehl):
+            auf = not CHAT_ZU.search(befehl)
+            self.b.chat_fenster.emit(auf)
+            self.sage("Chat ist offen." if auf else "Chat ist zu.", zustand="aktion")
             return
 
         design = self.design_wunsch(befehl)
