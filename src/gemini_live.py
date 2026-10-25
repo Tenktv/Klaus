@@ -304,6 +304,10 @@ WERKZEUGE = [
      "parameters": {"type": "OBJECT", "properties": {}}},
     {"name": "gespraech_beenden", "description": "Beendet das Gespraech, wenn der Nutzer sich verabschiedet oder fertig ist.",
      "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "chat_fenster", "description": "Oeffnet oder schliesst Klaus' Chatfenster am PC (zum Tippen und Mitlesen), "
+     "z. B. 'mach den Chat auf', 'zeig mir das Chatfenster', 'Chat zu'.",
+     "parameters": {"type": "OBJECT", "properties": {"aktion": {"type": "STRING", "enum": ["oeffnen", "schliessen"]}},
+                    "required": ["aktion"]}},
     {"name": "stimme", "description": "Klaus' Stimme: zeigen (alle Stimmen), wechseln (z. B. Anime-Maedchen, Sensei, Charon, eigene), "
      "variante (eigene Version einer Microsoft-Stimme mit tonhoehe/tempo), fish (fertige Stimme von fish.audio per link, z. B. eine "
      "Anime-Figur), entwerfen (neue Stimme nach beschreibung), klonen (aus Sprachprobe im Ordner data/stimmen/eigene), loeschen.",
@@ -428,6 +432,10 @@ class GeminiGespraech:
         if name == "programm_aktion":
             aktion, pid = args.get("aktion", ""), args.get("id", "")
             return a._mit_freigabe("programm", f"{pid} {aktion}", lambda t: rechte.programm(aktion, pid, t), an="winget")
+        if name == "chat_fenster":
+            auf = (args.get("aktion") or "oeffnen") != "schliessen"
+            a.b.chat_fenster.emit(auf)
+            return "Chatfenster ist offen." if auf else "Chatfenster ist zu."
         if name == "stimme":
             akt, nm = (args.get("aktion") or "zeigen").lower(), (args.get("name") or "").strip()
             try:
@@ -552,7 +560,8 @@ class GeminiGespraech:
                     return "Abgelehnt: Ich loesche nur, was ich vorher mit datei_suchen gefunden habe. Bitte erst suchen."
                 return self.a.loeschen_starten(pfad)
             if name in ("fenster_steuern", "fenster_liste", "datei_kopieren", "datei_verschieben", "programm_suchen",
-                        "programm_aktion", "lautstaerke", "bluetooth", "bildschirmfoto", "zwischenablage", "claude_remote_starten", "pc_ausschalten"):
+                        "programm_aktion", "lautstaerke", "bluetooth", "bildschirmfoto", "zwischenablage", "claude_remote_starten", "pc_ausschalten",
+                        "stimme", "chat_fenster"):
                 return self._rechte(name, args)
             if name == "mikrofon":
                 self.a.setze_mikro_aus(not args.get("an"))
