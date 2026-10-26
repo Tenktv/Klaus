@@ -217,7 +217,7 @@ class Steuerung(QObject):
     @Slot(str)
     def meldung(self, text: str) -> None:
         if self.tray:
-            self.tray.showMessage("Klaus", text, self.tray.icon(), 4000)
+            self.tray.showMessage(identitaet.NAME, text, self.tray.icon(), 4000)
 
 
 class Spielmodus(QObject):
@@ -576,6 +576,23 @@ def main() -> None:
     stimme.triggered.connect(lambda: os.startfile(BASE_DIR / "Stimme-waehlen.bat"))
     projekte = QAction("Projekte-Ordner öffnen")
     projekte.triggered.connect(lambda: apps.oeffne("klaus projekte"))
+    update_suchen = QAction("Nach Updates suchen")
+
+    def updates_suchen() -> None:
+        import pc_update
+
+        tray.showMessage(identitaet.NAME, f"Suche nach Updates (installiert: {pc_update.version()}) …", symbol, 3000)
+
+        def los() -> None:
+            try:
+                text = pc_update.jetzt_pruefen(assistent)
+            except Exception as e:
+                text = f"Update-Suche ging nicht: {str(e)[:150]}"
+            print(f"[Update] {text}", flush=True)
+            bruecke.meldung.emit(text)
+        threading.Thread(target=los, daemon=True).start()
+
+    update_suchen.triggered.connect(updates_suchen)
     log = QAction("Log öffnen")
     log.triggered.connect(lambda: LOG_PATH.exists() and os.startfile(LOG_PATH))
     verbindungen = QAction("Verbindungen (Twitch, YouTube, X …) …")
@@ -589,7 +606,7 @@ def main() -> None:
         app.quit()
 
     ende.triggered.connect(beenden)
-    for eintrag in (stumm, mikro_aus, spiel_an, spiel_auto, chat_oeffnen, panel_an, taskleiste_aus, autostart, stimme, verbindungen, projekte, log):
+    for eintrag in (stumm, mikro_aus, spiel_an, spiel_auto, chat_oeffnen, panel_an, taskleiste_aus, autostart, stimme, verbindungen, update_suchen, projekte, log):
         menue.addAction(eintrag)
     menue.addSeparator()
     menue.addAction(ende)
