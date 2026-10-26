@@ -50,7 +50,7 @@ def senden(art: str, daten=None) -> None:
 def _thema() -> str:
     try:
         import daten
-        return daten.lade_einstellungen().get("thema", "gold")
+        return daten.lade_einstellungen().get("thema", "jarvis")
     except Exception:
         return "gold"
 

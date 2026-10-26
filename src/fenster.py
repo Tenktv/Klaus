@@ -908,7 +908,7 @@ class MiniOrb(QWidget):
         self._druck = self._start = None
         self._gezogen = False
         self.blase = MiniBlase()
-        MiniOrb.HAUPT = thema_farbe(daten.lade_einstellungen().get("thema", "gold"))
+        MiniOrb.HAUPT = thema_farbe(daten.lade_einstellungen().get("thema", "jarvis"))
         MiniOrb.alle.append(self)
         self.dreh = QTimer(self, interval=50)   # 20 Bilder/s (~2,8 ms je Bild), nur solange Klaus hoert/denkt/spricht; in Ruhe steht das Bild
         self.dreh.timeout.connect(self._drehen)
