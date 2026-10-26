@@ -72,6 +72,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 import apps
 import daten
 import gehirn
+import identitaet
 from assistent import Assistent, Bruecke
 from daten import lade_einstellungen, speichere_einstellung
 from fenster import (ChatFenster, DesktopPanel, MiniOrb, OrbOverlay, PcNutzungHinweis, WebBruecke, ZweitFenster, setze_thema, taskleiste_verstecken,
@@ -511,6 +512,29 @@ def main() -> None:
         speichere_einstellung("panel", an)
 
     panel_an.toggled.connect(panel_umschalten)
+    minimiert = [False]
+
+    def panel_minimieren() -> None:
+        """Knopf oben rechts: Panel weg (nur fuer jetzt - beim naechsten Start ist es wieder da)."""
+        minimiert[0] = True
+        panel_an.blockSignals(True)
+        panel_an.setChecked(False)
+        panel_an.blockSignals(False)
+        panel.einschalten(False)
+        tray.showMessage(identitaet.NAME, "Panel minimiert – Klick auf mein Symbol in der Taskleiste holt es zurück.",
+                         symbol, 4000)
+
+    def tray_klick() -> None:
+        if minimiert[0]:
+            minimiert[0] = False
+            panel_an.blockSignals(True)
+            panel_an.setChecked(True)
+            panel_an.blockSignals(False)
+            panel.einschalten(True)
+        else:
+            zeige_chat()
+
+    panel_bruecke.minimieren.connect(panel_minimieren)
     taskleiste_aus = QAction("Taskleiste ausblenden", checkable=True, checked=taskleiste_versteckt())
 
     def taskleiste_umschalten(an: bool) -> None:
@@ -570,7 +594,7 @@ def main() -> None:
     menue.addSeparator()
     menue.addAction(ende)
     tray.setContextMenu(menue)
-    tray.activated.connect(lambda grund: grund == QSystemTrayIcon.Trigger and zeige_chat())
+    tray.activated.connect(lambda grund: grund == QSystemTrayIcon.Trigger and tray_klick())
     tray.show()
     steuerung.tray = tray
     bruecke.meldung.connect(steuerung.meldung)
