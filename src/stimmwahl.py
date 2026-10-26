@@ -44,6 +44,18 @@ EINGEBAUT = [
     {"name": "Aoede", "art": "gemini", "id": "Aoede", "info": "hell, weiblich"},
     {"name": "Leda", "art": "gemini", "id": "Leda", "info": "jung, weiblich"},
     {"name": "Zephyr", "art": "gemini", "id": "Zephyr", "info": "hell, freundlich"},
+    {"name": "Sulafat", "art": "gemini", "id": "Sulafat", "info": "warm"},
+    {"name": "Achird", "art": "gemini", "id": "Achird", "info": "freundlich"},
+    {"name": "Gacrux", "art": "gemini", "id": "Gacrux", "info": "reif, erfahren"},
+    {"name": "Algenib", "art": "gemini", "id": "Algenib", "info": "rau, kratzig"},
+    {"name": "Enceladus", "art": "gemini", "id": "Enceladus", "info": "hauchig, leise"},
+    {"name": "Laomedeia", "art": "gemini", "id": "Laomedeia", "info": "beschwingt"},
+    {"name": "Sadachbia", "art": "gemini", "id": "Sadachbia", "info": "lebhaft"},
+    {"name": "Vindemiatrix", "art": "gemini", "id": "Vindemiatrix", "info": "sanft"},
+    {"name": "Zubenelgenubi", "art": "gemini", "id": "Zubenelgenubi", "info": "lässig"},
+    {"name": "Rasalgethi", "art": "gemini", "id": "Rasalgethi", "info": "sachlich, erklärend"},
+    {"name": "Schedar", "art": "gemini", "id": "Schedar", "info": "ausgeglichen"},
+    {"name": "Despina", "art": "gemini", "id": "Despina", "info": "weich, glatt"},
     # Microsoft (natuerlich, kostenlos)
     {"name": "Florian", "art": "edge", "id": "de-DE-FlorianMultilingualNeural", "info": "maennlich, natuerlich"},
     {"name": "Seraphina", "art": "edge", "id": "de-DE-SeraphinaMultilingualNeural", "info": "weiblich, natuerlich"},
@@ -64,6 +76,43 @@ EINGEBAUT = [
      "info": "ruhig, weise"},
     {"name": "Chibi", "art": "edge", "id": "de-DE-AmalaNeural", "tonhoehe": "+55Hz", "tempo": "+18%",
      "info": "sehr hoch, niedlich"},
+    # Microsoft: Oesterreich und Schweiz (kostenlos, ohne Schluessel)
+    {"name": "Ingrid", "art": "edge", "id": "de-AT-IngridNeural", "info": "weiblich, österreichisch"},
+    {"name": "Jonas", "art": "edge", "id": "de-AT-JonasNeural", "info": "männlich, österreichisch"},
+    {"name": "Leni", "art": "edge", "id": "de-CH-LeniNeural", "info": "weiblich, schweizerisch"},
+    {"name": "Jan", "art": "edge", "id": "de-CH-JanNeural", "info": "männlich, schweizerisch"},
+    # Microsoft "Multilingual": sprechen Deutsch mit Akzent
+    {"name": "Andrew", "art": "edge", "id": "en-US-AndrewMultilingualNeural", "info": "warm, amerikanischer Akzent"},
+    {"name": "Ava", "art": "edge", "id": "en-US-AvaMultilingualNeural", "info": "freundlich, amerikanischer Akzent"},
+    {"name": "Brian", "art": "edge", "id": "en-US-BrianMultilingualNeural", "info": "locker, amerikanischer Akzent"},
+    {"name": "Emma", "art": "edge", "id": "en-US-EmmaMultilingualNeural", "info": "fröhlich, amerikanischer Akzent"},
+    {"name": "Vivienne", "art": "edge", "id": "fr-FR-VivienneMultilingualNeural", "info": "französischer Akzent"},
+    {"name": "Rémy", "art": "edge", "id": "fr-FR-RemyMultilingualNeural", "info": "französischer Akzent, männlich"},
+    {"name": "Giuseppe", "art": "edge", "id": "it-IT-GiuseppeMultilingualNeural", "info": "italienischer Akzent"},
+    # Figuren (verstellte Microsoft-Stimmen)
+    {"name": "Erzähler", "art": "edge", "id": "de-DE-FlorianMultilingualNeural", "tonhoehe": "-4Hz", "tempo": "-10%",
+     "info": "ruhig, wie ein Hörbuch"},
+    {"name": "Opa", "art": "edge", "id": "de-DE-ConradNeural", "tonhoehe": "-22Hz", "tempo": "-18%", "info": "alt, gemütlich"},
+    {"name": "Kind", "art": "edge", "id": "de-DE-KillianNeural", "tonhoehe": "+40Hz", "tempo": "+6%", "info": "jung, hell"},
+    {"name": "Moderator", "art": "edge", "id": "de-DE-KillianNeural", "tonhoehe": "+4Hz", "tempo": "+20%",
+     "info": "schnell, wie im Radio"},
+    {"name": "Kriegerin", "art": "edge", "id": "de-DE-KatjaNeural", "tonhoehe": "-10Hz", "tempo": "+4%", "info": "fest, mutig"},
+    {"name": "Magierin", "art": "edge", "id": "de-DE-SeraphinaMultilingualNeural", "tonhoehe": "+12Hz", "tempo": "-8%",
+     "info": "sanft, geheimnisvoll"},
+    {"name": "Riese", "art": "edge", "id": "de-DE-ConradNeural", "tonhoehe": "-35Hz", "tempo": "-12%", "info": "sehr tief"},
+    # Lokal (Piper): laufen ohne Internet; beim ersten Auswaehlen automatisch heruntergeladen (~20-110 MB)
+    {"name": "Thorsten", "art": "piper", "id": "data/stimmen/de_DE-thorsten-high.onnx", "laden": "de_DE-thorsten-high",
+     "info": "männlich, offline, beste Qualität"},
+    {"name": "Kerstin", "art": "piper", "id": "data/stimmen/de_DE-kerstin-low.onnx", "laden": "de_DE-kerstin-low",
+     "info": "weiblich, offline"},
+    {"name": "Ramona", "art": "piper", "id": "data/stimmen/de_DE-ramona-low.onnx", "laden": "de_DE-ramona-low",
+     "info": "weiblich, offline"},
+    {"name": "Eva", "art": "piper", "id": "data/stimmen/de_DE-eva_k-x_low.onnx", "laden": "de_DE-eva_k-x_low",
+     "info": "weiblich, offline, sehr schnell"},
+    {"name": "Karlsson", "art": "piper", "id": "data/stimmen/de_DE-karlsson-low.onnx", "laden": "de_DE-karlsson-low",
+     "info": "männlich, offline"},
+    {"name": "Pavoque", "art": "piper", "id": "data/stimmen/de_DE-pavoque-low.onnx", "laden": "de_DE-pavoque-low",
+     "info": "männlich, offline"},
 ]
 
 
@@ -88,8 +137,25 @@ def _speichern(d: dict) -> None:
 
 
 def _piper() -> list[dict]:
-    return [{"name": p.stem.replace("de_DE-", "").replace("-", " ").title(), "art": "piper", "id": str(p.relative_to(BASE_DIR)),
-             "info": "lokal, offline"} for p in sorted(ORDNER.glob("*.onnx"))] if ORDNER.exists() else []
+    """Weitere .onnx-Stimmen, die jemand selbst in data/stimmen/ gelegt hat (die eingebauten nicht doppelt)."""
+    bekannt = {Path(s["id"]).name for s in EINGEBAUT if s["art"] == "piper"}
+    return [{"name": p.stem.replace("de_DE-", "").replace("-", " ").title(), "art": "piper",
+             "id": p.relative_to(BASE_DIR).as_posix(), "info": "lokal, offline"}
+            for p in sorted(ORDNER.glob("*.onnx")) if p.name not in bekannt] if ORDNER.exists() else []
+
+
+def geladen(s: dict) -> bool:
+    return s["art"] != "piper" or (BASE_DIR / s["id"]).exists()
+
+
+def piper_laden(s: dict) -> None:
+    """Offline-Stimme von Piper herunterladen (huggingface.co/rhasspy/piper-voices) nach data/stimmen/."""
+    from piper.download_voices import download_voice
+
+    ORDNER.mkdir(parents=True, exist_ok=True)
+    download_voice(s["laden"], ORDNER)
+    if not geladen(s):
+        raise StimmFehler(f"Die Stimme {s['name']} kam nicht vollständig an.")
 
 
 def alle() -> list[dict]:
@@ -172,6 +238,24 @@ def waehlen(name: str) -> str:
     s = finden(name)
     if s["art"] == "fish" and not os.getenv("FISH_API_KEY", "").strip():
         raise StimmFehler("Für Fish-Stimmen fehlt FISH_API_KEY in der .env.")
+    if not geladen(s):
+        if not s.get("laden"):
+            raise StimmFehler(f"Die Datei für {s['name']} fehlt ({s['id']}).")
+
+        def los() -> None:
+            try:
+                piper_laden(s)
+                print(f"[Stimme] {s['name']} heruntergeladen", flush=True)
+                _aktiv_setzen(s)
+            except Exception as e:
+                print(f"[Stimme] {s['name']} laden ging nicht: {str(e)[:120]}", flush=True)
+        threading.Thread(target=los, daemon=True, name="stimme-laden").start()
+        return (f"Ich lade die Offline-Stimme „{s['name']}“ herunter (einmalig, etwa eine Minute). "
+                "Danach spreche ich mit ihr – auch ganz ohne Internet.")
+    return _aktiv_setzen(s)
+
+
+def _aktiv_setzen(s: dict) -> str:
     vorher = aktiv()
     _ausfall["bis"] = 0.0   # neue Stimme -> wieder probieren
     with _sperre:
@@ -296,7 +380,8 @@ def liste_text() -> str:
         liste = [s for s in alle() if s["art"] == art]
         if liste:
             z.append(f"{titel}:")
-            z += [f"{'▶' if s['name'] == jetzt else '•'} {s['name']} – {s.get('info', '')}" for s in liste]
+            z += [f"{'▶' if s['name'] == jetzt else '•'} {s['name']} – {s.get('info', '')}"
+                  + ("" if geladen(s) else " (wird beim Auswählen geladen)") for s in liste]
     z.append("Umschalten: „nimm die Stimme Anime-Mädchen“ · Eigene: Stimme beschreiben, Sprachprobe oder fish.audio-Link.")
     return "\n".join(z)
 
