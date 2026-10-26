@@ -52,6 +52,11 @@ VERBINDEN = re.compile(r"\b(?:verbind|verkn(?:ü|ue)pf|koppel)\w*\s+(?:(?:mich|d
                        r"|\b(?:(?:ö|oe)ffne|zeig)\w*\s+(?:mir\s+)?(?:die\s+|meine\s+)?verbindungen\b"
                        r"|\bverbindungen\s+(?:(?:ö|oe)ffnen|einrichten|verwalten)\b", re.I)
 
+# "oeffne deine Einstellungen", "Schluessel eintragen", "aendere deinen Namen" -> Klaus-Einstellungen (nicht Windows)
+EINSTELLUNGEN = re.compile(r"\bdeine\s+einstellungen\b|\b(?:klaus|assistenten)-?einstellungen\b"
+                           r"|\b(?:api-?)?schl(?:ü|ue)ssel\s+(?:eintragen|(?:ä|ae)ndern|einrichten)\b"
+                           r"|\b(?:ä|ae)nder\w*\s+(?:deinen|meinen)\s+namen\b|\bmikro(?:fon)?\s+(?:einstellen|wechseln|(?:ä|ae)ndern|ausw(?:ä|ae)hlen)\b", re.I)
+
 _CHAT = r"chat(?:-?fenster)?"
 CHAT_ZU = re.compile(rf"\bmach\w*\s+(?:mir\s+)?(?:den|das)?\s*{_CHAT}\s+(?:zu|weg)\b"
                      rf"|\bschlie(?:ss|ß)\w*\s+(?:den|das)?\s*{_CHAT}\b|\b{_CHAT}\s+(?:zu|weg|schlie(?:ss|ß)en)\b", re.I)
@@ -183,6 +188,7 @@ class Bruecke(QObject):
     mini = Signal(bool)  # Spielmodus an/aus (klaus_app.Spielmodus)
     chat = Signal(str)  # Twitch-Chat-Zeile als Sprechblase am Mini-Orb (stream.py)
     verbindungen = Signal(str)  # Fenster "Verbindungen" oeffnen (Plattform-ID oder "") - "verbinde Twitch"
+    einstellungen = Signal(str)  # Fenster "Einstellungen" (Bereich oder "") - "oeffne deine Einstellungen"
     chat_fenster = Signal(bool)  # Klaus-Chatfenster oeffnen (True) / schliessen (False) - "mach den Chat auf"
 
 
@@ -1068,6 +1074,16 @@ class Assistent:
         return " ".join(teile) or ("Clippen geht noch nicht: OBS läuft nicht (Replay-Puffer) und Twitch ist nicht verbunden "
                                    "(Taskleiste → Verbindungen → Twitch → „Bei Twitch anmelden“).")
 
+    def einstellungen_oeffnen(self, worum: str = "") -> str:
+        """Fenster "Einstellungen" - Schluessel tippt man dort selbst, nie ueber die KI."""
+        w = worum.lower()
+        bereich = ("allgemein" if "name" in w else "mikrofon" if "mikro" in w else "gemini" if "gemini" in w
+                   else "fish" if "fish" in w or "stimm" in w else "updates" if "update" in w or "melde" in w
+                   else "gemini" if "schl" in w else "")
+        if self.b:
+            self.b.einstellungen.emit(bereich)
+        return "Hier sind meine Einstellungen. Trag dort ein, was du ändern willst – Schlüssel bitte nur dort, nicht mir sagen."
+
     def verbindungen_oeffnen(self, plattform: str) -> str:
         """Fenster "Verbindungen" - per Sprache, Gemini-Werkzeug oder Telegram. Schluessel nie ueber die KI."""
         import verbindungen
@@ -1447,6 +1463,9 @@ class Assistent:
             self.sage(antwort, zustand="aktion")
             return
 
+        if EINSTELLUNGEN.search(befehl):
+            self.sage(self.einstellungen_oeffnen(befehl), zustand="aktion")
+            return
         verbinden = VERBINDEN.search(befehl)
         if verbinden:
             self.sage(self.verbindungen_oeffnen(verbinden.group("p") or ""), zustand="aktion")

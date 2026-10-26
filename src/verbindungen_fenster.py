@@ -1,8 +1,9 @@
 """
-Klaus - Fenster "Verbindungen": Twitch, YouTube, X, Instagram, Discord und andere Plattformen selbst eintragen.
+Klaus - Fenster zum Selbst-Eintragen: "Verbindungen" (Twitch, YouTube, X, Instagram, Discord, andere Plattformen)
+und "Einstellungen" (Name, KI-Schluessel, Stimme, Mikrofon, Updates, Fehlerberichte - klaus_einstellungen.py).
 
-Oeffnet sich ueber das Taskleisten-Menue oder per Sprache ("Klaus, verbinde Twitch"). Schluessel tippt man nur hier ein -
-sie gehen in die .env auf diesem PC, nie an die KI.
+Oeffnet sich ueber das Taskleisten-Menue oder per Sprache ("Klaus, verbinde Twitch", "oeffne die Einstellungen").
+Schluessel tippt man nur hier ein - sie gehen in die .env auf diesem PC, nie an die KI.
 """
 from __future__ import annotations
 
@@ -34,21 +35,26 @@ QPushButton#haupt { background: #1f6feb; border-color: #1f6feb; }
 """
 
 
-class VerbindungenFenster(QDialog):
+class EintragFenster(QDialog):
+    """Links die Bereiche, rechts Anleitung + Felder. quelle: Modul mit PLATTFORMEN, finde, zustand, _wert, webhooks,
+    speichern, testen, trennen (verbindungen.py oder klaus_einstellungen.py)."""
     meldung = Signal(str)       # aus Hintergrund-Threads (Testen, Twitch-Anmeldung)
     code = Signal(str, str)     # Twitch: Adresse, Code
+    TITEL = "Verbindungen"
+    HINWEIS = "Deine Schlüssel bleiben auf diesem PC (.env) – die KI sieht sie nie. Posten geht immer erst nach deiner Freigabe."
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, quelle=V, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"Verbindungen – {identitaet.NAME}")
+        self.q = quelle
+        self.setWindowTitle(f"{self.TITEL} – {identitaet.NAME}")
         self.setMinimumSize(820, 560)
         self.setStyleSheet(STIL)
         self.felder: dict[str, QLineEdit] = {}
-        self.pid = "twitch"
+        self.pid = next(iter(self.q.PLATTFORMEN))
 
         self.liste = QListWidget()
         self.liste.setFixedWidth(210)
-        for pid, p in V.PLATTFORMEN.items():
+        for pid, p in self.q.PLATTFORMEN.items():
             eintrag = QListWidgetItem(p.name)
             eintrag.setData(Qt.UserRole, pid)
             self.liste.addItem(eintrag)
@@ -71,13 +77,17 @@ class VerbindungenFenster(QDialog):
         self.k_testen = QPushButton("Testen")
         self.k_twitch = QPushButton("Bei Twitch anmelden")
         self.k_trennen = QPushButton("Trennen")
-        self.k_anleitung.clicked.connect(lambda: webbrowser.open(V.PLATTFORMEN[self.pid].link))
+        self.k_neustart = QPushButton("Neu starten")
+        self.k_neustart.setToolTip(f"{identitaet.NAME} neu starten, damit geänderte Einstellungen wirken")
+        self.k_neustart.clicked.connect(self._neustart)
+        self.k_neustart.hide()
+        self.k_anleitung.clicked.connect(lambda: webbrowser.open(self.q.PLATTFORMEN[self.pid].link))
         self.k_speichern.clicked.connect(self._speichern)
         self.k_testen.clicked.connect(self._testen)
         self.k_twitch.clicked.connect(self._twitch_anmelden)
         self.k_trennen.clicked.connect(self._trennen)
         knoepfe = QHBoxLayout()
-        for k in (self.k_anleitung, self.k_twitch, self.k_trennen):
+        for k in (self.k_anleitung, self.k_twitch, self.k_trennen, self.k_neustart):
             knoepfe.addWidget(k)
         knoepfe.addStretch()
         knoepfe.addWidget(self.k_testen)
@@ -88,8 +98,7 @@ class VerbindungenFenster(QDialog):
             rechts.addWidget(w)
         rechts.addStretch()
         rechts.addLayout(knoepfe)
-        hinweis = QLabel("Deine Schlüssel bleiben auf diesem PC (.env) – die KI sieht sie nie. "
-                         "Posten geht immer erst nach deiner Freigabe.", objectName="leise", wordWrap=True)
+        hinweis = QLabel(self.HINWEIS, objectName="leise", wordWrap=True)
         rechts.addWidget(hinweis)
         haupt = QHBoxLayout(self)
         haupt.addWidget(self.liste)
@@ -97,13 +106,15 @@ class VerbindungenFenster(QDialog):
 
         self.meldung.connect(self._melden)
         self.code.connect(self._code_zeigen)
-        self.zeige("twitch")
+        self.zeige(self.pid)
 
     # ---------------------------------------------------------------- Anzeige
     def zeige(self, pid: str = "") -> None:
-        gefunden = V.finde(pid).split(":", 1)[0]
-        pid = gefunden or ("webhook" if pid else self.pid)   # TikTok, LinkedIn ... -> "Andere Plattform"
-        ids = list(V.PLATTFORMEN)
+        gefunden = self.q.finde(pid).split(":", 1)[0]
+        if not gefunden and pid and "webhook" in self.q.PLATTFORMEN:
+            gefunden = "webhook"   # TikTok, LinkedIn ... -> "Andere Plattform"
+        pid = gefunden or self.pid
+        ids = list(self.q.PLATTFORMEN)
         self._listen_zeichen()
         self.liste.setCurrentRow(ids.index(pid))
         self._gewaehlt(ids.index(pid))
@@ -112,14 +123,14 @@ class VerbindungenFenster(QDialog):
         self.activateWindow()
 
     def _listen_zeichen(self) -> None:
-        for i, (pid, p) in enumerate(V.PLATTFORMEN.items()):
-            self.liste.item(i).setText(f"{ZEICHEN[V.zustand(pid)]}  {p.name}")
+        for i, (pid, p) in enumerate(self.q.PLATTFORMEN.items()):
+            self.liste.item(i).setText(f"{ZEICHEN[self.q.zustand(pid)]}  {p.name}")
 
     def _gewaehlt(self, zeile: int) -> None:
         if zeile < 0:
             return
-        self.pid = list(V.PLATTFORMEN)[zeile]
-        p = V.PLATTFORMEN[self.pid]
+        self.pid = list(self.q.PLATTFORMEN)[zeile]
+        p = self.q.PLATTFORMEN[self.pid]
         self.titel.setText(p.name)
         self.kann.setText(p.kann)
         schritte = "".join(f"<li>{s}</li>" for s in p.anleitung)
@@ -130,7 +141,7 @@ class VerbindungenFenster(QDialog):
         self.felder = {}
         for f in p.felder:
             feld = QLineEdit()
-            jetzt = "" if f.env.startswith("_") else V._wert(f.env)
+            jetzt = "" if f.env.startswith("_") else self.q._wert(f.env)
             if f.geheim:
                 feld.setEchoMode(QLineEdit.Password)
                 feld.setPlaceholderText("gespeichert – leer lassen = behalten" if jetzt else f.hinweis)
@@ -140,17 +151,21 @@ class VerbindungenFenster(QDialog):
             self.felder[f.env] = feld
             self.form.addRow(f.label + ":", feld)
         self.k_twitch.setVisible(self.pid == "twitch")
-        self.k_trennen.setVisible(self.pid != "webhook" and V.zustand(self.pid) != "nein")
+        self.k_trennen.setVisible(self.pid != "webhook" and self.q.zustand(self.pid) != "nein"
+                                  and getattr(p, "trennbar", True))
         self.codezeile.hide()
-        if self.pid == "webhook" and V.webhooks():
-            self.status.setText("Schon verbunden: " + ", ".join(V.webhooks()) + ". Neuer Name = weitere Plattform.")
+        extra = getattr(self.q, "zusatz", None)
+        if extra and extra(self.pid):
+            self.status.setText(extra(self.pid))
+        elif self.pid == "webhook" and self.q.webhooks():
+            self.status.setText("Schon verbunden: " + ", ".join(self.q.webhooks()) + ". Neuer Name = weitere Plattform.")
         else:
-            self.status.setText({"ja": "Verbunden.", "teilweise": "Halb eingerichtet.", "nein": ""}[V.zustand(self.pid)])
+            self.status.setText({"ja": "Verbunden.", "teilweise": "Halb eingerichtet.", "nein": ""}[self.q.zustand(self.pid)])
 
     def _melden(self, text: str) -> None:
         self.status.setText(text)
         self._listen_zeichen()
-        self.k_trennen.setVisible(self.pid != "webhook" and V.zustand(self.pid) != "nein")
+        self.k_trennen.setVisible(self.pid != "webhook" and self.q.zustand(self.pid) != "nein")
 
     def _code_zeigen(self, adresse: str, code: str) -> None:
         self.codezeile.setText(code)
@@ -160,15 +175,17 @@ class VerbindungenFenster(QDialog):
     # ---------------------------------------------------------------- Knoepfe
     def _speichern(self) -> None:
         try:
-            text = V.speichern(self.pid, {env: feld.text() for env, feld in self.felder.items()})
+            text = self.q.speichern(self.pid, {env: feld.text() for env, feld in self.felder.items()})
         except ValueError as e:
             self.status.setText(str(e))
             return
-        for f in V.PLATTFORMEN[self.pid].felder:
+        for f in self.q.PLATTFORMEN[self.pid].felder:
             if f.geheim:
                 self.felder[f.env].clear()
         self._gewaehlt(self.liste.currentRow())
         self._melden(text)
+        if getattr(self.q, "neustart_noetig", lambda pid: False)(self.pid):
+            self.k_neustart.show()
 
     def _im_hintergrund(self, arbeit) -> None:
         def los() -> None:
@@ -181,11 +198,16 @@ class VerbindungenFenster(QDialog):
     def _testen(self) -> None:
         self.status.setText("Teste …")
         pid = self.pid
-        self._im_hintergrund(lambda: V.testen(pid))
+        self._im_hintergrund(lambda: self.q.testen(pid))
 
     def _trennen(self) -> None:
-        self._melden(V.trennen(self.pid))
+        self._melden(self.q.trennen(self.pid))
         self._gewaehlt(self.liste.currentRow())
+
+    def _neustart(self) -> None:
+        import pc_update
+        self.status.setText(f"{identitaet.NAME} startet neu …")
+        pc_update.neustart()
 
     def _twitch_anmelden(self) -> None:
         import stream
@@ -202,12 +224,28 @@ class VerbindungenFenster(QDialog):
         self._im_hintergrund(arbeit)
 
 
-_fenster: VerbindungenFenster | None = None
+class VerbindungenFenster(EintragFenster):
+    pass
+
+
+class EinstellungenFenster(EintragFenster):
+    TITEL = "Einstellungen"
+    HINWEIS = ("Alles landet in der .env auf diesem PC – Schlüssel sieht die KI nie. "
+               "Name, Schlüssel und Mikrofon wirken nach einem Neustart.")
+
+
+_fenster: dict = {}
 
 
 def zeige(pid: str = "") -> None:
-    """Aus dem Qt-Hauptthread aufrufen (klaus_app.Steuerung)."""
-    global _fenster
-    if _fenster is None:
-        _fenster = VerbindungenFenster()
-    _fenster.zeige(pid)
+    """Verbindungen - aus dem Qt-Hauptthread aufrufen (klaus_app.Steuerung)."""
+    if "verbindungen" not in _fenster:
+        _fenster["verbindungen"] = VerbindungenFenster()
+    _fenster["verbindungen"].zeige(pid)
+
+
+def zeige_einstellungen(bereich: str = "") -> None:
+    import klaus_einstellungen
+    if "einstellungen" not in _fenster:
+        _fenster["einstellungen"] = EinstellungenFenster(klaus_einstellungen)
+    _fenster["einstellungen"].zeige(bereich)

@@ -190,6 +190,11 @@ WERKZEUGE = [
          "aktion": {"type": "STRING", "enum": ["liste", "einrichten", "testen"]},
          "plattform": {"type": "STRING", "description": "twitch, youtube, x, instagram, discord oder Name einer anderen Plattform"}},
          "required": ["aktion"]}},
+    {"name": "einstellungen", "description": "Oeffnet am PC das Fenster 'Einstellungen' (Name des Assistenten, wie er den "
+     "Nutzer nennt, KI-Schluessel Gemini/Groq/OpenRouter/eigene KI, Fish-Audio, Mikrofon, Update-Token, Melde-Code). Der "
+     "Nutzer traegt dort SELBST ein - frag nie nach Schluesseln und nimm keine entgegen.",
+     "parameters": {"type": "OBJECT", "properties": {"bereich": {"type": "STRING", "enum": [
+         "allgemein", "gemini", "ersatz", "eigene_ki", "fish", "mikrofon", "updates"]}}}},
     {"name": "posten", "description": "Text (bei Instagram mit Bild) auf einer verbundenen Plattform veroeffentlichen: x, "
      "discord, instagram oder eine eigene per Webhook verbundene (z. B. LinkedIn). Oeffentlich -> der Nutzer muss freigeben. "
      "Nur auf ausdruecklichen Wunsch, Text genau wie gewuenscht, nie Privates.",
@@ -638,6 +643,11 @@ class GeminiGespraech:
                     pid = verbindungen.finde(plattform)
                     return verbindungen.testen(pid) if pid else f"{plattform or 'Diese Plattform'} ist nicht verbunden."
                 return verbindungen.status_text()
+            if name == "einstellungen":
+                bereich = str(args.get("bereich") or "")
+                if self.a.b:
+                    self.a.b.einstellungen.emit(bereich)
+                return "Das Einstellungen-Fenster ist offen. Der Nutzer traegt dort selbst ein."
             if name == "posten":
                 import verbindungen
                 pid = verbindungen.finde(str(args.get("plattform") or ""))
