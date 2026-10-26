@@ -126,6 +126,7 @@ class WebBruecke(QObject):
     holo = Signal(str)  # Pop-up-Fenster rund ums Auge als JSON (siehe assistent.holo / web/popups.js)
     untertitel = Signal(str)  # Text unter dem Orb im Overlay
     sichtbar = Signal(bool)  # False = Panel ist von einem Vollbild-Fenster verdeckt -> Animationen pausieren
+    minimieren = Signal()  # Knopf oben rechts im Panel -> klaus_app blendet das Panel aus
     stummStatus = Signal(bool)  # Klaus stumm (hoert nur noch auf "Klaus, wieder an")
     mikroStatus = Signal(bool)  # Mikrofon komplett aus
     mini = Signal(bool)  # Spielmodus: Panel ist weg -> alle Holo-Fenster auf Bildschirm 2 (bzw. ueber das Spiel)
@@ -309,6 +310,10 @@ class WebBruecke(QObject):
         import freigabe
 
         freigabe.entscheide(anfrage_id, ok, "Klick im Panel")
+
+    @Slot()
+    def panelMinimieren(self) -> None:
+        self.minimieren.emit()
 
     @Slot()
     def stummUmschalten(self) -> None:
@@ -571,6 +576,8 @@ NAME_SKRIPT = """
     const stil = document.createElement("style");
     stil.textContent = %s;
     document.head.append(stil);
+    const logo = document.querySelector(".logo");
+    if (logo && %s) logo.textContent = %s;   // K.L.A.U.S. im Kopf (einzelne Buchstaben-Knoten) -> eigener Name
     knoten(document.body);
     new MutationObserver(liste => liste.forEach(m => m.type === "childList" ? m.addedNodes.forEach(knoten) : knoten(m.target)))
       .observe(document.body, {childList: true, subtree: true, characterData: true,
@@ -583,17 +590,19 @@ NAME_SKRIPT = """
 
 def name_skript() -> str:
     """JavaScript fuer die Web-Seiten - "" wenn alles beim Standard (Klaus / Nikola) bleibt."""
-    paare, stil = [], ""
+    paare, stil, logo = [], "", ""
     if identitaet.NAME != identitaet.STANDARD_NAME:
+        logo = identitaet.NAME.upper()
         gross = identitaet.NAME.upper()
         paare += [[r"\bKlaus\b", identitaet.NAME], [r"\bKLAUS\b", gross], [r"K\.L\.A\.U\.S\.", ".".join(gross) + "."]]
         stil = (f".klaus::before {{ content: {json.dumps(gross)} !important; }} "
                 ".boot-unter { visibility: hidden; }")   # "KLESRO LOGISTIC AUTONOMOUS UTILITY SYSTEM" passt nur zu K.L.A.U.S.
     if identitaet.fremder_nutzer():
         paare += [[r"\bNikola\b", identitaet.NUTZER], [r"\bNIKOLA\b", identitaet.NUTZER.upper()]]
+        stil += " .logo-unter { display: none; }"   # "KLESRO WEB · GÖPPINGEN" ist Nikolas Firma
     if not paare:
         return ""
-    return NAME_SKRIPT % (json.dumps(paare, ensure_ascii=False), json.dumps(stil))
+    return NAME_SKRIPT % (json.dumps(paare, ensure_ascii=False), json.dumps(stil), json.dumps(logo), json.dumps(logo))
 
 
 def _name_einsetzen(seite: QWebEnginePage) -> None:

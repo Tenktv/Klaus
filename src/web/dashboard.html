@@ -917,6 +917,7 @@
     <button class="hud-knopf" id="knopf-design" title="Farbpalette wechseln (oder sag: „Klaus, Design rot“)"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 2v12M2 8h6"/></svg>Design</button>
     <button class="hud-knopf" id="knopf-widget" title="Widget hinzufügen"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>Widget</button>
     <button class="hud-knopf primaer" id="knopf-standard" title="Alle Widgets auf Standard zurücksetzen"><svg viewBox="0 0 16 16"><path d="M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z"/></svg>Standard</button>
+    <button class="hud-knopf" id="knopf-minimieren" title="Panel minimieren – Klick aufs Klaus-Symbol in der Taskleiste holt es zurück" aria-label="Minimieren"><svg viewBox="0 0 16 16"><path d="M3 12.5h10"/></svg></button>
   </nav>
   <div id="designs" role="menu" aria-label="Design wählen"></div>
 </header>
@@ -2117,6 +2118,7 @@ klausBereit.then((k) => {
   document.getElementById("knopf-widget").onclick = katalogZeigen;
   document.getElementById("knopf-standard").onclick = () => { aufbauen(STANDARD); speichern(); };
   document.getElementById("knopf-design").onclick = designMenue;
+  document.getElementById("knopf-minimieren").onclick = () => klaus.panelMinimieren();
   document.getElementById("katalog-zu").onclick = katalogZu;
   document.getElementById("katalog").onclick = (e) => { if (e.target.id === "katalog") katalogZu(); };
   addEventListener("keydown", (e) => {
