@@ -24,9 +24,12 @@ STIMMEN_DIR = BASE_DIR / "data" / "stimmen"
 PROBEN_DIR = STIMMEN_DIR / "proben"
 ENV_PATH = BASE_DIR / ".env"
 
-SATZ = (
+import identitaet
+
+SATZ = identitaet.anpassen(
     "Stimme {nr}. Hallo Nikola, hier ist Klaus. "
-    "Ich habe drei neue Firmen ohne Website in Göppingen gefunden. Sollen wir anfangen?"
+    + ("Was machen wir heute? Sag einfach Bescheid." if identitaet.fremder_nutzer()
+       else "Ich habe drei neue Firmen ohne Website in Göppingen gefunden. Sollen wir anfangen?")
 )
 
 
