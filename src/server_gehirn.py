@@ -631,6 +631,9 @@ def main() -> None:
         tg.run_von_stdin()
         return
     a, tg = bauen()
+    import fehlerberichte   # Tester-PCs melden Fehler -> Nikola per Telegram (/melde_code Name)
+    fehlerberichte.befehle_einrichten(tg)
+    fehlerberichte.starten(tg.senden, tg.datei)
     print(f"[Server] Klaus-Gehirn laeuft (Telegram, Werkzeuge lokal: {sorted(LOKAL)})", flush=True)
     import briefing
 
