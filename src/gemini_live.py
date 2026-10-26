@@ -410,6 +410,9 @@ class GeminiGespraech:
         self.fish_runde = 0          # steigt bei Unterbrechung -> alte Saetze verfallen
         self.fish_puffer = ""
         self.fish_arbeitet = False
+        # Geminis eigenes Audio der laufenden Antwort - faellt die externe Stimme aus, kommt die Antwort trotzdem
+        self.gemini_audio: list[bytes] = []
+        self._runde_fertig = False
         threading.Thread(target=self._fish_sprecher, daemon=True).start()   # immer bereit: Stimme ist umschaltbar
         print(f"[Gemini] Stimme: {stimmwahl.aktiv()['name']}")
 
@@ -419,7 +422,7 @@ class GeminiGespraech:
         self.ende = False
         self._zustand = ""
         self.letzte_aktivitaet = time.time()
-        self.fish_an = stimmwahl.extern_aktiv()   # Stimmwechsel greift ab diesem Gespraech
+        self.fish_an = stimmwahl.extern_aktiv() and not stimmwahl.extern_gesperrt()   # Stimmwechsel greift ab hier
         asyncio.run(self._gespraech(erster_satz))
 
     # ---------------------------------------------------------------- Werkzeuge
@@ -796,8 +799,19 @@ class GeminiGespraech:
                     self.wiedergabe.put(stueck)
                     self.letzte_aktivitaet = time.time()
             except Exception as e:  # kein Guthaben, kein Netz ... -> ab sofort wieder Geminis eigene Stimme
-                print(f"[Gemini] Stimme {stimmwahl.aktiv()['name']} aus ({e}) - nehme die Gemini-Stimme")
+                name = stimmwahl.aktiv()["name"]
+                print(f"[Gemini] Stimme {name} aus ({e}) - nehme die Gemini-Stimme")
                 self.fish_an = False
+                stimmwahl.extern_sperren(str(e))   # nicht bei jedem Gespraech wieder stumm bleiben
+                if runde == self.fish_runde and self.a.darf_sprechen('antwort'):
+                    for stueck in self.gemini_audio:   # diese Antwort nicht verschlucken: Geminis Audio nachreichen
+                        self.wiedergabe.put(stueck)
+                self.gemini_audio = []
+                try:
+                    self.a.b.meldung.emit(f"Stimme „{name}“ geht gerade nicht ({str(e)[:80]}). "
+                                          "Ich spreche so lange mit der Gemini-Stimme.")
+                except Exception:
+                    pass
             finally:
                 self.fish_arbeitet = False
 
@@ -820,6 +834,7 @@ class GeminiGespraech:
     def _unterbrochen(self) -> None:
         self.fish_runde += 1          # Fish: angefangene und wartende Saetze verwerfen
         self.fish_puffer = ""
+        self.gemini_audio = []
         while not self.fish_saetze.empty():
             try:
                 self.fish_saetze.get_nowait()
@@ -905,12 +920,16 @@ class GeminiGespraech:
                                 for teil in inhalt.model_turn.parts or []:
                                     if teil.inline_data and teil.inline_data.data:
                                         self.letzte_aktivitaet = time.time()
-                                        if self.fish_an:
-                                            continue  # Fish spricht - Geminis eigenes Audio nicht abspielen
+                                        if self.fish_an:   # Fish spricht - Geminis Audio nur aufheben (Ersatz)
+                                            if self._runde_fertig:
+                                                self.gemini_audio, self._runde_fertig = [], False
+                                            self.gemini_audio.append(teil.inline_data.data)
+                                            continue
                                         if self.a.darf_sprechen('antwort'):
                                             self._setze_zustand("sprechen")
                                             self.wiedergabe.put(teil.inline_data.data)
                             if inhalt.turn_complete:
+                                self._runde_fertig = True
                                 if self.fish_an:
                                     self._fish_text("", alles=True)  # letzten (ggf. unvollstaendigen) Satz auch sprechen
                                 if du:

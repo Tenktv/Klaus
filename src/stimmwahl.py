@@ -132,6 +132,19 @@ def aktiv() -> dict:
     return _standard()
 
 
+_ausfall = {"bis": 0.0, "grund": ""}   # externe Stimme (Fish, Microsoft ...) ging nicht -> eine Weile Gemini-Stimme
+
+
+def extern_sperren(grund: str, minuten: float = 30) -> None:
+    import time
+    _ausfall.update(bis=time.time() + minuten * 60, grund=grund)
+
+
+def extern_gesperrt() -> bool:
+    import time
+    return time.time() < _ausfall["bis"]
+
+
 def extern_aktiv() -> bool:
     """Spricht eine andere Stimme als Gemini selbst? (dann: Gemini denkt, diese Stimme spricht)"""
     return aktiv()["art"] != "gemini"
@@ -160,6 +173,7 @@ def waehlen(name: str) -> str:
     if s["art"] == "fish" and not os.getenv("FISH_API_KEY", "").strip():
         raise StimmFehler("Für Fish-Stimmen fehlt FISH_API_KEY in der .env.")
     vorher = aktiv()
+    _ausfall["bis"] = 0.0   # neue Stimme -> wieder probieren
     with _sperre:
         d = _laden()
         d["aktiv"] = s["name"]
