@@ -36,11 +36,13 @@ def _knoten(knoten: dict, kid: str, label: str, gruppe: int, typ: str, info: str
 
 def gedaechtnis() -> dict:
     vault = gehirn.VAULT
-    gruppen = {0: "Nikola", 1: "Fakten", 2: "Gespräche", 3: "Briefings", 4: "Projekte", 5: "Themen", 6: "Notizen"}
+    import identitaet
+    gruppen = {0: identitaet.anpassen("Nikola"), 1: "Fakten", 2: "Gespräche", 3: "Briefings", 4: "Projekte", 5: "Themen", 6: "Notizen"}
     ordner_gruppe = {"Gespraeche": 2, "Briefings": 3, "Projekte": 4}
     knoten: dict[str, dict] = {}
     kanten: set[tuple[str, str]] = set()
-    nikola = _knoten(knoten, "nikola", "Nikola", 0, "Person", "Was Klaus über dich weiß (Nikola.md)")
+    nikola = _knoten(knoten, "nikola", identitaet.anpassen("Nikola"), 0, "Person",
+                     identitaet.anpassen("Was Klaus über dich weiß") + " (Nikola.md)")
 
     # Fakten
     fakten = gehirn.lade_gedaechtnis()

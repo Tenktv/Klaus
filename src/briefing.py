@@ -40,7 +40,8 @@ def text() -> str:
     heute = dt.date.today()
     stunde = dt.datetime.now().hour
     gruss = "☀️ Guten Morgen" if stunde < 11 else "👋 Hallo" if stunde < 18 else "🌙 Guten Abend"
-    teile = [f"{gruss}, Nikola! {WOCHENTAGE[heute.weekday()]}, {heute:%d.%m.}"]
+    import identitaet
+    teile = [identitaet.anpassen(f"{gruss}, Nikola! {WOCHENTAGE[heute.weekday()]}, {heute:%d.%m.}")]   # Tester: eigener Name
     w = daten.wetter()
     if "fehler" not in w and w.get("tage"):
         t = w["tage"][0]
