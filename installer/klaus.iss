@@ -128,6 +128,7 @@ begin
     'Solange Klaus nur getestet wird, liegen die Updates in einem privaten GitHub-Repo. Trag hier den Update-Token ein, ' +
     'den du von Nikola bekommen hast (nur Lesezugriff). Hast du keinen, leer lassen – nachtragen geht später in den Einstellungen (.env).');
   UpdateSeite.Add('Update-Token:', True);
+  UpdateSeite.Add('Melde-Code (schickt Fehler automatisch an Nikola, optional):', True);
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -169,7 +170,7 @@ begin
   StringChangeEx(Kanal, 'twitch.tv/', '', True);
   StringChangeEx(Kanal, '@', '', True);
   StringChangeEx(Kanal, '/', '', True);
-  SetArrayLength(Zeilen, 14);
+  SetArrayLength(Zeilen, 15);
   Zeilen[0] := '# Klaus - Einstellungen (vom Installer angelegt). Vorlage mit allen Optionen: .env.example';
   Zeilen[1] := 'KLAUS_NAME=' + Name;
   Zeilen[2] := 'KLAUS_NUTZER=' + Bereinigt(NamenSeite.Values[1]);
@@ -184,6 +185,7 @@ begin
   Zeilen[11] := 'KLAUS_AUTO_UPDATE=1';
   Zeilen[12] := 'KLAUS_UPDATE_TOKEN=' + Bereinigt(UpdateSeite.Values[0]);
   Zeilen[13] := 'TWITCH_KANAL=' + Kanal;
+  Zeilen[14] := 'KLAUS_MELDE_CODE=' + Bereinigt(UpdateSeite.Values[1]);
   SaveStringsToUTF8File(Datei, Zeilen, False);   { erste Zeile ist ein Kommentar - ein BOM davor stoert nicht }
 end;
 

@@ -593,6 +593,21 @@ def main() -> None:
         threading.Thread(target=los, daemon=True).start()
 
     update_suchen.triggered.connect(updates_suchen)
+    bericht = QAction("Fehlerbericht senden")
+
+    def bericht_senden() -> None:
+        import fehlerbericht
+
+        def los() -> None:
+            try:
+                text = fehlerbericht.senden("von Hand gesendet")
+            except Exception as e:
+                text = f"Fehlerbericht ging nicht: {str(e)[:150]}"
+            print(f"[Fehlerbericht] {text}", flush=True)
+            bruecke.meldung.emit(text)
+        threading.Thread(target=los, daemon=True).start()
+
+    bericht.triggered.connect(bericht_senden)
     log = QAction("Log öffnen")
     log.triggered.connect(lambda: LOG_PATH.exists() and os.startfile(LOG_PATH))
     verbindungen = QAction("Verbindungen (Twitch, YouTube, X …) …")
@@ -606,7 +621,7 @@ def main() -> None:
         app.quit()
 
     ende.triggered.connect(beenden)
-    for eintrag in (stumm, mikro_aus, spiel_an, spiel_auto, chat_oeffnen, panel_an, taskleiste_aus, autostart, stimme, verbindungen, update_suchen, projekte, log):
+    for eintrag in (stumm, mikro_aus, spiel_an, spiel_auto, chat_oeffnen, panel_an, taskleiste_aus, autostart, stimme, verbindungen, update_suchen, bericht, projekte, log):
         menue.addAction(eintrag)
     menue.addSeparator()
     menue.addAction(ende)

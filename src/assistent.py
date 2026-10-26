@@ -1169,6 +1169,8 @@ class Assistent:
         except Exception:
             traceback.print_exc()
             self.zeige("fehler", "Klaus konnte nicht starten – siehe data/klaus.log")
+            import fehlerbericht
+            fehlerbericht.automatisch("Klaus startet nicht", traceback.format_exc())   # Tester: geht an Nikola
             return
 
         while self.laeuft:
@@ -1205,6 +1207,8 @@ class Assistent:
             except Exception:
                 traceback.print_exc()
                 self.zeige("fehler", "Da ist etwas schiefgelaufen.")
+                import fehlerbericht
+                fehlerbericht.automatisch("Fehler im Gespräch", traceback.format_exc())
                 self.verschwinde(nach=2.5)
 
     def warte_auf_befehl(self) -> str | None:
