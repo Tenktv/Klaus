@@ -1133,7 +1133,7 @@ class Assistent:
             m = muster.match(text.strip())
             if m:
                 return m.group("rest").strip(" ,.!?")
-        return None
+        return identitaet.weckwort_unscharf(text.strip())
 
     @staticmethod
     def oeffnen_ziel(befehl: str):

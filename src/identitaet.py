@@ -9,6 +9,7 @@ identitaet.weckwort_muster() Regex-Teil fuers Weckwort ("Klaus, ..." / "Hey Luna
 """
 from __future__ import annotations
 
+import difflib
 import os
 import re
 from pathlib import Path
@@ -54,3 +55,29 @@ def weckwort_muster() -> str:
         n = NAME.lower()
         varianten = list(dict.fromkeys([n, n.replace("c", "k"), n.replace("k", "c"), n.replace("ph", "f"), n.replace("y", "i")]))
     return "(?:" + "|".join(re.escape(v) for v in varianten) + ")"
+
+
+GRUESSE = {"hey", "hallo", "hi", "ok", "okay", "he", "du"}
+
+
+def _klingt_wie_name(wort: str) -> bool:
+    return difflib.SequenceMatcher(None, wort.lower(), NAME.lower()).ratio() >= 0.75
+
+
+def weckwort_unscharf(text: str) -> str | None:
+    """Eigene Namen schreibt Whisper oft leicht anders ("Lumina", "Lumin", "Lu Mine" statt "Lumine").
+    Am Anfang (nach "Hey"/"Hallo") oder am Ende des Satzes reicht deshalb ein aehnlich klingendes Wort.
+    -> Befehl ("" = nur der Name) oder None. Fuer "Klaus" und sehr kurze Namen nicht (zu viele Fehlalarme)."""
+    if NAME == STANDARD_NAME or len(NAME) < 4:
+        return None
+    worte = list(re.finditer(r"\w+", text))
+    if not worte:
+        return None
+    i = 1 if len(worte) > 1 and worte[0].group().lower() in GRUESSE else 0
+    for n in (1, 2):
+        if i + n <= len(worte) and _klingt_wie_name("".join(w.group() for w in worte[i:i + n])):
+            return text[worte[i + n - 1].end():].strip(" ,.!?")
+    for n in (1, 2):
+        if len(worte) > n and _klingt_wie_name("".join(w.group() for w in worte[-n:])):
+            return text[:worte[-n].start()].strip(" ,.!?")
+    return None

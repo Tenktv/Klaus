@@ -82,6 +82,7 @@ Du baust nichts selbst. Wenn der Plan rund ist, schlage vor, ihn an Claude zu ue
 (der Nutzer sagt dann "an Claude geben")."""
 import identitaet
 SYSTEM = identitaet.anpassen(SYSTEM)
+WORTSCHATZ = identitaet.anpassen(WORTSCHATZ)   # eigener Name statt "Klaus" - sonst hoert Whisper "Lumine" schlecht
 
 
 PROMPT_BAUEN = """Fasse das bisherige Gespraech zu einem vollstaendigen Arbeitsauftrag fuer Claude Code
