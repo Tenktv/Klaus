@@ -44,6 +44,8 @@ Name: "{group}\Klaus"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: 
 Name: "{group}\Eigene Stimmen (Sprachproben hier ablegen)"; Filename: "{app}\data\stimmen\eigene"
 Name: "{group}\Einstellungen (.env)"; Filename: "notepad.exe"; Parameters: """{app}\.env"""
 Name: "{group}\Klaus deinstallieren"; Filename: "{uninstallexe}"
+; auch direkt im Klaus-Ordner (dort liegt sonst nur das unscheinbare unins000.exe)
+Name: "{app}\Klaus deinstallieren"; Filename: "{uninstallexe}"; Comment: "Klaus vom PC entfernen"
 Name: "{userdesktop}\Klaus"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\src\klaus_app.py"""; WorkingDir: "{app}"; Tasks: desktop
 
 [Run]
@@ -56,6 +58,9 @@ Filename: "powershell.exe"; Parameters: "-NoProfile -Command ""Get-CimInstance W
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\.venv"
+Type: filesandordirs; Name: "{app}\src"
+Type: filesandordirs; Name: "{app}\installer"
+Type: files; Name: "{userstartup}\Klaus.lnk"
 
 [Code]
 var
@@ -190,6 +195,24 @@ begin
   Exec('powershell.exe', '-NoProfile -Command "Get-CimInstance Win32_Process | ? CommandLine -like ''*klaus_app.py*'' | % { Stop-Process -Id $_.ProcessId -Force }"',
        '', SW_HIDE, ewWaitUntilTerminated, Ergebnis);
   Result := '';
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  { Einstellungen (.env mit deinen Schluesseln), Gedaechtnis, eigene Stimmen und die Spracherkennung (~500 MB)
+    bleiben sonst liegen - fuer eine Neuinstallation praktisch. Fragen, ob alles weg soll. }
+  if (CurUninstallStep = usPostUninstall) and (not UninstallSilent()) then
+    if MsgBox('Klaus ist deinstalliert.' + #13#10#13#10 +
+              'Sollen auch deine Einstellungen (Schlüssel, Name), das Gedächtnis, eigene Stimmen und die ' +
+              'Spracherkennung gelöscht werden?' + #13#10#13#10 +
+              'Ja = alles weg.   Nein = behalten (für eine spätere Neuinstallation).',
+              mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+    begin
+      DelTree(ExpandConstant('{app}'), True, True, True);
+      DelTree(ExpandConstant('{%USERPROFILE}\.cache\huggingface\hub\models--Systran--faster-whisper-small'), True, True, True);
+      DelTree(ExpandConstant('{%USERPROFILE}\.cache\huggingface\hub\models--Systran--faster-whisper-medium'), True, True, True);
+      DelTree(ExpandConstant('{%USERPROFILE}\.cache\huggingface\hub\models--Systran--faster-whisper-large-v3'), True, True, True);
+    end;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
