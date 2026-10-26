@@ -64,23 +64,54 @@ def _zahlen(text: str) -> tuple[int, ...]:
     return tuple(int(x) for x in re.findall(r"\d+", text)[:3]) or (0,)
 
 
-def neues_release() -> dict | None:
-    """Neuere Klaus-Setup.exe im Download-Repo? -> {tag, url, sha256} oder None."""
+def release_pruefen() -> tuple[dict | None, str]:
+    """Neuere Klaus-Setup.exe im Download-Repo? -> ({tag, url, sha256} oder None, Grund zum Anzeigen)."""
     import requests
 
     r = requests.get(f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest", timeout=15, headers=_kopf())
+    if r.status_code in (401, 403, 404):
+        return None, ("GitHub lässt mich nicht an die Updates: Das Repo ist privat und der Update-Token fehlt oder ist "
+                      "abgelaufen (KLAUS_UPDATE_TOKEN in den Einstellungen)." if r.status_code != 403 or not UPDATE_TOKEN
+                      else "Der Update-Token hat keine Leserechte auf das Repo.")
     if r.status_code != 200:
-        return None
+        return None, f"GitHub antwortet gerade nicht ({r.status_code}) – später nochmal."
     d = r.json()
     tag = str(d.get("tag_name") or "")
     if _zahlen(tag) <= _zahlen(version()):
-        return None
+        return None, f"Du hast schon die neueste Version ({version()})."
     datei = next((a for a in d.get("assets") or [] if str(a.get("name", "")).lower() == "klaus-setup.exe"), None)
     pruef = re.search(r"SHA256:\s*([0-9a-f]{64})", str(d.get("body") or ""), re.I)
     if not datei or not pruef:   # ohne Pruefsumme installiere ich nichts
-        return None
+        return None, f"Version {tag} ist noch nicht fertig hochgeladen – gleich nochmal versuchen."
     # privates Repo: ueber die API-Adresse der Datei laden (mit Token), oeffentlich: direkter Download-Link
-    return {"tag": tag, "url": datei["url"] if UPDATE_TOKEN else datei["browser_download_url"], "sha256": pruef.group(1).lower()}
+    return ({"tag": tag, "url": datei["url"] if UPDATE_TOKEN else datei["browser_download_url"],
+             "sha256": pruef.group(1).lower()}, "")
+
+
+def neues_release() -> dict | None:
+    rel, grund = release_pruefen()
+    if not rel:
+        print(f"[Update] {grund}", flush=True)
+    return rel
+
+
+def jetzt_pruefen(assistent) -> str:
+    """Taskleisten-Menue "Nach Updates suchen": sofort pruefen und installieren (ohne Warten auf ruhige Momente)."""
+    if installiert():
+        rel, grund = release_pruefen()
+        if not rel:
+            return grund
+        gestartet, text = release_einspielen(rel)
+        if gestartet:
+            threading.Timer(3, lambda: os._exit(0)).start()
+        return text
+    neu = neue_commits()
+    if not neu:
+        return f"Du hast schon den neuesten Stand ({version()})."
+    neu_starten, text = einspielen()
+    if neu_starten:
+        threading.Timer(3, neustart).start()
+    return text or "Update eingespielt."
 
 
 def release_einspielen(rel: dict) -> tuple[bool, str]:
