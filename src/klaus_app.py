@@ -181,6 +181,11 @@ class Steuerung(QObject):
         import verbindungen_fenster
         verbindungen_fenster.zeige(plattform)
 
+    @Slot(str)
+    def einstellungen(self, bereich: str) -> None:
+        import verbindungen_fenster
+        verbindungen_fenster.zeige_einstellungen(bereich)
+
     @Slot(bool)
     def chat_fenster(self, auf: bool) -> None:
         """'Klaus, mach den Chat auf' / '... Chat zu' (Sprache, Werkzeug oder Telegram)."""
@@ -462,6 +467,7 @@ def main() -> None:
     bruecke.thema.connect(steuerung.thema)
     bruecke.chat_fenster.connect(steuerung.chat_fenster)
     bruecke.verbindungen.connect(steuerung.verbindungen)
+    bruecke.einstellungen.connect(steuerung.einstellungen)
     bruecke.thema.connect(zweit_bruecke.thema)
     bruecke.panel.connect(panel_bruecke.panelBefehl)
     bruecke.holo.connect(panel_bruecke.holo)
@@ -610,6 +616,8 @@ def main() -> None:
     bericht.triggered.connect(bericht_senden)
     log = QAction("Log öffnen")
     log.triggered.connect(lambda: LOG_PATH.exists() and os.startfile(LOG_PATH))
+    einstellungen_menue = QAction("Einstellungen (Name, Schlüssel, Mikrofon) …")
+    einstellungen_menue.triggered.connect(lambda: steuerung.einstellungen(""))
     verbindungen = QAction("Verbindungen (Twitch, YouTube, X …) …")
     verbindungen.triggered.connect(lambda: steuerung.verbindungen(""))
     ende = QAction("Klaus beenden")
@@ -621,7 +629,7 @@ def main() -> None:
         app.quit()
 
     ende.triggered.connect(beenden)
-    for eintrag in (stumm, mikro_aus, spiel_an, spiel_auto, chat_oeffnen, panel_an, taskleiste_aus, autostart, stimme, verbindungen, update_suchen, bericht, projekte, log):
+    for eintrag in (stumm, mikro_aus, spiel_an, spiel_auto, chat_oeffnen, panel_an, taskleiste_aus, autostart, stimme, einstellungen_menue, verbindungen, update_suchen, bericht, projekte, log):
         menue.addAction(eintrag)
     menue.addSeparator()
     menue.addAction(ende)
