@@ -397,8 +397,9 @@ def _offene_order_abgleichen(s: dict, senden) -> None:
         s["stueck"] += menge
         s["investiert"] += menge * preis
     elif menge:
-        s["stueck"] = max(0.0, s["stueck"] - menge)
+        s["stueck"] = max(0.0, round(s["stueck"] - menge, 9))
         s["investiert"] = s["einstand"] * s["stueck"]
+        _staub_entfernen(s)
         if not s["stueck"]:
             s["einstand"] = 0.0
         _log(s, f"verkauft {menge:g} zu {_zahl(preis)} $ ({'+' if gewinn >= 0 else '−'}{_zahl(abs(gewinn))} $)")
@@ -409,12 +410,24 @@ def _offene_order_abgleichen(s: dict, senden) -> None:
     s["offen"] = None
 
 
+STAUB = 1e-8   # Alpaca nimmt keine Order unter 1e-9 Stueck - so kleine Reste sind Rundungsstaub, keine Position
+
+
+def _staub_entfernen(s: dict) -> None:
+    """Rest wie 3e-17 Stueck nach einem Verkauf (Gleitkomma) gilt als "nichts mehr gehalten". Sonst meldet die Strategie
+    stuendlich ein Verkaufssignal und Alpaca lehnt ab: "qty must be > 1e-9"."""
+    if 0 < s["stueck"] < STAUB:
+        _log(s, f"Rest von {s['stueck']:.1e} Stück ignoriert (Rundung)")
+        s["stueck"], s["einstand"], s["investiert"] = 0.0, 0.0, 0.0
+
+
 def schritt(s: dict, senden, markt_offen: bool, jetzt: float | None = None) -> None:
     """Eine Strategie einmal pruefen (aus der Schleife; testbar)."""
     if s["offen"]:
         _offene_order_abgleichen(s, senden)
         if s["offen"]:
             return
+    _staub_entfernen(s)   # auch Staub aus frueheren Verkaeufen (gespeicherter Stand)
     if time.time() < s.get("pause_bis", 0):   # nach einer fehlgeschlagenen Order kurz Ruhe
         return
     krypto = "/" in s["symbol"]
