@@ -160,6 +160,27 @@ class StrategieTests(unittest.TestCase):
         self.assertEqual(self.orders, [('sell', 2.0, None)])
         self.assertTrue(s['gesperrt'])
 
+    def test_rundungsstaub_ist_keine_position(self):
+        # Wie bei BTC/USD gemeldet: "Verkaufssignal, aber ... qty must be > 1e-9" jede Stunde, weil nach einem Verkauf
+        # 3e-17 Stueck uebrig blieben und die Strategie sich weiter fuer "gehalten" hielt.
+        s = self._strategie(symbol='BTC/USD', stueck=3e-17, einstand=60000.0, investiert=2e-12)
+        self._lauf(s, AUF[::-1].copy())                  # Trend nach unten -> frueher: Verkaufsorder ueber 3e-17
+        self.assertEqual(self.orders, [])
+        self.assertEqual((s['stueck'], s['einstand'], s['investiert']), (0.0, 0.0, 0.0))
+        self.assertFalse(any('Order ging nicht' in m for m in self.gesendet))
+
+    def test_teilverkauf_laesst_keinen_staub(self):
+        s = self._strategie(symbol='BTC/USD', stueck=0.1, einstand=100.0, investiert=10.0,
+                            offen={'id': 'o1', 'seite': 'sell'})
+        with patch.object(al, 'order', lambda i: {'status': 'filled', 'filled_qty': '0.1', 'filled_avg_price': '110'}):
+            st._offene_order_abgleichen(s, self.senden)
+        self.assertEqual((s['stueck'], s['einstand']), (0.0, 0.0))
+        s = self._strategie(symbol='BTC/USD', stueck=0.3, einstand=100.0, investiert=30.0,
+                            offen={'id': 'o2', 'seite': 'sell'})
+        with patch.object(al, 'order', lambda i: {'status': 'filled', 'filled_qty': '0.2', 'filled_avg_price': '110'}):
+            st._offene_order_abgleichen(s, self.senden)
+        self.assertEqual(s['stueck'], 0.1)               # 0.3 - 0.2 ohne Rest wie 0.09999999999999998
+
     def test_hoechstens_vier_orders_am_tag(self):
         s = self._strategie()
         for _ in range(6):
