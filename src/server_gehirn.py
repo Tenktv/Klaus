@@ -636,6 +636,19 @@ def main() -> None:
     fehlerberichte.starten(tg.senden, tg.datei)
     import whatsapp_kunden   # WhatsApp-Assistent fuer Kunden eines Testers (Termine) - Port nur, wenn eingerichtet
     whatsapp_kunden.befehle_einrichten(tg, TB._env_setzen)
+    tg.vorab = lambda u: whatsapp_kunden.telegram_update(u, "main")
+
+    def whatsapp_voll(text: str) -> str:
+        """Nikola schreibt von seiner Nummer an die Business-Nummer: sein voller Klaus. Schluessel-Befehle nur in Telegram
+        (in WhatsApp laesst sich die Nachricht nicht loeschen); Freigaben (Geld, Loeschen ...) laufen weiter ueber Knopf + PIN in Telegram."""
+        befehl = text.split()[0].lower() if text.startswith("/") else ""
+        if befehl in tg.geheime_befehle:
+            return "Das geht nur in Telegram – dort lösche ich die Nachricht mit dem Schlüssel sofort."
+        if befehl in tg.befehle:
+            return str(tg.befehle[befehl](text))
+        with tg._sperre:
+            return tg._antworten(text)
+    whatsapp_kunden.voll_antwort = whatsapp_voll
     whatsapp_kunden.starten()
     print(f"[Server] Klaus-Gehirn laeuft (Telegram, Werkzeuge lokal: {sorted(LOKAL)})", flush=True)
     import briefing
