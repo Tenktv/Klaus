@@ -634,6 +634,9 @@ def main() -> None:
     import fehlerberichte   # Tester-PCs melden Fehler -> Nikola per Telegram (/melde_code Name)
     fehlerberichte.befehle_einrichten(tg)
     fehlerberichte.starten(tg.senden, tg.datei)
+    import whatsapp_kunden   # WhatsApp-Assistent fuer Kunden eines Testers (Termine) - Port nur, wenn eingerichtet
+    whatsapp_kunden.befehle_einrichten(tg, TB._env_setzen)
+    whatsapp_kunden.starten()
     print(f"[Server] Klaus-Gehirn laeuft (Telegram, Werkzeuge lokal: {sorted(LOKAL)})", flush=True)
     import briefing
 
