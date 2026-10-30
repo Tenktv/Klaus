@@ -245,14 +245,15 @@ class Assistent:
         pc_zugriff.melder = lambda text: self.fern.senden(text) if self.fern else None
         import spiel_coach   # Tipps beim Zocken: lokal vorlesen (Headset), bzw. Telegram, wenn du dort schreibst
         spiel_coach.sagen = lambda text: self.sage(text, zustand="sprechen", quelle="coach")
-        import stream   # Twitch-Chat vorlesen (nur lokal, nie ins Gedaechtnis/Telegram), Clips, OBS
-        stream.sprechen = lambda text: self.vorlesen(text, quelle="twitch")
-        stream.anzeigen = self.b.chat.emit
-        stream.beschaeftigt = lambda: bool(self.gemini) and time.time() - (self.gemini.letzte_aktivitaet or 0) < 8
-        import stream_overlay   # OBS-Browserquelle http://127.0.0.1:7710/overlay
-        stream.overlay = stream_overlay.senden
-        stream_overlay.starten()
-        stream.starten()
+        if not identitaet.LITE:   # Lite: kein Twitch, OBS, Overlay-Server (spart Threads, Port und Speicher)
+            import stream   # Twitch-Chat vorlesen (nur lokal, nie ins Gedaechtnis/Telegram), Clips, OBS
+            stream.sprechen = lambda text: self.vorlesen(text, quelle="twitch")
+            stream.anzeigen = self.b.chat.emit
+            stream.beschaeftigt = lambda: bool(self.gemini) and time.time() - (self.gemini.letzte_aktivitaet or 0) < 8
+            import stream_overlay   # OBS-Browserquelle http://127.0.0.1:7710/overlay
+            stream.overlay = stream_overlay.senden
+            stream_overlay.starten()
+            stream.starten()
         import datei_senden   # Dateien aufs Handy (Telegram)
         datei_senden.datei_melder = lambda inhalt, name, text: (self.fern.datei(inhalt, name, text)
                                                                 if self.fern and hasattr(self.fern, "datei") else None)

@@ -21,6 +21,8 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 STANDARD_NAME = "Klaus"
 NAME = os.getenv("KLAUS_NAME", "").strip() or STANDARD_NAME
 NUTZER = os.getenv("KLAUS_NUTZER", "").strip()
+# Lite: nur Sprache und Chat fuer schwaechere PCs (klaus_lite.py) - kein Panel/Orb/Overlay, kein Stream, weniger Werkzeuge
+LITE = os.getenv("KLAUS_LITE", "").strip() == "1"
 # Whisper schreibt "Klaus" oft anders - fuer andere Namen reicht der Name selbst (plus ein paar Schreibweisen)
 _KLAUS_VARIANTEN = ["klaus", "claus", "klaas", "kraus", "klause"]
 

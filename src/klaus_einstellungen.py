@@ -68,6 +68,16 @@ PLATTFORMEN: dict[str, Plattform] = {p.id: p for p in [
         [Feld("KLAUS_MIC", "Mikrofon (Teil des Namens)", hinweis="leer = Windows-Standard")],
         ()),
     Plattform(
+        "leistung", "Leistung (Lite)",
+        "Für schwächere PCs: Lite zeigt nur Sprache und ein kleines Chatfenster, ohne Panel, Orb, Designs, Twitch und Spielmodus. "
+        "Spart viel Arbeitsspeicher und Prozessor. Sprachgespräche, Termine, Telegram und WhatsApp bleiben gleich.",
+        ["Lite: an, um die schlanke Version zu nutzen (leer oder aus = volle Oberfläche).",
+         "Spracherkennung fürs Weckwort: tiny (schnellste), base (empfohlen für Lite), small (genauer), medium (nur mit guter Grafikkarte).",
+         "Danach „Neu starten“. Von Lite zurück zur vollen Oberfläche geht nur, wenn die volle Version installiert wurde (sonst Setup.exe neu)."],
+        "https://github.com/Tenktv/Klaus/releases/latest",
+        [Feld("KLAUS_LITE", "Lite", hinweis="an / aus"), Feld("WHISPER_MODEL", "Spracherkennung", hinweis="tiny, base, small oder medium")],
+        ()),
+    Plattform(
         "updates", "Updates & Hilfe",
         "Update-Token (nur solange das Repo privat ist) und Melde-Code: damit kommen Fehler automatisch bei Nikola an.",
         ["Beides bekommst du von Nikola.",
@@ -80,7 +90,7 @@ PLATTFORMEN: dict[str, Plattform] = {p.id: p for p in [
 for _p in PLATTFORMEN.values():
     _p.trennbar = _p.id in ("gemini", "ersatz", "eigene_ki", "fish")
 
-NEUSTART = {"allgemein", "gemini", "ersatz", "eigene_ki", "fish", "mikrofon", "updates"}
+NEUSTART = {"allgemein", "gemini", "ersatz", "eigene_ki", "fish", "mikrofon", "leistung", "updates"}
 
 
 def _wert(name: str) -> str:
@@ -120,6 +130,15 @@ def zusatz(pid: str) -> str:
     return ""
 
 
+def _web_oberflaeche_da() -> bool:
+    """Ist PySide6 mit WebEngine (volle Oberflaeche) installiert? Lite-Installationen haben nur PySide6-Essentials."""
+    import importlib.util
+    try:
+        return importlib.util.find_spec("PySide6.QtWebEngineWidgets") is not None
+    except (ImportError, ValueError):
+        return False
+
+
 def normalisieren(env: str, wert: str) -> str:
     w = re.sub(r"[\r\n\t]", "", wert).strip()
     if not w:
@@ -135,6 +154,20 @@ def normalisieren(env: str, wert: str) -> str:
         if teile.scheme not in ("http", "https") or not teile.hostname:
             raise ValueError("Die API-Adresse beginnt mit https:// (oder http://localhost für LM Studio).")
         w = w.rstrip("/")
+    elif env == "KLAUS_LITE":
+        a = w.lower()
+        if a in ("1", "an", "ja", "ein", "lite", "true"):
+            return "1"
+        if a in ("0", "aus", "nein", "false", "voll"):
+            if os.getenv("KLAUS_LITE", "").strip() == "1" and not _web_oberflaeche_da():
+                raise ValueError("Die volle Oberfläche ist in dieser Installation nicht dabei (Lite hat sie weggelassen). "
+                                 "Dafür die Setup.exe noch einmal ausführen und „Lite“ abwählen.")
+            return "0"
+        raise ValueError("Lite: „an“ oder „aus“.")
+    elif env == "WHISPER_MODEL":
+        if w.lower() not in ("tiny", "base", "small", "medium"):
+            raise ValueError("Spracherkennung: tiny, base, small oder medium.")
+        w = w.lower()
     elif env in ("KLAUS_MIC", "ERSATZ_KI_MODELLE"):
         w = w[:120]
     elif " " in w:
@@ -229,6 +262,10 @@ def testen(pid: str) -> str:
                     + " Guthaben siehst du auf fish.audio – ohne Guthaben spricht die Gemini-Stimme.")
         if pid == "mikrofon":
             return _mikrofone()
+        if pid == "leistung":
+            lite = _wert("KLAUS_LITE") == "1"
+            return (f"Gerade: {'Lite (nur Sprache und Chat)' if lite else 'volle Oberfläche'}, Spracherkennung {_wert('WHISPER_MODEL') or 'small (Standard)'}. "
+                    f"Volle Oberfläche in dieser Installation: {'vorhanden' if _web_oberflaeche_da() else 'nicht vorhanden'}.")
         if pid == "updates":
             import fehlerbericht
             import pc_update
