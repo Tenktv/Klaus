@@ -245,6 +245,7 @@ class TelegramKlaus:
         self.ereignis_fn = None          # (art, text) -> Meldung ans Panel des PCs
         self.befehle: dict = {}          # "/name" -> fn(text) -> Antwort (z. B. /briefing auf dem Server)
         self.geheime_befehle: set = set()   # Befehle mit Schluesseln: Nachricht wird sofort geloescht
+        self.vorab = None                # fn(update) -> True: erledigt, nicht weiter (z. B. WhatsApp-Knoepfe, /unterricht)
 
     def _melde(self, art: str, text: str) -> None:
         if self.ereignis_fn:
@@ -413,6 +414,8 @@ class TelegramKlaus:
 
     def _update(self, u: dict) -> None:
         try:
+            if self.vorab and self.vorab(u):
+                return
             if "callback_query" in u:
                 q = u["callback_query"]
                 if q["from"]["id"] == self.nutzer:

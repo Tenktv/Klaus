@@ -30,6 +30,8 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
+import whatsapp_kunden
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
@@ -314,6 +316,8 @@ class Verteiler:
         if befehl == "/passwort" and name:
             return self.passwort_aendern(n, name, text)
         if name:
+            if whatsapp_kunden.telegram_update(u, "tester"):   # WhatsApp-Knoepfe/Befehle des Inhabers (/unterricht, Senden ...)
+                return
             return self.arbeiter_fuer(name).senden(u)
         if n:
             _senden(uid, "Hallo! Bitte melde dich an: /login <profil> <passwort>\n"
