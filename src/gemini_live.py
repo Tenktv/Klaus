@@ -341,6 +341,17 @@ WERKZEUGE = [
          "beschreibung": {"type": "STRING", "description": "entwerfen: wie die Stimme klingen soll"}}, "required": ["aktion"]}},
 ]
 
+# Lite (nur Sprache und Chat): ohne Panel/Widgets/Design, ohne Spiele und Stream - weniger Werkzeuge = schneller und billiger
+LITE_WEG = {"website_im_panel", "widget", "design", "spiel_coach", "spielmodus", "twitch", "youtube", "stream_overlay", "obs",
+            "plan_zeigen", "plan_anheften", "plan_oeffnen", "widget_erstellen", "widget_aendern", "globus_zeigen", "graph_zeigen",
+            "lagebericht", "was_verpasst", "browser"}   # browser: Lite installiert Chromium nicht mit
+
+
+def werkzeuge() -> list[dict]:
+    import identitaet
+    return [w for w in WERKZEUGE if w["name"] not in LITE_WEG] if identitaet.LITE else WERKZEUGE
+
+
 ANWEISUNG = """
 
 Du fuehrst ein Echtzeit-Sprachgespraech. Antworte schnell, kurz und natuerlich, auf Deutsch.
@@ -869,7 +880,7 @@ class GeminiGespraech:
                 voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=stimmwahl.gemini_stimme()))),
             input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
-            tools=[types.Tool(function_declarations=WERKZEUGE)],
+            tools=[types.Tool(function_declarations=werkzeuge())],
         )
 
         ohr = self.a.ohr

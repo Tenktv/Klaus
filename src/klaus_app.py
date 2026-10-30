@@ -65,6 +65,13 @@ if sys.stdout is None or sys.stderr is None:
     _log = _SchwaerzendesLog(open(LOG_PATH, "a", encoding="utf-8", buffering=1))
     sys.stdout = sys.stderr = _log
 
+if __name__ == "__main__":   # Lite-Version (KLAUS_LITE=1): nur Sprache und Chat, ohne Web-Oberflaeche - bevor fenster.py (WebEngine) geladen wird
+    import identitaet as _identitaet
+    if _identitaet.LITE:
+        import klaus_lite
+        klaus_lite.main()
+        raise SystemExit
+
 from PySide6.QtCore import QAbstractNativeEventFilter, QLockFile, QObject, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap, QRadialGradient
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon

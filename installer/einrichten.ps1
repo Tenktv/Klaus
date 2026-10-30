@@ -4,7 +4,8 @@
 #   3. lokale Ersatzstimme (Piper) laden, Browser fuer das Browser-Werkzeug
 # -Update: stilles Update - nur was sich geaendert hat, Fenster bleibt nicht offen.
 # -Ollama: lokale KI (Ollama + Modell) installieren.
-param([Parameter(Mandatory = $true)][string]$Ordner, [switch]$Update, [switch]$Ollama, [string]$OllamaModell = "qwen2.5:7b-instruct-q4_K_M")
+# -Lite: Klaus Lite (nur Sprache und Chat): PySide6-Essentials statt PySide6 (ohne Chromium/WebEngine), kein Playwright-Browser.
+param([Parameter(Mandatory = $true)][string]$Ordner, [switch]$Update, [switch]$Lite, [switch]$Ollama, [string]$OllamaModell = "qwen2.5:7b-instruct-q4_K_M")
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -45,7 +46,15 @@ try {
         & $python -m venv (Join-Path $Ordner ".venv")
     }
 
+    $envDatei = Join-Path $Ordner ".env"
+    if (-not $Lite -and (Test-Path $envDatei)) { $Lite = [bool](Select-String -Path $envDatei -Pattern '^\s*KLAUS_LITE\s*=\s*1\s*$' -Quiet) }
     $req = Join-Path $Ordner "requirements.txt"
+    if ($Lite) {
+        Write-Host "Lite-Version: ohne Web-Oberflaeche (spart Platz und Speicher)"
+        $req = Join-Path $Ordner "data\requirements-lite.txt"
+        Get-Content (Join-Path $Ordner "requirements.txt") | Where-Object { $_ -notmatch '^\s*playwright' } |
+            ForEach-Object { if ($_ -match '^\s*PySide6\s*$') { 'PySide6-Essentials' } else { $_ } } | Set-Content $req -Encoding utf8
+    }
     $merker = Join-Path $Ordner "data\requirements.sha256"
     $hash = (Get-FileHash $req -Algorithm SHA256).Hash
     if (-not (Test-Path $merker) -or (Get-Content $merker -Raw).Trim() -ne $hash) {
@@ -53,7 +62,7 @@ try {
         & $venvPy -m pip install --upgrade pip --quiet
         & $venvPy -m pip install -r $req
         if ($LASTEXITCODE -ne 0) { throw "pip install ist fehlgeschlagen (siehe data\einrichten.log)." }
-        & $venvPy -m playwright install chromium
+        if (-not $Lite) { & $venvPy -m playwright install chromium }
         Set-Content -Path $merker -Value $hash
     }
     else { Write-Host "Pakete sind aktuell." }

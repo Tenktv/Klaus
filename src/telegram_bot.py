@@ -224,7 +224,7 @@ class TelegramKlaus:
         self.a = assistent
         self.werkzeuge = gemini_live.GeminiGespraech.__new__(gemini_live.GeminiGespraech)   # nur fuer _werkzeug()
         self.werkzeuge.a, self.werkzeuge.gefunden, self.werkzeuge.ende = assistent, set(), False
-        self.deklarationen = [w for w in gemini_live.WERKZEUGE if w["name"] not in NICHT_PER_CHAT]
+        self.deklarationen = [w for w in gemini_live.werkzeuge() if w["name"] not in NICHT_PER_CHAT]
         self.nutzer = int(os.getenv("TELEGRAM_NUTZER", "0") or 0)
         self.pin = os.getenv("TELEGRAM_PIN", "").strip()
         self.verlauf: list = []          # Gemini-Contents (letzte Runden)

@@ -50,7 +50,7 @@ Name: "{userdesktop}\Klaus"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parame
 
 [Run]
 ; Python, Pakete, Stimme - beim ersten Mal ein paar Minuten (Fenster zeigt den Fortschritt), bei Updates nur, was sich geaendert hat
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\installer\einrichten.ps1"" -Ordner ""{app}"" {code:UpdateSchalter} {code:OllamaSchalter}"; StatusMsg: "Richte Klaus ein (Python und Pakete) ..."; Flags: waituntilterminated
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\installer\einrichten.ps1"" -Ordner ""{app}"" {code:UpdateSchalter} {code:LiteSchalter} {code:OllamaSchalter}"; StatusMsg: "Richte Klaus ein (Python und Pakete) ..."; Flags: waituntilterminated
 Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\src\klaus_app.py"""; WorkingDir: "{app}"; Description: "Klaus jetzt starten"; Flags: nowait postinstall
 
 [UninstallRun]
@@ -70,6 +70,7 @@ var
   LokalSeite: TInputOptionWizardPage;
   UpdateSeite: TInputQueryWizardPage;
   StreamSeite: TInputQueryWizardPage;
+  LiteSeite: TInputOptionWizardPage;
 
 const
   OLLAMA_MODELL = 'qwen2.5:7b-instruct-q4_K_M';
@@ -82,6 +83,12 @@ end;
 function UpdateSchalter(Param: String): String;
 begin
   if IstUpdate() then Result := '-Update' else Result := '';
+end;
+
+function LiteSchalter(Param: String): String;
+begin
+  Result := '';
+  if (not IstUpdate()) and LiteSeite.Values[0] then Result := '-Lite';
 end;
 
 function OllamaSchalter(Param: String): String;
@@ -119,6 +126,12 @@ begin
     'Der Assistent nutzt die lokale KI, wenn keine Cloud-KI antwortet.', False, False);
   LokalSeite.Add('Ollama und das lokale Modell installieren');
 
+  LiteSeite := CreateInputOptionPage(NamenSeite.ID, 'Version', 'Volle Oberfläche oder Lite?',
+    'Die volle Version zeigt ein Panel mit Orb, Widgets und Designs. „Lite“ ist für schwächere PCs: nur Sprache und ein kleines Chatfenster, ' +
+    'ohne Design-Oberfläche, Twitch und Spielmodus – braucht deutlich weniger Arbeitsspeicher, Platz und Prozessor. Sprachgespräche, Termine, ' +
+    'Telegram und WhatsApp funktionieren in beiden gleich.', False, False);
+  LiteSeite.Add('Lite-Version installieren (für schwächere PCs)');
+
   StreamSeite := CreateInputQueryPage(LokalSeite.ID, 'Streaming (optional)', 'Soll dein Assistent deinen Chat mitlesen?',
     'Mit deinem Twitch-Kanalnamen liest er den Chat mit, begrüßt neue Leute und liest vor. YouTube, X, Instagram, Discord ' +
     'und andere Plattformen verbindest du später selbst: Taskleisten-Symbol → „Verbindungen“ oder sag „verbinde YouTube“.');
@@ -143,7 +156,8 @@ end;
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
   Result := IstUpdate() and ((PageID = NamenSeite.ID) or (PageID = SchluesselSeite.ID) or (PageID = EigeneKiSeite.ID) or
-                             (PageID = LokalSeite.ID) or (PageID = StreamSeite.ID) or (PageID = UpdateSeite.ID));
+                             (PageID = LokalSeite.ID) or (PageID = StreamSeite.ID) or (PageID = UpdateSeite.ID) or (PageID = LiteSeite.ID));
+  if (not Result) and (PageID = StreamSeite.ID) and LiteSeite.Values[0] then Result := True;   { Lite: kein Twitch }
 end;
 
 function Bereinigt(Wert: String): String;
@@ -170,7 +184,7 @@ begin
   StringChangeEx(Kanal, 'twitch.tv/', '', True);
   StringChangeEx(Kanal, '@', '', True);
   StringChangeEx(Kanal, '/', '', True);
-  SetArrayLength(Zeilen, 15);
+  SetArrayLength(Zeilen, 17);
   Zeilen[0] := '# Klaus - Einstellungen (vom Installer angelegt). Vorlage mit allen Optionen: .env.example';
   Zeilen[1] := 'KLAUS_NAME=' + Name;
   Zeilen[2] := 'KLAUS_NUTZER=' + Bereinigt(NamenSeite.Values[1]);
@@ -186,6 +200,8 @@ begin
   Zeilen[12] := 'KLAUS_UPDATE_TOKEN=' + Bereinigt(UpdateSeite.Values[0]);
   Zeilen[13] := 'TWITCH_KANAL=' + Kanal;
   Zeilen[14] := 'KLAUS_MELDE_CODE=' + Bereinigt(UpdateSeite.Values[1]);
+  if LiteSeite.Values[0] then Zeilen[15] := 'KLAUS_LITE=1' else Zeilen[15] := 'KLAUS_LITE=';
+  if LiteSeite.Values[0] then Zeilen[16] := 'WHISPER_MODEL=base' else Zeilen[16] := 'WHISPER_MODEL=';   { kleineres Modell fuer schwache PCs }
   SaveStringsToUTF8File(Datei, Zeilen, False);   { erste Zeile ist ein Kommentar - ein BOM davor stoert nicht }
 end;
 
