@@ -121,6 +121,15 @@ URL = ANBIETER[0].url if ANBIETER else ""
 KEY = ANBIETER[0].key if ANBIETER else ""
 
 
+def _erlaubt(name: str, nur: set[str] | None) -> bool:
+    return nur is None or name in nur or name.rstrip("0123456789") in nur   # "openrouter" erlaubt openrouter1 und openrouter2
+
+
+def verfuegbar(nur: set[str] | None = None) -> list[str]:
+    """Namen der eingerichteten Anbieter, die erlaubt sind (nur=None: alle). Fuer Anwendungen mit Kundendaten (whatsapp_kunden)."""
+    return [a.name for a in ANBIETER if _erlaubt(a.name, nur)]
+
+
 def bereit() -> bool:
     return bool(ANBIETER)
 
@@ -154,15 +163,18 @@ class ErsatzFehler(RuntimeError):
 
 
 def chat(nachrichten: list[dict], tools: list[dict] | None = None, bild: bool = False, timeout: float = 45,
-         frist: float = 150) -> dict:
+         frist: float = 150, nur: set[str] | None = None) -> dict:
     """Anbieter der Reihe nach, je Anbieter bis zu 3 Modelle (429/5xx/404/kaputter Werkzeugaufruf -> naechstes).
+    nur: nur diese Anbieter (z. B. {"eigen", "openai"} fuer Kundendaten - nie ein Gratis-Anbieter, der Eingaben mitlesen darf).
     -> {"message": {...}, "modell": "anbieter/modell"}"""
     if not ANBIETER:
         raise ErsatzFehler("Kein Schluessel fuer die Ersatz-KI (GROQ_API_KEY / OPENROUTER_API_KEY)")
+    if not verfuegbar(nur):
+        raise ErsatzFehler(f"Kein erlaubter Anbieter eingerichtet (erlaubt: {', '.join(sorted(nur or []))})")
     ende = time.time() + frist
     fehler = []
     # Explizit freigegebene Premium-Anbieter zuerst; ohne Opt-in bleibt die alte Gratis-Reihenfolge.
-    anbieter = sorted(ANBIETER, key=lambda a: 0 if ki_kosten.modelle(a.name) else 1)
+    anbieter = sorted((a for a in ANBIETER if _erlaubt(a.name, nur)), key=lambda a: 0 if ki_kosten.modelle(a.name) else 1)
     for a in anbieter:
         if a.name in ('eigen', 'openai') and not ki_kosten.modelle(a.name):
             continue
@@ -219,9 +231,9 @@ def chat(nachrichten: list[dict], tools: list[dict] | None = None, bild: bool = 
     raise ErsatzFehler(f"Ersatz-KI antwortet nicht ({'; '.join(fehler)[-300:]})")
 
 
-def text(prompt: str, system: str = "") -> str:
+def text(prompt: str, system: str = "", nur: set[str] | None = None) -> str:
     nachrichten = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
-    return (chat(nachrichten)["message"].get("content") or "").strip()
+    return (chat(nachrichten, nur=nur)["message"].get("content") or "").strip()
 
 
 def bild_json(bild: bytes, mime: str, auftrag: str) -> str:

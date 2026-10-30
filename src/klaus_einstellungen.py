@@ -44,7 +44,10 @@ PLATTFORMEN: dict[str, Plattform] = {p.id: p for p in [
         "eigene_ki", "Eigene KI",
         "Jeder Anbieter im OpenAI-Format: OpenAI, Mistral, DeepSeek – oder LM Studio auf deinem PC.",
         ["Adresse der API eintragen, z. B. https://api.openai.com/v1 oder für LM Studio http://localhost:1234/v1.",
-         "Schlüssel (bei LM Studio leer lassen) und Modell(e), kommagetrennt."],
+         "Google (Gemini) im OpenAI-Format: https://generativelanguage.googleapis.com/v1beta/openai, Schlüssel aus einem Projekt MIT Abrechnung, "
+         "Modell z. B. gemini-2.5-flash.",
+         "Schlüssel (bei LM Studio leer lassen) und Modell(e), kommagetrennt.",
+         "Für WhatsApp-Kundendaten ist das der Standard-Anbieter: Gratis-Anbieter (Groq, OpenRouter) sehen dort keine Kundentexte."],
         "https://platform.openai.com/api-keys",
         [Feld("ERSATZ_KI_URL", "API-Adresse", hinweis="https://…/v1"), Feld("ERSATZ_KI_KEY", "API-Schlüssel", geheim=True),
          Feld("ERSATZ_KI_MODELLE", "Modell(e)", hinweis="z. B. gpt-4o-mini")],
