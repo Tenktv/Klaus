@@ -41,11 +41,15 @@ class Basis(unittest.TestCase):
                   patch.dict(os.environ, {'WHATSAPP_APP_SECRET': APP_SECRET, 'WHATSAPP_VERIFY_TOKEN': 'vt', 'TESTER_BOT_TOKEN': 'bot'})):
             p.start()
             self.addCleanup(p.stop)
+        p = patch.object(ersatz_ki, 'verfuegbar', lambda nur=None: ['eigen'])   # es gibt einen erlaubten Anbieter; die KI selbst ist in den Tests gefaelscht
+        p.start()
+        self.addCleanup(p.stop)
+        W._ki_hinweis.clear()
         W._verlauf.clear()
         W._zaehler.update(tag='', firma={}, kunde={})
         W._gesehen.clear()
         self.meldungen = []
-        p = patch.object(W, '_tester_melden', lambda c, text, anhang=None: self.meldungen.append((text, anhang)))
+        p = patch.object(W, '_tester_melden', lambda c, text, anhang=None, knoepfe=None: self.meldungen.append((text, anhang)))
         p.start()
         self.addCleanup(p.stop)
 
@@ -174,6 +178,72 @@ class KI(Basis):
         self.assertEqual(antworten[0], 'Hallo!')
 
 
+class Datenschutz(Basis):
+    """Kundendaten nur an erlaubte KI-Anbieter, so wenig wie moeglich."""
+    def test_standard_erlaubt_nur_bezahlte_oder_eigene(self):
+        with patch.dict(os.environ, {'WHATSAPP_KI_ANBIETER': ''}):
+            os.environ.pop('WHATSAPP_KI_ANBIETER')
+            self.assertEqual(W.ki_anbieter(), {'eigen', 'openai'})
+        with patch.dict(os.environ, {'WHATSAPP_KI_ANBIETER': 'alle'}):
+            self.assertIsNone(W.ki_anbieter())
+        with patch.dict(os.environ, {'WHATSAPP_KI_ANBIETER': 'Groq, openrouter'}):
+            self.assertEqual(W.ki_anbieter(), {'groq', 'openrouter'})
+
+    def test_ersatz_ki_filtert_anbieter(self):
+        patch.stopall()
+        a = ersatz_ki.Anbieter
+        liste = [a('groq', 'u', 'k', [], []), a('openrouter1', 'u', 'k', [], []), a('eigen', 'u', 'k', [], [])]
+        with patch.object(ersatz_ki, 'ANBIETER', liste):
+            self.assertEqual(ersatz_ki.verfuegbar({'eigen', 'openai'}), ['eigen'])
+            self.assertEqual(ersatz_ki.verfuegbar({'openrouter'}), ['openrouter1'])
+            self.assertEqual(ersatz_ki.verfuegbar(None), ['groq', 'openrouter1', 'eigen'])
+            with self.assertRaises(ersatz_ki.ErsatzFehler) as e:
+                ersatz_ki.chat([{'role': 'user', 'content': 'hi'}], nur={'openai'})        # kein erlaubter Anbieter -> nichts wird gesendet
+            self.assertIn('Kein erlaubter Anbieter', str(e.exception))
+
+    def test_ohne_erlaubte_ki_bekommt_der_kunde_keine_ki_antwort_und_nichts_geht_raus(self):
+        gerufen = []
+        with patch.object(ersatz_ki, 'verfuegbar', lambda nur=None: []), \
+                patch.object(ersatz_ki, 'chat', lambda *a, **k: gerufen.append(1) or antwort_text('x')):
+            text = W.antworten(cfg(), KUNDE, 'Anna', 'Hallo, ich heisse Anna Meier')
+            W.antworten(cfg(), KUNDE, 'Anna', 'noch eine')
+        self.assertIn('meldet sich bei dir', text)
+        self.assertEqual(gerufen, [])
+        hinweise = [m for m, _ in self.meldungen if 'keine erlaubte KI' in m]
+        self.assertEqual(len(hinweise), 1)                                          # hoechstens ein Hinweis pro Stunde
+
+    def test_kunde_wird_mit_erlaubter_liste_gefragt_und_ohne_namen_oder_nummer(self):
+        gesehen = []
+
+        def chat(nachrichten, tools=None, nur=None, **k):
+            gesehen.append((json.dumps(nachrichten, ensure_ascii=False), nur))
+            return antwort_text('Hallo!')
+        with patch.object(ersatz_ki, 'chat', chat), patch.dict(os.environ, {'WHATSAPP_KI_ANBIETER': 'eigen,openai'}):
+            W.antworten(cfg(), KUNDE, 'Anna Meier', 'Ich möchte einen Termin')
+        roh, nur = gesehen[0]
+        self.assertEqual(nur, {'eigen', 'openai'})
+        self.assertNotIn('Anna Meier', roh)
+        self.assertNotIn(KUNDE, roh)
+
+    def test_inhaber_werkzeug_gibt_der_ki_keine_telefonnummern(self):
+        start = dt.datetime.combine(montag_in_zukunft(), dt.time(10))
+        W.buchen(cfg(), FID, KUNDE, 'Anna', start)
+        antwort = W._inhaber_werkzeug(cfg(), 'termine', {'datum': start.date().isoformat()})
+        self.assertIn('Anna', antwort)
+        self.assertNotIn(KUNDE, antwort)
+
+    def test_entwurf_ohne_profilnamen(self):
+        gesehen = []
+        with patch.object(ersatz_ki, 'text', lambda prompt, system='', nur=None: gesehen.append((prompt, nur)) or 'ok'), \
+                patch.object(W, '_entwuerfe', lambda: {}), patch.object(W, '_entwuerfe_speichern', lambda d: None):
+            W.entwurf_erstellen(cfg(kontakte={'491762222222': {'art': 'privat', 'name': 'Mama'}}),
+                                {'wa_id': '491762222222', 'name': 'Profilname Geheim', 'text': 'Hi', 'id': '1', 'art': 'text'})
+            W.entwurf_erstellen(cfg(), {'wa_id': '491799999999', 'name': 'Profilname Geheim', 'text': 'Hi', 'id': '2', 'art': 'text'})
+        self.assertEqual(gesehen[0][0], 'Nachricht von Mama: Hi')
+        self.assertEqual(gesehen[1][0], 'Nachricht von Kontakt: Hi')
+        self.assertTrue(all('Geheim' not in p for p, _ in gesehen))
+
+
 class Webhook(Basis):
     def setUp(self):
         super().setUp()
@@ -299,7 +369,7 @@ class Alltag(Basis):
         W.bearbeiten({'firma_id': FID, 'wa_id': von, 'name': 'Kontakt', 'id': mid or str(time.time()), 'art': art, 'text': text})
 
     def test_privatkontakt_bekommt_nur_vorschlag_und_senden_geht_per_knopf(self):
-        with patch.object(ersatz_ki, 'text', lambda prompt, system='': 'Klar, bis später!'):
+        with patch.object(ersatz_ki, 'text', lambda prompt, system='', nur=None: 'Klar, bis später!'):
             self.nachricht('491762222222', 'Kommst du heute zum Essen?')
         self.assertEqual(self.gesendet, [])                                   # nichts geht ungefragt raus
         self.assertIn('Vorschlag: „Klar, bis später!“', self.meldungen[-1][0])
@@ -311,7 +381,7 @@ class Alltag(Basis):
         self.assertEqual(W._entwuerfe(), {})
 
     def test_eigener_text_per_antwort_auf_die_nachricht(self):
-        with patch.object(ersatz_ki, 'text', lambda prompt, system='': 'Vorschlag'):
+        with patch.object(ersatz_ki, 'text', lambda prompt, system='', nur=None: 'Vorschlag'):
             self.nachricht('491762222222', 'Hast du Zeit?')
         u = {'message': {'chat': {'type': 'private'}, 'from': {'id': 42}, 'text': 'Erst ab 19 Uhr, ok?',
                          'reply_to_message': {'message_id': 777}}}
@@ -319,7 +389,7 @@ class Alltag(Basis):
         self.assertEqual(self.gesendet, [('491762222222', 'Erst ab 19 Uhr, ok?')])
 
     def test_fremde_koennen_keine_entwuerfe_freigeben(self):
-        with patch.object(ersatz_ki, 'text', lambda prompt, system='': 'Vorschlag'):
+        with patch.object(ersatz_ki, 'text', lambda prompt, system='', nur=None: 'Vorschlag'):
             self.nachricht('491762222222', 'Hi')
         nr = list(W._entwuerfe())[0]
         u = {'callback_query': {'id': 'x', 'data': f'wa:s:{nr}', 'from': {'id': 999}, 'message': {'message_id': 1}}}
