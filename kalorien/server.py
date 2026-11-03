@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import db, ki, nahrung
+from . import db, ki, nahrung, sozial
 
 WEB = Path(__file__).resolve().parent / "web"
 PORT = int(os.getenv("KALORIEN_PORT", "7730") or 7730)   # .env wird erst im Start geladen -> dort nochmal lesen
@@ -138,7 +138,7 @@ def nutzer_aus(c, kopf: str):
 
 def ich(z) -> dict:
     return {"name": z["name"], "admin": z["name"].lower() in _admins(), "ki": ki.verfuegbar(),
-            "profil": json.loads(z["profil"] or "{}"),
+            "profil": json.loads(z["profil"] or "{}"), "bio": z["bio"] or "", "rangliste": bool(z["in_rangliste"]),
             "ziele": {"kcal": z["ziel_kcal"], "eiweiss": z["ziel_eiweiss"], "kh": z["ziel_kh"], "fett": z["ziel_fett"]}}
 
 
@@ -154,6 +154,10 @@ def profil_speichern(c, z, d: dict) -> dict:
             raise Fehler(400, str(e) if isinstance(e, ValueError) and str(e) else "Bitte alle Angaben ausfüllen.")
         ziele = {k[5:]: v for k, v in erg.items()}
         profil = {k: b.get(k) for k in ("geschlecht", "alter", "groesse", "gewicht", "aktivitaet", "ziel")}
+    if "bio" in d:
+        c.execute("UPDATE nutzer SET bio=? WHERE id=?", (_text(d["bio"], "Über mich", 0, 160) if str(d["bio"]).strip() else "", z["id"]))
+    if "rangliste" in d:
+        c.execute("UPDATE nutzer SET in_rangliste=? WHERE id=?", (1 if d["rangliste"] else 0, z["id"]))
     for k, spalte in (("kcal", "ziel_kcal"), ("eiweiss", "ziel_eiweiss"), ("kh", "ziel_kh"), ("fett", "ziel_fett")):
         if k in ziele:
             c.execute(f"UPDATE nutzer SET {spalte}=? WHERE id=?", (ziele[k], z["id"]))
@@ -172,7 +176,7 @@ def _summe(zeilen) -> dict:
 
 def tag(c, z, datum: str) -> dict:
     zeilen = c.execute("SELECT * FROM eintrag WHERE nutzer=? AND datum=? ORDER BY id", (z["id"], datum)).fetchall()
-    return {"datum": datum, "eintraege": [dict(e) for e in zeilen], "summe": _summe(zeilen), **{"ziele": ich(z)["ziele"]}}
+    return {"datum": datum, "eintraege": [dict(e) for e in zeilen], "summe": _summe(zeilen), "ziele": ich(z)["ziele"], **sozial.tag_zusatz(c, z, datum)}
 
 
 def eintragen(c, z, d: dict) -> dict:
@@ -277,7 +281,7 @@ def chat_schreiben(c, z, d: dict) -> dict:
 
 def melden(c, z, d: dict) -> dict:
     art = d.get("art")
-    if art not in ("thema", "antwort", "chat"):
+    if art not in ("thema", "antwort", "chat", "beitrag", "kommentar"):
         raise Fehler(400, "Unbekannte Art.")
     _bremse(f"melden:{z['id']}", 10, 600)
     c.execute("INSERT INTO meldung(von, art, ziel, grund, erstellt) VALUES (?,?,?,?,?)",
@@ -297,7 +301,7 @@ def blockieren(c, z, name: str, an: bool = True) -> dict:
 
 
 def loeschen(c, z, art: str, oid: int) -> dict:
-    tabelle = {"thema": "thema", "antwort": "antwort", "chat": "chat"}.get(art)
+    tabelle = {"thema": "thema", "antwort": "antwort", "chat": "chat", "beitrag": "beitrag", "kommentar": "kommentar"}.get(art)
     if not tabelle:
         raise Fehler(400, "Unbekannte Art.")
     zeile = c.execute(f"SELECT nutzer FROM {tabelle} WHERE id=?", (oid,)).fetchone()
@@ -306,10 +310,16 @@ def loeschen(c, z, art: str, oid: int) -> dict:
     if zeile["nutzer"] != z["id"] and z["name"].lower() not in _admins():
         raise Fehler(403, "Das darfst du nicht löschen.")
     c.execute(f"UPDATE {tabelle} SET versteckt=1 WHERE id=?", (oid,))
+    if art == "beitrag":
+        bild = c.execute("SELECT bild FROM beitrag WHERE id=?", (oid,)).fetchone()["bild"]
+        sozial.bild_loeschen(bild)
+        c.execute("UPDATE beitrag SET bild='' WHERE id=?", (oid,))
     return {"text": "Gelöscht."}
 
 
 def konto_loeschen(c, z) -> dict:
+    for bild in sozial.konto_bilder(c, z["id"]):
+        sozial.bild_loeschen(bild)
     c.execute("DELETE FROM nutzer WHERE id=?", (z["id"],))   # Tagebuch, Beitraege, Zugaenge: ON DELETE CASCADE
     c.execute("DELETE FROM blockiert WHERE nutzer=? OR ziel=?", (z["id"], z["id"]))
     c.execute("DELETE FROM ki_nutzung WHERE nutzer=?", (z["id"],))
@@ -320,7 +330,11 @@ def export(c, z) -> dict:
     return {"name": z["name"], "ziele": ich(z)["ziele"], "profil": json.loads(z["profil"] or "{}"),
             "tagebuch": [dict(r) for r in c.execute("SELECT datum, mahlzeit, name, menge, kcal, eiweiss, kh, fett FROM eintrag WHERE nutzer=? "
                                                     "ORDER BY datum, id", (z["id"],))],
-            "beitraege": [dict(r) for r in c.execute("SELECT titel, text, erstellt FROM thema WHERE nutzer=?", (z["id"],))]}
+            "forum": [dict(r) for r in c.execute("SELECT titel, text, erstellt FROM thema WHERE nutzer=?", (z["id"],))],
+            "beitraege": [dict(r) for r in c.execute("SELECT art, text, erstellt FROM beitrag WHERE nutzer=? AND versteckt=0", (z["id"],))],
+            "training": [dict(r) for r in c.execute("SELECT datum, art, minuten, kcal, notiz FROM training WHERE nutzer=? ORDER BY datum", (z["id"],))],
+            "gewicht": [dict(r) for r in c.execute("SELECT datum, kg FROM gewicht WHERE nutzer=? ORDER BY datum", (z["id"],))],
+            "wasser": [dict(r) for r in c.execute("SELECT datum, ml FROM wasser WHERE nutzer=? ORDER BY datum", (z["id"],))]}
 
 
 # ------------------------------------------------------------------ HTTP
@@ -381,6 +395,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _antworten(self, methode: str) -> None:
         u = urlparse(self.path)
+        if u.path.startswith("/bild/"):
+            roh = sozial.bild_lesen(u.path[6:])
+            return self._senden(200, roh, "image/jpeg", {"Cache-Control": "private, max-age=86400"}) if roh else self._senden(404, {"fehler": "weg"})
         if not u.path.startswith("/api/"):
             return self._datei(u.path) if methode in ("GET", "HEAD") else self._senden(405, {"fehler": "nicht erlaubt"})
         try:
@@ -402,7 +419,7 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 c.close()
             self._senden(200, antwort)
-        except Fehler as e:
+        except (Fehler, sozial.SozialFehler) as e:
             self._senden(e.status, {"fehler": e.text})
         except ki.KiFehler as e:
             self._senden(503, {"fehler": str(e)})
@@ -493,6 +510,44 @@ class Handler(BaseHTTPRequestHandler):
                 return chat_lesen(c, z, int(q.get("nach") or 0))
             if m == "POST":
                 return chat_schreiben(c, z, d)
+        if t0 == "feed" and m == "GET":
+            return sozial.feed(c, z, q.get("art") == "folge", int(q.get("vor") or 0), q.get("von", "")[:24])
+        if t0 == "beitrag":
+            if m == "POST" and len(teile) == 1:
+                _bremse(f"beitrag:{z['id']}", 10, 3600)
+                return sozial.beitrag_neu(c, z, d, _text)
+            if m == "GET" and len(teile) == 2:
+                return sozial.beitrag_lesen(c, z, int(teile[1]))
+            if m == "POST" and len(teile) == 3 and teile[2] == "gefaellt":
+                return sozial.gefaellt_wechseln(c, z, int(teile[1]))
+            if m == "POST" and len(teile) == 3 and teile[2] == "kommentar":
+                _bremse(f"kommentar:{z['id']}", 30, 600)
+                return sozial.kommentar_neu(c, z, int(teile[1]), d, _text)
+        if t0 == "profil" and m == "GET" and len(teile) == 2:
+            return sozial.profil(c, z, unquote(teile[1]))
+        if t0 == "folgen" and m in ("POST", "DELETE"):
+            return sozial.folgen(c, z, str(d.get("name") or q.get("name") or ""), m == "POST")
+        if t0 == "suche" and m == "GET":
+            return sozial.suche(c, z, q.get("q", ""))
+        if t0 == "rangliste" and m == "GET":
+            return sozial.rangliste(c, z)
+        if t0 == "training":
+            if m == "POST":
+                return sozial.training_eintragen(c, z, d, _datum(d.get("datum")), _text, _zahl)
+            if m == "DELETE" and len(teile) == 2:
+                c.execute("DELETE FROM training WHERE id=? AND nutzer=?", (int(teile[1]), z["id"]))
+                return {"text": "Gelöscht."}
+        if t0 == "wasser" and m == "POST":
+            try:
+                ml = int(float(str(d.get("ml")).replace(",", ".")))
+            except ValueError:
+                raise Fehler(400, "Menge ist keine Zahl.")
+            return sozial.wasser_addieren(c, z, _datum(d.get("datum")), ml)
+        if t0 == "gewicht":
+            if m == "GET":
+                return sozial.gewicht_verlauf(c, z)
+            if m == "POST":
+                return sozial.gewicht_setzen(c, z, _datum(d.get("datum")), _zahl(d.get("kg"), "Gewicht", 400))
         if t0 == "melden" and m == "POST":
             return melden(c, z, d)
         if t0 == "blockieren" and m in ("POST", "DELETE"):

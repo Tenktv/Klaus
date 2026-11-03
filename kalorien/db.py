@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 DATEI = Path(os.getenv("KALORIEN_DB") or Path(__file__).resolve().parent.parent / "data" / "kalorien.db")
+BILDER = DATEI.parent / "kalorien_bilder"   # Beitragsfotos (nur hier, nie das Essens-Foto zur Schaetzung)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS nutzer (
@@ -36,6 +37,27 @@ CREATE TABLE IF NOT EXISTS chat (
     erstellt INTEGER NOT NULL, versteckt INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS meldung (
     id INTEGER PRIMARY KEY, von INTEGER, art TEXT NOT NULL, ziel INTEGER NOT NULL, grund TEXT DEFAULT '', erstellt INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS folgen (
+    von INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE, ziel INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE,
+    erstellt INTEGER NOT NULL, PRIMARY KEY (von, ziel));
+CREATE TABLE IF NOT EXISTS beitrag (
+    id INTEGER PRIMARY KEY, nutzer INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE, art TEXT NOT NULL,
+    text TEXT DEFAULT '', bild TEXT DEFAULT '', erstellt INTEGER NOT NULL, versteckt INTEGER DEFAULT 0);
+CREATE INDEX IF NOT EXISTS beitrag_zeit ON beitrag(erstellt);
+CREATE TABLE IF NOT EXISTS gefaellt (
+    beitrag INTEGER NOT NULL REFERENCES beitrag(id) ON DELETE CASCADE, nutzer INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE,
+    PRIMARY KEY (beitrag, nutzer));
+CREATE TABLE IF NOT EXISTS kommentar (
+    id INTEGER PRIMARY KEY, beitrag INTEGER NOT NULL REFERENCES beitrag(id) ON DELETE CASCADE,
+    nutzer INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE, text TEXT NOT NULL, erstellt INTEGER NOT NULL, versteckt INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS training (
+    id INTEGER PRIMARY KEY, nutzer INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE, datum TEXT NOT NULL,
+    art TEXT NOT NULL, minuten INTEGER NOT NULL, kcal INTEGER NOT NULL, notiz TEXT DEFAULT '', erstellt INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS training_tag ON training(nutzer, datum);
+CREATE TABLE IF NOT EXISTS wasser (nutzer INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE, datum TEXT NOT NULL, ml INTEGER DEFAULT 0,
+    PRIMARY KEY (nutzer, datum));
+CREATE TABLE IF NOT EXISTS gewicht (nutzer INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE, datum TEXT NOT NULL, kg REAL NOT NULL,
+    PRIMARY KEY (nutzer, datum));
 CREATE TABLE IF NOT EXISTS blockiert (nutzer INTEGER NOT NULL, ziel INTEGER NOT NULL, PRIMARY KEY (nutzer, ziel));
 """
 
@@ -47,6 +69,10 @@ def verbinden() -> sqlite3.Connection:
     c.execute("PRAGMA foreign_keys=ON")
     c.execute("PRAGMA journal_mode=WAL")
     c.executescript(SCHEMA)
+    spalten = {r["name"] for r in c.execute("PRAGMA table_info(nutzer)")}
+    for name, ddl in (("bio", "TEXT DEFAULT ''"), ("in_rangliste", "INTEGER DEFAULT 1")):   # aeltere Datenbanken nachruesten
+        if name not in spalten:
+            c.execute(f"ALTER TABLE nutzer ADD COLUMN {name} {ddl}")
     try:
         os.chmod(DATEI, 0o600)
     except OSError:

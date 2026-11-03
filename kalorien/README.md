@@ -13,7 +13,11 @@ lässt sich per Schnittstelle mit Klaus, Telegram oder Kurzbefehlen verbinden.
 | Melden, Blockieren, Löschen, Moderator-Liste, Textfilter, Sende-Bremsen | ✅ |
 | Konto löschen + Daten exportieren (DSGVO) | ✅ |
 | Schnittstelle: Zugangs-Schlüssel (`kt_…`) → Klaus/Telegram: `/kalorien`, `/essen …`, Foto mit „Essen“ | ✅ |
-| Wasser, Gewicht-Verlauf, eigene Rezepte/Favoriten, Fotos im Forum, Push-Nachrichten, Abo/Bezahlung | ⏳ noch nicht |
+| **Fitness-Social-Media:** Feed mit Fotos (Standort im Foto wird entfernt), Likes, Kommentare, „Folge ich“-Feed, Profile mit Über-mich, Folgen, Leute suchen | ✅ |
+| Training eintragen (Kalorien automatisch aus Sportart, Dauer und Gewicht geschätzt), im Feed teilen | ✅ |
+| Wasser, Gewichtsverlauf, Serien (🔥 Tage in Folge), Abzeichen, Wochen-Rangliste (freiwillig, pro Tag max. 240 Min.) | ✅ |
+| Foto-Beiträge ohne KI-Prüfung: Melden/Löschen/Blockieren statt automatischer Bilderkennung | ⚠️ siehe Moderation |
+| Eigene Rezepte/Favoriten, Direktnachrichten, Gruppen/Challenges, Push-Nachrichten, Bezahlung/Abo, App-Store-Paket | ⏳ noch nicht |
 
 ## Starten (Server oder PC)
 
@@ -58,6 +62,10 @@ oder einem eigenen Bot. Endpunkte: `GET /api/tag?datum=`, `POST /api/eintrag`, `
   Registrierung drin), Datenschutzerklärung, Verzeichnis der Verarbeitungstätigkeiten, ggf. Auftragsverarbeitung mit dem Hoster.
 - **Fotos** gehen an Google (Gemini) und werden von der App **nicht gespeichert**. Das muss in der Datenschutzerklärung stehen;
   für Gemini ist das bezahlte API-Konto vorzuziehen (dort werden Eingaben nicht zum Training genutzt – Bedingungen selbst prüfen).
+- **Feed-Fotos** liegen auf dem Server (`data/kalorien_bilder/`), sind für alle angemeldeten Mitglieder sichtbar und werden beim Löschen des
+  Beitrags oder Kontos gelöscht. EXIF/GPS wird serverseitig entfernt. Es gibt keine automatische Bilderprüfung: rechne mit Meldungen
+  (Nacktheit, Körperbilder, Essstörungs-Inhalte) und plane jemanden ein, der `/api/meldungen` liest – für den App Store ist Moderation Pflicht.
+- **Rangliste/Profile** zeigen nur Name, Bio, Serie, Trainingsminuten; das Tagebuch (Essen, Gewicht, Wasser) bleibt immer privat.
 - **Forum/Chat** = Nutzerinhalte: Impressum, Nutzungsregeln, Melde- und Löschweg (drin), jemand muss Meldungen lesen (`/api/meldungen` als Admin).
 - Passwörter werden mit scrypt gehasht, Schlüssel nur als SHA-256 gespeichert. Kein Tracking, keine Werbe-SDKs.
 - Kalorienwerte sind **Schätzungen**, keine medizinische Beratung (Hinweis steht in der App). Keine Crash-Diäten empfehlen.
