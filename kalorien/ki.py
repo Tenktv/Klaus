@@ -1,4 +1,9 @@
-"""Kalorien-App - KI-Schaetzung aus Foto oder Text (Google Gemini ueber REST, Schluessel nur auf dem Server).
+"""Fit-App - KI ueber REST. Zwei Wege:
+
+  * Server-KI: der GEMINI_API_KEY des Betreibers (mit Tageslimit je Nutzer, siehe server.ki_zaehlen)
+  * Eigene KI (nur Pro): der Nutzer traegt seinen eigenen Schluessel ein - Gemini, OpenAI, Anthropic, Groq oder OpenRouter.
+    Die Adressen der Anbieter sind FEST eingebaut: der Nutzer kann keine eigene URL angeben (sonst koennte er den Server
+    auf interne Adressen schicken = SSRF). Der Schluessel verlaesst den Server nie in Richtung App.
 
 Fotos werden NICHT gespeichert: sie gehen einmal an die KI, zurueck kommt nur die Schaetzung."""
 from __future__ import annotations
@@ -7,10 +12,27 @@ import base64
 import json
 import os
 import re
+import urllib.error
 import urllib.request
 
 MODELL = os.getenv("KALORIEN_MODELL", "gemini-2.5-flash")
 URL = "https://generativelanguage.googleapis.com/v1beta/models/{modell}:generateContent"
+
+# Feste Anbieter. "bild": versteht das Standardmodell Fotos?
+ANBIETER = {
+    "gemini": {"name": "Google Gemini", "modell": "gemini-2.5-flash", "bild": True, "hilfe": "aistudio.google.com/apikey"},
+    "openai": {"name": "OpenAI", "modell": "gpt-4o-mini", "bild": True, "url": "https://api.openai.com/v1/chat/completions",
+               "hilfe": "platform.openai.com/api-keys"},
+    "anthropic": {"name": "Anthropic (Claude)", "modell": "claude-haiku-4-5", "bild": True, "url": "https://api.anthropic.com/v1/messages",
+                  "hilfe": "console.anthropic.com/settings/keys"},
+    "groq": {"name": "Groq", "modell": "meta-llama/llama-4-scout-17b-16e-instruct", "bild": True,
+             "url": "https://api.groq.com/openai/v1/chat/completions", "hilfe": "console.groq.com/keys"},
+    "openrouter": {"name": "OpenRouter", "modell": "google/gemini-2.5-flash", "bild": True,
+                   "url": "https://openrouter.ai/api/v1/chat/completions", "hilfe": "openrouter.ai/keys"},
+}
+MODELL_MUSTER = re.compile(r"^[\w./:@-]{2,80}$")
+SCHLUESSEL_MUSTER = re.compile(r"^[\w.\-]{16,300}$")
+
 FORMAT = ('Antworte NUR mit JSON: {"gerichte":[{"name":"deutscher Name","menge":"z.B. 150 g oder 1 Stück","kcal":Zahl,'
           '"eiweiss":Gramm,"kh":Gramm,"fett":Gramm}],"hinweis":"ein kurzer Satz zur Unsicherheit"}. '
           "Zahlen sind für die genannte Menge insgesamt, nicht pro 100 g. Schätze realistisch, lieber vorsichtig runden. "
@@ -31,19 +53,99 @@ def verfuegbar() -> bool:
     return bool(schluessel())
 
 
-def _aufrufen(teile: list[dict], timeout: float = 60) -> dict:
-    if not schluessel():
-        raise KiFehler("Die KI ist auf diesem Server nicht eingerichtet (GEMINI_API_KEY fehlt).")
-    daten = {"contents": [{"parts": teile}], "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2}}
-    anfrage = urllib.request.Request(URL.format(modell=MODELL), data=json.dumps(daten).encode(),
-                                     headers={"Content-Type": "application/json", "x-goog-api-key": schluessel()})
+def konfig_pruefen(anbieter: str, key: str, modell: str = "") -> dict:
+    """Eingaben des Nutzers pruefen -> {anbieter, schluessel, modell}. Wirft KiFehler."""
+    if anbieter not in ANBIETER:
+        raise KiFehler("Unbekannter Anbieter.")
+    key = (key or "").strip()
+    if not SCHLUESSEL_MUSTER.match(key):
+        raise KiFehler("Das sieht nicht wie ein API-Schlüssel aus (nur Buchstaben, Zahlen, - _ .).")
+    modell = (modell or "").strip()
+    if modell and not MODELL_MUSTER.match(modell):
+        raise KiFehler("Der Modellname ist ungültig.")
+    return {"anbieter": anbieter, "schluessel": key, "modell": modell or ANBIETER[anbieter]["modell"]}
+
+
+def maskiert(key: str) -> str:
+    return "••••" + key[-4:] if len(key) >= 8 else "••••"
+
+
+def _post(url: str, kopf: dict, daten: dict, timeout: float) -> dict:
+    anfrage = urllib.request.Request(url, data=json.dumps(daten).encode(), headers={"Content-Type": "application/json", **kopf})
     try:
         with urllib.request.urlopen(anfrage, timeout=timeout) as r:
-            antwort = json.loads(r.read().decode("utf-8", "replace"))
-        text = antwort["candidates"][0]["content"]["parts"][0]["text"]
-    except (OSError, KeyError, IndexError, ValueError) as e:
+            return json.loads(r.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as e:
+        # Nie den Schluessel oder Rohtext des Anbieters weitergeben - nur eine klare Ursache
+        if e.code in (401, 403):
+            raise KiFehler("Der Anbieter hat den API-Schlüssel abgelehnt. Stimmt er, und hat er Guthaben?")
+        if e.code == 402:
+            raise KiFehler("Dein Konto beim KI-Anbieter hat kein Guthaben mehr.")
+        if e.code == 404:
+            raise KiFehler("Das Modell gibt es beim Anbieter nicht. Prüfe den Modellnamen.")
+        if e.code == 429:
+            raise KiFehler("Dein KI-Anbieter sagt: Limit erreicht. Bitte später nochmal.")
+        raise KiFehler(f"Der KI-Anbieter antwortet gerade nicht ({e.code}).")
+    except (OSError, ValueError) as e:
         raise KiFehler(f"Die KI antwortet gerade nicht ({type(e).__name__}).")
-    return lesen(text)
+
+
+def chat(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, konfig: dict | None = None,
+         json_modus: bool = True, timeout: float = 60, max_token: int = 1800) -> str:
+    """Eine Anfrage an die KI -> Text. bild = (Bytes, MIME). konfig = eigene KI des Nutzers, sonst der Server-Schluessel."""
+    if konfig is None:
+        if not schluessel():
+            raise KiFehler("Die KI ist auf diesem Server nicht eingerichtet (GEMINI_API_KEY fehlt).")
+        konfig = {"anbieter": "gemini", "schluessel": schluessel(), "modell": MODELL}
+    anbieter, key, modell = konfig["anbieter"], konfig["schluessel"], konfig.get("modell") or ANBIETER[konfig["anbieter"]]["modell"]
+    b64 = base64.b64encode(bild[0]).decode() if bild else ""
+    if anbieter == "gemini":
+        teile = [{"text": (system + "\n\n" + nutzer).strip()}]
+        if bild:
+            teile.append({"inline_data": {"mime_type": bild[1], "data": b64}})
+        cfg = {"temperature": 0.3, "maxOutputTokens": max_token}
+        if json_modus:
+            cfg["responseMimeType"] = "application/json"
+        r = _post(URL.format(modell=modell), {"x-goog-api-key": key}, {"contents": [{"parts": teile}], "generationConfig": cfg}, timeout)
+        try:
+            return r["candidates"][0]["content"]["parts"][0]["text"]
+        except (KeyError, IndexError):
+            raise KiFehler("Die KI hat nichts geantwortet (evtl. blockiert). Bitte anders formulieren.")
+    if anbieter == "anthropic":
+        inhalt = ([{"type": "image", "source": {"type": "base64", "media_type": bild[1], "data": b64}}] if bild else []) + [{"type": "text", "text": nutzer}]
+        r = _post(ANBIETER["anthropic"]["url"], {"x-api-key": key, "anthropic-version": "2023-06-01"},
+                  {"model": modell, "max_tokens": max_token, "system": system, "temperature": 0.3,
+                   "messages": [{"role": "user", "content": inhalt}]}, timeout)
+        try:
+            return "".join(t.get("text", "") for t in r["content"] if t.get("type") == "text")
+        except (KeyError, TypeError):
+            raise KiFehler("Die KI hat nichts geantwortet.")
+    # OpenAI-Format: OpenAI, Groq, OpenRouter
+    inhalt = ([{"type": "text", "text": nutzer}] + ([{"type": "image_url", "image_url": {"url": f"data:{bild[1]};base64,{b64}"}}] if bild else []))
+    daten = {"model": modell, "temperature": 0.3, "max_tokens": max_token,
+             "messages": [{"role": "system", "content": system}, {"role": "user", "content": inhalt if bild else nutzer}]}
+    if json_modus and anbieter in ("openai", "groq"):
+        daten["response_format"] = {"type": "json_object"}
+    r = _post(ANBIETER[anbieter]["url"], {"Authorization": f"Bearer {key}"}, daten, timeout)
+    try:
+        return r["choices"][0]["message"]["content"] or ""
+    except (KeyError, IndexError, TypeError):
+        raise KiFehler("Die KI hat nichts geantwortet.")
+
+
+def json_holen(text: str):
+    """JSON aus einer KI-Antwort (tolerant gegenueber ```json-Zaeunen und Text drumherum)."""
+    text = re.sub(r"^```(?:json)?|```$", "", (text or "").strip(), flags=re.M).strip()
+    try:
+        return json.loads(text)
+    except ValueError:
+        m = re.search(r"\{.*\}", text, re.S)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except ValueError:
+                pass
+    raise KiFehler("Die KI-Antwort war nicht lesbar. Bitte nochmal versuchen.")
 
 
 def lesen(text: str) -> dict:
@@ -69,15 +171,30 @@ def lesen(text: str) -> dict:
     return {"gerichte": gerichte, "hinweis": str(roh.get("hinweis") or "")[:200] if isinstance(roh, dict) else ""}
 
 
-def aus_bild(bild: bytes, mime: str, hinweis: str = "") -> dict:
+def _aufrufen(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, konfig: dict | None = None) -> dict:
+    """KI fragen und die Mahlzeiten-Antwort lesen (eigene Stelle, damit Tests die KI ersetzen koennen)."""
+    return lesen(chat(system, nutzer, bild, konfig))
+
+
+def aus_bild(bild: bytes, mime: str, hinweis: str = "", konfig: dict | None = None) -> dict:
     if mime not in ("image/jpeg", "image/png", "image/webp"):
         raise KiFehler("Bitte ein JPEG-, PNG- oder WebP-Foto senden.")
     zusatz = f' Hinweis des Nutzers: "{hinweis[:300]}".' if hinweis.strip() else ""
-    return _aufrufen([{"text": BILD + FORMAT + zusatz},
-                      {"inline_data": {"mime_type": mime, "data": base64.b64encode(bild).decode()}}])
+    return _aufrufen(BILD + FORMAT, "Foto der Mahlzeit." + zusatz, (bild, mime), konfig)
 
 
-def aus_text(beschreibung: str) -> dict:
+def aus_text(beschreibung: str, konfig: dict | None = None) -> dict:
     if not beschreibung.strip():
         raise KiFehler("Bitte beschreibe, was du gegessen hast.")
-    return _aufrufen([{"text": TEXT + FORMAT + f'\nMahlzeit: "{beschreibung[:600]}"'}])
+    return _aufrufen(TEXT + FORMAT, f'Mahlzeit: "{beschreibung[:600]}"', None, konfig)
+
+
+def testen(konfig: dict) -> str:
+    """Kleine Probe-Anfrage mit dem Schluessel des Nutzers (verbraucht Centbruchteile)."""
+    antwort = chat("Antworte nur mit dem JSON {\"ok\": true}.", "Test", None, konfig, True, 20, 30)
+    return "ok" if "ok" in antwort.lower() else "antwortet"
+
+
+def ANBIETER_LISTE() -> list[dict]:
+    """Fuer die App (Auswahl beim Eintragen der eigenen KI)."""
+    return [{"id": k, "name": v["name"], "modell": v["modell"], "hilfe": v["hilfe"]} for k, v in ANBIETER.items()]

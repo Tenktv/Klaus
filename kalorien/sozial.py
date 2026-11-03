@@ -212,11 +212,16 @@ def _weg(c, z) -> set[int]:
 
 
 def _beitrag_dict(r, z) -> dict:
-    return {"id": r["id"], "name": r["name"], "art": r["art"], "text": r["text"], "bild": ("/bild/" + r["bild"]) if r["bild"] else "",
-            "erstellt": r["erstellt"], "likes": r["likes"], "kommentare": r["kommentare"], "geliked": bool(r["geliked"]), "eigen": r["nutzer"] == z["id"]}
+    d = {"id": r["id"], "name": r["name"], "art": r["art"], "text": r["text"], "bild": ("/bild/" + r["bild"]) if r["bild"] else "",
+         "erstellt": r["erstellt"], "likes": r["likes"], "kommentare": r["kommentare"], "geliked": bool(r["geliked"]), "eigen": r["nutzer"] == z["id"]}
+    if r["art"] == "reel":
+        d.update(video=("/video/" + r["video"]) if r["video"] else "", poster=("/bild/" + r["poster"]) if r["poster"] else "",
+                 dauer=r["dauer"], status=r["status"], folgt=bool(r["folgt"]))
+    return d
 
 
-_SEL = ("SELECT b.id, b.nutzer, n.name, b.art, b.text, b.bild, b.erstellt, "
+_SEL = ("SELECT b.id, b.nutzer, n.name, b.art, b.text, b.bild, b.erstellt, b.video, b.poster, b.status, b.dauer, "
+        "(SELECT COUNT(*) FROM folgen f WHERE f.von=? AND f.ziel=b.nutzer) AS folgt, "
         "(SELECT COUNT(*) FROM gefaellt g WHERE g.beitrag=b.id) AS likes, "
         "(SELECT COUNT(*) FROM kommentar k WHERE k.beitrag=b.id AND k.versteckt=0) AS kommentare, "
         "(SELECT COUNT(*) FROM gefaellt g WHERE g.beitrag=b.id AND g.nutzer=?) AS geliked "
@@ -224,7 +229,7 @@ _SEL = ("SELECT b.id, b.nutzer, n.name, b.art, b.text, b.bild, b.erstellt, "
 
 
 def feed(c, z, nur_folge: bool, vor: int, von_name: str = "") -> list[dict]:
-    sql, arg = _SEL, [z["id"]]
+    sql, arg = _SEL + " AND b.art!='reel'", [z["id"], z["id"]]
     if nur_folge:
         sql += " AND (b.nutzer=? OR b.nutzer IN (SELECT ziel FROM folgen WHERE von=?))"
         arg += [z["id"], z["id"]]
@@ -240,7 +245,7 @@ def feed(c, z, nur_folge: bool, vor: int, von_name: str = "") -> list[dict]:
 
 
 def beitrag_lesen(c, z, bid: int) -> dict:
-    r = c.execute(_SEL + " AND b.id=?", (z["id"], bid)).fetchone()
+    r = c.execute(_SEL + " AND b.id=?", (z["id"], z["id"], bid)).fetchone()
     if not r or r["nutzer"] in _weg(c, z):
         raise SozialFehler(404, "Beitrag nicht gefunden.")
     weg = _weg(c, z)

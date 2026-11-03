@@ -11,6 +11,7 @@ from pathlib import Path
 
 DATEI = Path(os.getenv("KALORIEN_DB") or Path(__file__).resolve().parent.parent / "data" / "kalorien.db")
 BILDER = DATEI.parent / "kalorien_bilder"   # Beitragsfotos (nur hier, nie das Essens-Foto zur Schaetzung)
+VIDEOS = DATEI.parent / "kalorien_videos"   # Reels (nach der Umwandlung in H.264/MP4) und das Rohmaterial waehrend der Verarbeitung
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS nutzer (
@@ -59,6 +60,33 @@ CREATE TABLE IF NOT EXISTS wasser (nutzer INTEGER NOT NULL REFERENCES nutzer(id)
 CREATE TABLE IF NOT EXISTS gewicht (nutzer INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE, datum TEXT NOT NULL, kg REAL NOT NULL,
     PRIMARY KEY (nutzer, datum));
 CREATE TABLE IF NOT EXISTS blockiert (nutzer INTEGER NOT NULL, ziel INTEGER NOT NULL, PRIMARY KEY (nutzer, ziel));
+CREATE TABLE IF NOT EXISTS nutzer_ki (
+    nutzer INTEGER PRIMARY KEY REFERENCES nutzer(id) ON DELETE CASCADE, anbieter TEXT NOT NULL, schluessel TEXT NOT NULL,
+    modell TEXT DEFAULT '', erstellt INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS pro_code (
+    code TEXT PRIMARY KEY, tage INTEGER NOT NULL, erstellt INTEGER NOT NULL, benutzt_von INTEGER, benutzt_am INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS rezept (
+    id INTEGER PRIMARY KEY, nutzer INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE, titel TEXT NOT NULL,
+    beschreibung TEXT DEFAULT '', portionen INTEGER DEFAULT 1, zeit_min INTEGER DEFAULT 0, zutaten TEXT DEFAULT '[]',
+    schritte TEXT DEFAULT '[]', kcal REAL DEFAULT 0, eiweiss REAL DEFAULT 0, kh REAL DEFAULT 0, fett REAL DEFAULT 0,
+    tags TEXT DEFAULT '', bild TEXT DEFAULT '', oeffentlich INTEGER DEFAULT 0, offiziell INTEGER DEFAULT 0,
+    erstellt INTEGER NOT NULL, versteckt INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS rezept_gespeichert (
+    nutzer INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE, rezept INTEGER NOT NULL REFERENCES rezept(id) ON DELETE CASCADE,
+    PRIMARY KEY (nutzer, rezept));
+CREATE TABLE IF NOT EXISTS workout (
+    id INTEGER PRIMARY KEY, nutzer INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE, datum TEXT NOT NULL, name TEXT NOT NULL,
+    minuten INTEGER DEFAULT 0, kcal INTEGER DEFAULT 0, volumen REAL DEFAULT 0, notiz TEXT DEFAULT '', training_id INTEGER DEFAULT 0,
+    erstellt INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS workout_tag ON workout(nutzer, datum);
+CREATE TABLE IF NOT EXISTS satz (
+    id INTEGER PRIMARY KEY, workout INTEGER NOT NULL REFERENCES workout(id) ON DELETE CASCADE,
+    nutzer INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE, uebung TEXT NOT NULL COLLATE NOCASE, nr INTEGER NOT NULL,
+    wdh INTEGER NOT NULL, kg REAL NOT NULL);
+CREATE INDEX IF NOT EXISTS satz_uebung ON satz(nutzer, uebung);
+CREATE TABLE IF NOT EXISTS routine (
+    id INTEGER PRIMARY KEY, nutzer INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE, name TEXT NOT NULL,
+    uebungen TEXT NOT NULL DEFAULT '[]', erstellt INTEGER NOT NULL);
 """
 
 
@@ -70,9 +98,15 @@ def verbinden() -> sqlite3.Connection:
     c.execute("PRAGMA journal_mode=WAL")
     c.executescript(SCHEMA)
     spalten = {r["name"] for r in c.execute("PRAGMA table_info(nutzer)")}
-    for name, ddl in (("bio", "TEXT DEFAULT ''"), ("in_rangliste", "INTEGER DEFAULT 1")):   # aeltere Datenbanken nachruesten
+    for name, ddl in (("bio", "TEXT DEFAULT ''"), ("in_rangliste", "INTEGER DEFAULT 1"), ("pro_bis", "INTEGER DEFAULT 0")):   # aeltere Datenbanken nachruesten
         if name not in spalten:
             c.execute(f"ALTER TABLE nutzer ADD COLUMN {name} {ddl}")
+    spalten = {r["name"] for r in c.execute("PRAGMA table_info(beitrag)")}
+    for name, ddl in (("video", "TEXT DEFAULT ''"), ("poster", "TEXT DEFAULT ''"), ("status", "TEXT DEFAULT 'fertig'"),
+                      ("dauer", "REAL DEFAULT 0"), ("roh", "TEXT DEFAULT ''")):   # Reels sind Beitraege mit Video
+        if name not in spalten:
+            c.execute(f"ALTER TABLE beitrag ADD COLUMN {name} {ddl}")
+    c.execute("CREATE INDEX IF NOT EXISTS beitrag_video ON beitrag(video, erstellt)")
     try:
         os.chmod(DATEI, 0o600)
     except OSError:
