@@ -17,7 +17,11 @@ lässt sich per Schnittstelle mit Klaus, Telegram oder Kurzbefehlen verbinden.
 | Training eintragen (Kalorien automatisch aus Sportart, Dauer und Gewicht geschätzt), im Feed teilen | ✅ |
 | Wasser, Gewichtsverlauf, Serien (🔥 Tage in Folge), Abzeichen, Wochen-Rangliste (freiwillig, pro Tag max. 240 Min.) | ✅ |
 | Foto-Beiträge ohne KI-Prüfung: Melden/Löschen/Blockieren statt automatischer Bilderkennung | ⚠️ siehe Moderation |
-| Eigene Rezepte/Favoriten, Direktnachrichten, Gruppen/Challenges, Push-Nachrichten, Bezahlung/Abo, App-Store-Paket | ⏳ noch nicht |
+| **Klesro Fit (neues Design „Startnummer“):** Workout-Tracker (Sätze, Pausen-Timer, Rekorde per Epley-1RM, Routinen, Statistik) | ✅ |
+| **Reels:** Kurzvideos bis 60 s hochladen, ffmpeg wandelt zu H.264/AAC (≤720p, Metadaten entfernt), Vollbild-Feed mit Autoplay, Likes, Kommentare | ✅ |
+| **Rezepte:** 10 Start-Rezepte, Portionen skalieren, ins Tagebuch, speichern, eigene anlegen, KI-Rezeptentwurf (Pro) | ✅ |
+| **Pro-Plan:** per Code (Admin erstellt sie, Einlösen in „Ich“), eigene KI mit eigenem API-Schlüssel (Gemini/OpenAI/Anthropic/Groq/OpenRouter), KI-Coach; Schlüssel nur serverseitig, nie zurückgegeben | ✅ |
+| Direktnachrichten, Gruppen/Challenges, Push-Nachrichten, echte Bezahlung (Stripe), App-Store-Paket | ⏳ noch nicht |
 
 ## Starten (Server oder PC)
 
@@ -33,6 +37,9 @@ GEMINI_API_KEY=...          # Foto- und Text-Schätzung; ohne ihn gehen Tagebuch
 KALORIEN_ADMINS=Nikola      # Namen mit Moderationsrechten (Beiträge löschen, Meldungen lesen, sperren)
 KALORIEN_KI_PRO_TAG=30      # KI-Schätzungen pro Nutzer und Tag (schützt dein Gemini-Guthaben)
 KALORIEN_PROXY=1            # nur wenn Caddy davorsteht
+KALORIEN_OFFEN=0            # 0 = Registrierung geschlossen
+KALORIEN_KI_PRO_TAG ist das Limit der kostenlosen Version; Pro hat eigene Grenzen (pro.py)
+# Reels brauchen ffmpeg auf dem Server (apt install ffmpeg); Caddy: Upload-Limit für /api/reel erhöhen
 ```
 
 Dauerhaft auf dem Server: `server/kalorien.service` (systemd, siehe Kommentar dort).
