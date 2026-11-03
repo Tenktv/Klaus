@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import db, ki, nahrung, pro, reels, rezepte, sozial, workouts
+from . import db, ki, nahrung, pro, reels, rezepte, sozial, workouts, schalter
 
 WEB = Path(__file__).resolve().parent / "web"
 PORT = int(os.getenv("KALORIEN_PORT", "7730") or 7730)   # .env wird erst im Start geladen -> dort nochmal lesen
@@ -91,7 +91,7 @@ def _datum(w) -> str:
 
 # ------------------------------------------------------------------ Konten
 def registrieren(c, name: str, passwort: str) -> dict:
-    if os.getenv("KALORIEN_OFFEN", "1") == "0":
+    if not schalter.offen():
         raise Fehler(403, "Registrierung ist geschlossen.")
     name = name.strip()
     if not re.fullmatch(r"[\w .-]{3,24}", name):
