@@ -379,3 +379,9 @@ Ruhemodus, gemeinsame Starter-Sperre, Protokoll-Waechter und Premium-Textmodell-
 - Fehlt noch in `.env`: `KLESRO_ADRESSE`, `KLESRO_TELEFON`, SFTP-Zugang (für Briefe/Upload).
 - Das GitHub-Repo ist privat (ohne Anmeldung 404). So lassen, bis der Setup-Assistent (Phase K) die
   persönlichen Daten (Name, Ort, Mikrofon, Spiele) aus dem Code geholt hat.
+
+## Klesro Fit (Kalorien-App) – Stand 2026-11-03
+- Neues Design „Startnummer", Workout-Tracker, Reels (ffmpeg), Rezepte, Pro-Plan per Code, eigene KI (Schlüssel nur serverseitig), KI-Coach. Details: `kalorien/README.md`.
+- Live: https://kalorien.217-154-85-0.sslip.io (ffmpeg installiert, Caddy `/api/reel` bis 260 MB, `MemoryMax=1500M`, `KALORIEN_KI_PRO_TAG=8`). Wächter-Basis aktualisiert.
+- Offen: DNS-A-Record `kalorien` → 217.154.85.0 (IONOS), Registrierung schließen (`KALORIEN_OFFEN=0`) nach Nikolas Konto, Pro-Codes via Admin, keine echte Bezahlung (Stripe), Moderation/Recht für Nutzer-Videos.
+- Tests: `tests/test_kalorien*.py` (71) mit Python 3.11 (`%LOCALAPPDATA%\Programs\Python\Python311`) – das PATH-`python` (hermes-venv) hat kein PIL/numpy.
