@@ -1,0 +1,22 @@
+# Kalorien-App dauerhaft auf dem Server:
+#   sudo cp server/kalorien.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now kalorien
+# Pfade/Benutzer an deinen Server anpassen (wie klaus-gehirn.service). Schluessel (GEMINI_API_KEY ...) stehen in der .env.
+[Unit]
+Description=Kalorien-App
+After=network-online.target
+
+[Service]
+User=klaus
+WorkingDirectory=/home/klaus/klaus
+EnvironmentFile=-/home/klaus/klaus/.env
+Environment=KALORIEN_PROXY=1
+ExecStart=/home/klaus/klaus/.venv/bin/python -m kalorien.server
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/klaus/klaus/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

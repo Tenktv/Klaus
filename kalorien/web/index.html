@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1512">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kalorien">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<title>Kalorien</title>
+</head>
+<body>
+<main id="inhalt" aria-live="polite"></main>
+<nav id="leiste" hidden>
+  <button data-seite="heute"><span>◉</span>Heute</button>
+  <button data-seite="neu"><span>＋</span>Essen</button>
+  <button data-seite="forum"><span>☰</span>Forum</button>
+  <button data-seite="chat"><span>✉</span>Chat</button>
+  <button data-seite="ich"><span>☺</span>Ich</button>
+</nav>
+<div id="meldung" role="status"></div>
+<script src="vendor/zxing.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
