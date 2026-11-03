@@ -81,6 +81,15 @@ PLATTFORMEN: dict[str, Plattform] = {p.id: p for p in [
         [Feld("KLAUS_LITE", "Lite", hinweis="an / aus"), Feld("WHISPER_MODEL", "Spracherkennung", hinweis="tiny, base, small oder medium")],
         ()),
     Plattform(
+        "kalorien", "Kalorien-App",
+        "Verbindet Klaus mit deiner Kalorien-App: /kalorien, /essen und Fotos mit „Essen“ in Telegram.",
+        ["In der Kalorien-App: Ich → Schnittstelle → Namen eingeben → „Schlüssel erstellen“ und kopieren.",
+         "Hier die Adresse deiner App (ohne /api) und den Schlüssel eintragen, speichern, „Testen“."],
+        "https://github.com/Tenktv/Klaus/tree/main/kalorien",
+        [Feld("KALORIEN_URL", "Adresse der App", hinweis="z. B. https://kalorien.deine-domain.de oder http://127.0.0.1:7730"),
+         Feld("KALORIEN_TOKEN", "Schlüssel (kt_…)", geheim=True)],
+        ("KALORIEN_TOKEN",)),
+    Plattform(
         "updates", "Updates & Hilfe",
         "Update-Token (nur solange das Repo privat ist) und Melde-Code: damit kommen Fehler automatisch bei Nikola an.",
         ["Beides bekommst du von Nikola.",
@@ -91,9 +100,9 @@ PLATTFORMEN: dict[str, Plattform] = {p.id: p for p in [
         ()),
 ]}
 for _p in PLATTFORMEN.values():
-    _p.trennbar = _p.id in ("gemini", "ersatz", "eigene_ki", "fish")
+    _p.trennbar = _p.id in ("gemini", "ersatz", "eigene_ki", "fish", "kalorien")
 
-NEUSTART = {"allgemein", "gemini", "ersatz", "eigene_ki", "fish", "mikrofon", "leistung", "updates"}
+NEUSTART = {"allgemein", "gemini", "ersatz", "eigene_ki", "fish", "mikrofon", "leistung", "updates", "kalorien"}
 
 
 def _wert(name: str) -> str:
@@ -269,6 +278,10 @@ def testen(pid: str) -> str:
             lite = _wert("KLAUS_LITE") == "1"
             return (f"Gerade: {'Lite (nur Sprache und Chat)' if lite else 'volle Oberfläche'}, Spracherkennung {_wert('WHISPER_MODEL') or 'small (Standard)'}. "
                     f"Volle Oberfläche in dieser Installation: {'vorhanden' if _web_oberflaeche_da() else 'nicht vorhanden'}.")
+        if pid == "kalorien":
+            import kalorien_klaus
+
+            return kalorien_klaus.kalorien() if kalorien_klaus.bereit() else "Noch kein Schlüssel eingetragen."
         if pid == "updates":
             import fehlerbericht
             import pc_update

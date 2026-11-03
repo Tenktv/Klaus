@@ -492,6 +492,12 @@ class TelegramKlaus:
             self._api("sendChatAction", chat_id=self.nutzer, action="typing")
         except Exception:
             pass
+        import kalorien_klaus
+        if kalorien_klaus.ist_essensfoto(hinweis):   # Foto mit "Essen ..." -> Kalorien-App schaetzt und traegt ein
+            with _Lebenszeichen(self, nach=6) as lz:
+                lz.setze("🍽 Ich schätze das Essen vom Foto …")
+                self.senden(kalorien_klaus.foto(bild, hinweis))
+            return
         if not kalender.eingerichtet():
             self.senden("Der Kalender ist nicht eingerichtet, deshalb kann ich keine Termine aus Fotos eintragen.")
             return

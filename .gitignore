@@ -28,3 +28,6 @@ data/twitch_token.json
 data/stream.json
 *.rar
 data/obs/
+
+# Kalorien-App: Datenbank mit Gesundheitsdaten nie ins Repo
+data/kalorien.db*

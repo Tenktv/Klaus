@@ -650,6 +650,8 @@ def main() -> None:
             return tg._antworten(text)
     whatsapp_kunden.voll_antwort = whatsapp_voll
     whatsapp_kunden.starten()
+    import kalorien_klaus   # Kalorien-App (kalorien/) als Kunde ihrer Schnittstelle: /kalorien, /essen, Foto mit "Essen"
+    kalorien_klaus.befehle_einrichten(tg)
     print(f"[Server] Klaus-Gehirn laeuft (Telegram, Werkzeuge lokal: {sorted(LOKAL)})", flush=True)
     import briefing
 
