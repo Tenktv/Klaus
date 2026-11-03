@@ -130,3 +130,22 @@ def befehle_einrichten(tg) -> None:
     tg.befehle["/kalorien"] = kalorien
     tg.befehle["/essen"] = lambda t: essen(t) if bereit() else kalorien()
     tg.befehle["/essen_weg"] = essen_weg
+    tg.befehle["/fit_registrierung"] = registrierung
+
+
+def registrierung(text: str) -> str:
+    """/fit_registrierung an|aus  (nur Nikola, nur im Haupt-Klaus; wirkt sofort, ohne Neustart der App)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from kalorien import schalter
+    teile = text.split()
+    wunsch = teile[1].lower() if len(teile) > 1 else ""
+    if wunsch in ("an", "auf", "offen", "ein"):
+        schalter.setzen(True)
+    elif wunsch in ("aus", "zu", "geschlossen"):
+        schalter.setzen(False)
+    elif wunsch:
+        return "Schreib: /fit_registrierung an  oder  /fit_registrierung aus"
+    return (f"Registrierung der Kalorien-App ist jetzt {'🟢 OFFEN' if schalter.offen() else '🔴 GESCHLOSSEN'} "
+            f"(gilt über: {schalter.quelle()}). Umschalten: /fit_registrierung an|aus")
