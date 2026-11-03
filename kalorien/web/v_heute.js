@@ -1,6 +1,6 @@
 /* Heute: Kalorien-Tacho, Makros, Wasser, Gewicht, Training, Mahlzeiten, Rezept-Tipps. */
 import {S, h, api, los, leeren, icon, kopf, avatar, tacho, linie, zahl, de, heute, tagName, MAHLZEITEN, proMarke, istPro} from "./core.js";
-import {wasserSheet, gewichtSheet, eintragSheet, schritteSheet, neuLaden} from "./v_essen.js";
+import {wasserSheet, gewichtSheet, eintragSheet, schritteSheet, verbrauchSheet, VERBRAUCH, neuLaden} from "./v_essen.js";
 import {rezeptKarte} from "./v_rezepte.js";
 
 export async function heuteSeite(ctx) {
@@ -8,7 +8,8 @@ export async function heuteSeite(ctx) {
     api("GET", "tag?datum=" + S.datum), api("GET", "woche"), api("GET", "profil/" + encodeURIComponent(S.ich.name)), api("GET", "gewicht"),
     api("GET", "rezepte?art=entdecken").catch(() => [])]);
   if (!ctx.aktuell()) return;
-  const ziel = t.ziele.kcal, ist = zahl(t.summe.kcal), verbrannt = t.verbrannt, budget = ziel + verbrannt, uebrig = budget - ist;
+  const ziel = t.ziele.kcal, ist = zahl(t.summe.kcal), verbrannt = t.verbrannt, bonus = t.bonus || 0, budget = ziel + bonus, uebrig = budget - ist;
+  if (verbrannt > 0 && !t.verbrauch_modus && !S.verbrauchGefragt && S.datum === heute()) { S.verbrauchGefragt = true; setTimeout(() => verbrauchSheet(""), 500); }
   const istHeute = S.datum === heute();
 
   // Datumsleiste: die letzten 7 Tage, Punkt = an dem Tag wurde etwas eingetragen
@@ -19,7 +20,9 @@ export async function heuteSeite(ctx) {
   const tachoKarte = h("div", {class: "karte", style: {paddingBottom: "10px"}},
     h("div", {class: "tacho"}, tacho(ist, budget), h("div", {class: "mitte-zahl"}, zahlGross, h("div", {class: "lab unter" + (uebrig < 0 ? " ember" : "")}, uebrig < 0 ? "kcal drüber" : "kcal übrig"))),
     h("div", {class: "tacho-fuss"}, h("div", {}, h("b", {}, de(ist)), h("span", {class: "lab"}, "Gegessen")),
-      h("div", {}, h("b", {class: "ember"}, de(verbrannt)), h("span", {class: "lab"}, "Verbrannt")), h("div", {}, h("b", {}, de(ziel)), h("span", {class: "lab"}, "Ziel"))));
+      h("div", {}, h("b", {class: "ember"}, de(verbrannt)), h("span", {class: "lab"}, "Verbrannt")), h("div", {}, h("b", {}, de(ziel)), h("span", {class: "lab"}, "Ziel"))),
+    verbrannt > 0 ? h("button", {class: "text-knopf", style: {width: "100%", textAlign: "center", padding: "10px 0 4px"}, onclick: () => verbrauchSheet(t.verbrauch_modus)},
+      bonus > 0 ? `Budget: Ziel + ${de(bonus)} kcal Verbrauch · ändern` : "Verbrauch zählt nicht ins Budget · ändern") : null);
 
   const makro = (name, w, z, farbe) => h("div", {class: "makro" + (w > z * 1.15 ? " ueber" : ""), style: {"--c": farbe}},
     h("div", {class: "kopfz"}, h("span", {class: "lab"}, name), h("span", {}, h("b", {}, zahl(w)), h("span", {class: "mut"}, ` / ${zahl(z)} g`))), h("div", {class: "bar"}, h("i", {style: {width: Math.min(100, z ? w / z * 100 : 0) + "%"}})));

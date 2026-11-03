@@ -142,6 +142,9 @@ def ich(z) -> dict:
             "ziele": {"kcal": z["ziel_kcal"], "eiweiss": z["ziel_eiweiss"], "kh": z["ziel_kh"], "fett": z["ziel_fett"]}}
 
 
+VERBRAUCH = {"nein": 0.0, "halb": 0.5, "ja": 1.0}   # wie viel des Verbrauchs (Training, Schritte) das Tagesbudget erhoeht
+
+
 def profil_speichern(c, z, d: dict) -> dict:
     ziele = {k: int(_zahl(d[k], k, 20000)) for k in ("kcal", "eiweiss", "kh", "fett") if d.get(k) not in (None, "")}
     profil = json.loads(z["profil"] or "{}")
@@ -154,6 +157,10 @@ def profil_speichern(c, z, d: dict) -> dict:
             raise Fehler(400, str(e) if isinstance(e, ValueError) and str(e) else "Bitte alle Angaben ausfüllen.")
         ziele = {k[5:]: v for k, v in erg.items()}
         profil = {k: b.get(k) for k in ("geschlecht", "alter", "groesse", "gewicht", "aktivitaet", "ziel")}
+        if "verbrauch" in json.loads(z["profil"] or "{}"):
+            profil["verbrauch"] = json.loads(z["profil"])["verbrauch"]
+    if d.get("verbrauch") in VERBRAUCH:
+        profil["verbrauch"] = d["verbrauch"]
     if "bio" in d:
         c.execute("UPDATE nutzer SET bio=? WHERE id=?", (_text(d["bio"], "Über mich", 0, 160) if str(d["bio"]).strip() else "", z["id"]))
     if "rangliste" in d:
@@ -176,7 +183,10 @@ def _summe(zeilen) -> dict:
 
 def tag(c, z, datum: str) -> dict:
     zeilen = c.execute("SELECT * FROM eintrag WHERE nutzer=? AND datum=? ORDER BY id", (z["id"], datum)).fetchall()
-    return {"datum": datum, "eintraege": [dict(e) for e in zeilen], "summe": _summe(zeilen), "ziele": ich(z)["ziele"], **sozial.tag_zusatz(c, z, datum)}
+    zusatz = sozial.tag_zusatz(c, z, datum)
+    modus = json.loads(z["profil"] or "{}").get("verbrauch", "")
+    return {"datum": datum, "eintraege": [dict(e) for e in zeilen], "summe": _summe(zeilen), "ziele": ich(z)["ziele"], **zusatz,
+            "verbrauch_modus": modus, "bonus": round(zusatz["verbrannt"] * VERBRAUCH.get(modus, 0.0))}
 
 
 def eintragen(c, z, d: dict) -> dict:

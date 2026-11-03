@@ -153,6 +153,15 @@ export function eintragSheet(e) {
     })}, "Speichern")]);
 }
 
+export const VERBRAUCH = {nein: "Nein – Ziel bleibt fest", halb: "Zur Hälfte anrechnen", ja: "Ja, voll anrechnen"};
+export function verbrauchSheet(aktuell, nachher) {
+  const waehle = modus => () => los(async () => { await api("PUT", "ich", {verbrauch: modus}); S.ich.profil = {...S.ich.profil, verbrauch: modus}; toast("Gespeichert"); if (nachher) nachher(); neuLaden(); });
+  sheet("Verbrannte Kalorien anrechnen?", zu => [
+    h("p", {class: "mut", style: {margin: "0 0 14px"}}, "Soll dein Tagesbudget größer werden, wenn du dich bewegst? Schrittzähler und Schätzungen sind ungenau – wer jede Bewegung voll „zurückisst“, nimmt oft unbemerkt weniger ab."),
+    ["nein", "halb", "ja"].map(k => h("button", {class: "btn " + (aktuell === k ? "" : "zweit"), style: {marginBottom: "10px"}, onclick: () => { zu(); waehle(k)(); }}, VERBRAUCH[k] + (k === "nein" ? " (empfohlen)" : ""))),
+    h("div", {class: "mut klein"}, "Du kannst das jederzeit unter Ich → Tagesziele ändern. Der Verbrauch wird immer angezeigt, nur das Budget ändert sich.")]);
+}
+
 export function schritteSheet(t) {
   const eingabe = h("input", {type: "number", inputmode: "numeric", step: "1", min: "0", value: t.schritte || "", placeholder: "0", "aria-label": "Schritte heute", style: {fontSize: "34px", fontFamily: "var(--disp)", fontWeight: 700, textAlign: "center", minHeight: "64px"}});
   sheet("Schritte", zu => [

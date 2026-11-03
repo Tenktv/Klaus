@@ -62,6 +62,20 @@ class TestPro(Fit):
         self.assertEqual(self.api("POST", "/api/schritte", {"schritte": 999999}, token=t)[0], 400)
         self.assertEqual(self.api("POST", "/api/schritte", {"schritte": "abc"}, token=t)[0], 400)
 
+    def test_verbrauch_zaehlt_nur_nach_wahl_ins_budget(self):
+        t = self.neu("Budget Bea")
+        self.api("POST", "/api/training", {"art": "krafttraining", "minuten": 30, "kcal": 200}, token=t)
+        tag = self.api("GET", "/api/tag", token=t)[1]
+        self.assertEqual((tag["verbrannt"], tag["bonus"], tag["verbrauch_modus"]), (200, 0, ""))   # ungefragt: kein Aufschlag
+        self.assertEqual(self.api("PUT", "/api/ich", {"verbrauch": "halb"}, token=t)[0], 200)
+        self.assertEqual(self.api("GET", "/api/tag", token=t)[1]["bonus"], 100)
+        self.api("PUT", "/api/ich", {"verbrauch": "ja"}, token=t)
+        self.assertEqual(self.api("GET", "/api/tag", token=t)[1]["bonus"], 200)
+        self.api("PUT", "/api/ich", {"berechnen": {"geschlecht": "m", "alter": 30, "groesse": 180, "gewicht": 80, "aktivitaet": "leicht", "ziel": "halten"}}, token=t)
+        self.assertEqual(self.api("GET", "/api/tag", token=t)[1]["verbrauch_modus"], "ja")   # Zielberechnung ueberschreibt die Wahl nicht
+        self.api("PUT", "/api/ich", {"verbrauch": "quatsch"}, token=t)
+        self.assertEqual(self.api("GET", "/api/tag", token=t)[1]["verbrauch_modus"], "ja")
+
     def test_frei_ist_nicht_pro_admin_schon(self):
         frei, chef = self.neu("Frei Frida"), self.chef()
         self.assertFalse(self.api("GET", "/api/ich", token=frei)[1]["plan"]["pro"])

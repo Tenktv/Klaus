@@ -1,5 +1,6 @@
 /* Ich: Profil, Ziele, Pro, eigene KI, KI-Coach, Schnittstelle, Admin. */
 import {S, h, api, los, toast, leeren, icon, sheet, bestaetigen, kopf, zurueck, leer, avatar, de, tagName, vor, istPro, proMarke, abmelden} from "./core.js";
+import {verbrauchSheet, VERBRAUCH} from "./v_essen.js";
 
 const row = (ikon, titel, sub, tun, rechts) => h("div", {class: "liste-zeile", onclick: tun}, h("span", {class: "ikon"}, icon(ikon)), h("div", {class: "fuell"}, h("div", {class: "fett"}, titel), sub ? h("div", {class: "mut klein"}, sub) : null), rechts || icon("rechts", 18));
 
@@ -57,6 +58,9 @@ export async function zieleSeite(ctx) {
     h("div", {class: "karte"}, h("div", {class: "lab", style: {marginBottom: "10px"}}, "Berechnen lassen"), zieleFormular(() => { toast("Ziele aktualisiert"); location.hash = "#/ich"; })),
     h("div", {class: "karte"}, h("div", {class: "lab", style: {marginBottom: "10px"}}, "Oder selbst festlegen"), h("div", {class: "r2 raster"}, feld("kcal", "Kalorien"), feld("eiweiss", "Eiweiß g", "var(--volt)"), feld("kh", "Kohlenhydrate g", "var(--ice)"), feld("fett", "Fett g", "var(--gold)")),
       h("button", {class: "btn zweit", style: {marginTop: "14px"}, onclick: () => los(async () => { await api("PUT", "ich", {kcal: f.kcal.value, eiweiss: f.eiweiss.value, kh: f.kh.value, fett: f.fett.value}); S.ich = await api("GET", "ich"); toast("Gespeichert"); location.hash = "#/ich"; })}, "Speichern")),
+    h("div", {class: "karte"}, h("div", {class: "lab", style: {marginBottom: "10px"}}, "Verbrannte Kalorien (Training, Schritte)"),
+      h("div", {class: "mut klein", style: {marginBottom: "10px"}}, "Sollen sie dein Tagesbudget erhöhen? Unbewusstes „Zurückessen“ bremst den Fortschritt."),
+      h("button", {class: "btn zweit", onclick: () => verbrauchSheet((S.ich.profil || {}).verbrauch || "nein", () => window.dispatchEvent(new HashChangeEvent("hashchange")))}, VERBRAUCH[(S.ich.profil || {}).verbrauch || "nein"])),
     h("p", {class: "hilfe"}, "Richtwerte nach Mifflin-St-Jeor, keine medizinische Beratung. Unter 1.200 kcal am Tag rechnet die App nie.")));
 }
 
