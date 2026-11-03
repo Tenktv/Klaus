@@ -3,27 +3,28 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0f1512">
+<meta name="theme-color" content="#09090a">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Kalorien">
+<meta name="apple-mobile-web-app-title" content="Klesro Fit">
+<meta name="description" content="Klesro Fit – Kalorien, Training, Reels und Rezepte in einer App.">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preload" href="fonts/rajdhani-700.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
-<title>Kalorien</title>
+<title>Klesro Fit</title>
 </head>
 <body>
-<main id="inhalt" aria-live="polite"></main>
-<nav id="leiste" hidden>
-  <button data-seite="heute"><span>◉</span>Heute</button>
-  <button data-seite="neu"><span>＋</span>Essen</button>
-  <button data-seite="feed"><span>♥</span>Feed</button>
-  <button data-seite="forum"><span>☰</span>Community</button>
-  <button data-seite="ich"><span>☺</span>Ich</button>
-</nav>
-<div id="meldung" role="status"></div>
-<script src="vendor/zxing.min.js"></script>
-<script src="app.js"></script>
+<div id="app">
+  <main id="view" aria-live="polite"></main>
+  <nav id="leiste" hidden aria-label="Hauptmenü"></nav>
+  <div id="timer" class="timer-leiste" hidden></div>
+</div>
+<div id="sheets"></div>
+<div id="toast" role="status"></div>
+<script src="vendor/zxing.min.js" defer></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>

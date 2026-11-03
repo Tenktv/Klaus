@@ -426,7 +426,7 @@ class Handler(BaseHTTPRequestHandler):
         art = mimetypes.guess_type(ziel.name)[0] or "application/octet-stream"
         if ziel.suffix == ".webmanifest":
             art = "application/manifest+json"
-        cache = "no-cache" if ziel.suffix in (".html", ".js", ".webmanifest") or ziel.name == "sw.js" else "public, max-age=86400"
+        cache = "no-cache" if ziel.suffix in (".html", ".js", ".css", ".webmanifest") or ziel.name == "sw.js" else "public, max-age=86400"
         self._senden(200, ziel.read_bytes(), art + ("; charset=utf-8" if art.startswith("text/") or art.endswith("javascript") else ""),
                      {"Cache-Control": cache})
 
@@ -535,9 +535,14 @@ class Handler(BaseHTTPRequestHandler):
             self._senden(503, {"fehler": str(e)})
         except RuntimeError as e:
             self._senden(503, {"fehler": str(e)})
+        except (ConnectionError, TimeoutError):
+            return   # der Browser hat die Seite schon verlassen (Neuladen, Wischen) - kein Fehler
         except Exception as e:   # nie Interna nach aussen
             print(f"[Kalorien] {methode} {u.path}: {type(e).__name__}: {e}", flush=True)
-            self._senden(500, {"fehler": "Da ist etwas schiefgegangen."})
+            try:
+                self._senden(500, {"fehler": "Da ist etwas schiefgegangen."})
+            except OSError:
+                pass
 
     def _route(self, c, m: str, pfad: str, q: dict, d: dict):
         teile = pfad.split("/")
