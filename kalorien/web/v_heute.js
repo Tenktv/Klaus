@@ -1,6 +1,6 @@
 /* Heute: Kalorien-Tacho, Makros, Wasser, Gewicht, Training, Mahlzeiten, Rezept-Tipps. */
 import {S, h, api, los, leeren, icon, kopf, avatar, tacho, linie, zahl, de, heute, tagName, MAHLZEITEN, proMarke, istPro} from "./core.js";
-import {wasserSheet, gewichtSheet, neuLaden} from "./v_essen.js";
+import {wasserSheet, gewichtSheet, eintragSheet, neuLaden} from "./v_essen.js";
 import {rezeptKarte} from "./v_rezepte.js";
 
 export async function heuteSeite(ctx) {
@@ -47,9 +47,9 @@ export async function heuteSeite(ctx) {
     const liste = t.eintraege.filter(e => e.mahlzeit === k), summe = liste.reduce((a, e) => a + e.kcal, 0);
     return h("div", {class: "karte"}, h("div", {class: "mahlzeit-kopf"}, h("h2", {}, n), summe ? h("span", {class: "mut fett"}, `${de(summe)} kcal`) : null,
       h("button", {class: "ikon", "aria-label": n + " hinzufügen", onclick: () => { S.mahlzeit = k; location.hash = "#/essen/foto"; }}, icon("plus"))),
-      liste.length ? liste.map(e => h("div", {class: "eintrag"}, h("div", {class: "fuell"}, h("div", {class: "t"}, e.name),
+      liste.length ? liste.map(e => h("div", {class: "eintrag"}, h("div", {class: "fuell klick", role: "button", tabindex: "0", "aria-label": e.name + " bearbeiten", onclick: () => eintragSheet(e)}, h("div", {class: "t"}, e.name),
         h("div", {class: "kurz"}, e.menge ? h("span", {style: {"--c": "var(--dim)"}}, e.menge) : null, h("span", {style: {"--c": "var(--volt)"}}, `${zahl(e.eiweiss)} E`), h("span", {style: {"--c": "var(--ice)"}}, `${zahl(e.kh)} KH`), h("span", {style: {"--c": "var(--gold)"}}, `${zahl(e.fett)} F`))),
-        h("div", {class: "kcal"}, zahl(e.kcal)), h("button", {class: "ikon ohne", "aria-label": "Löschen", onclick: () => los(async () => { await api("DELETE", "eintrag/" + e.id); neuLaden(); })}, icon("x"))))
+        h("div", {class: "kcal"}, zahl(e.kcal)), h("button", {class: "ikon ohne", "aria-label": "Bearbeiten", onclick: () => eintragSheet(e)}, icon("stift", 18)), h("button", {class: "ikon ohne", "aria-label": "Löschen", onclick: () => los(async () => { await api("DELETE", "eintrag/" + e.id); neuLaden(); })}, icon("x"))))
         : h("div", {class: "mut klein", style: {padding: "6px 0 2px"}}, "Noch nichts eingetragen"));
   });
 

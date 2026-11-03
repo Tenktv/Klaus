@@ -189,6 +189,18 @@ def eintragen(c, z, d: dict) -> dict:
     return {"id": cur.lastrowid}
 
 
+def eintrag_aendern(c, z, eid: int, d: dict) -> dict:
+    alt = c.execute("SELECT * FROM eintrag WHERE id=? AND nutzer=?", (eid, z["id"])).fetchone()
+    if not alt:
+        raise Fehler(404, "Eintrag nicht gefunden.")
+    mahlzeit = d.get("mahlzeit") if d.get("mahlzeit") in MAHLZEITEN else alt["mahlzeit"]
+    c.execute("UPDATE eintrag SET mahlzeit=?, name=?, menge=?, kcal=?, eiweiss=?, kh=?, fett=? WHERE id=? AND nutzer=?",
+              (mahlzeit, _text(d.get("name"), "Name", 1, 120), str(d.get("menge") or "")[:40],
+               _zahl(d.get("kcal"), "Kalorien", 10000), _zahl(d.get("eiweiss") or 0, "Eiweiß", 1000), _zahl(d.get("kh") or 0, "Kohlenhydrate", 2000),
+               _zahl(d.get("fett") or 0, "Fett", 1000), eid, z["id"]))
+    return {"text": "Gespeichert."}
+
+
 def _mahlzeit_jetzt() -> str:
     h = datetime.now().hour
     return "fruehstueck" if h < 10 else "mittag" if h < 15 else "abend" if h < 21 else "snack"
@@ -571,6 +583,8 @@ class Handler(BaseHTTPRequestHandler):
         if t0 == "eintrag":
             if m == "POST":
                 return eintragen(c, z, d)
+            if m == "PUT" and len(teile) == 2:
+                return eintrag_aendern(c, z, int(teile[1]), d)
             if m == "DELETE" and len(teile) == 2:
                 c.execute("DELETE FROM eintrag WHERE id=? AND nutzer=?", (int(teile[1]), z["id"]))
                 return {"text": "Gelöscht."}

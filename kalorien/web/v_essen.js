@@ -117,6 +117,24 @@ export async function wasserSheet() {
     h("div", {class: "knopfreihe"}, h("button", {class: "btn geist", onclick: add(-250)}, "−250 ml"), h("button", {class: "btn", onclick: () => { zu(); neuLaden(); }}, "Fertig"))]);
 }
 
+export function eintragSheet(e) {
+  const f = (n, wert, extra = {}) => h("input", {value: wert ?? "", "aria-label": n, ...extra});
+  const name = f("Name", e.name, {maxlength: 120}), menge = f("Menge", e.menge, {maxlength: 40, placeholder: "Menge (z. B. 150 g)"});
+  const zahlFeld = (n, w) => f(n, w, {type: "number", inputmode: "decimal", step: "0.1"});
+  const kcal = zahlFeld("Kalorien", e.kcal), ei = zahlFeld("Eiweiß g", e.eiweiss), kh = zahlFeld("Kohlenhydrate g", e.kh), fe = zahlFeld("Fett g", e.fett);
+  let mz = e.mahlzeit;
+  const chips = h("div", {class: "chips", style: {marginBottom: "12px"}});
+  const male = () => leeren(chips, Object.entries(MAHLZEITEN).map(([k, n]) => h("button", {class: "chip" + (mz === k ? " an" : ""), onclick: () => { mz = k; male(); }}, n)));
+  male();
+  const lab = (t, x) => h("div", {}, h("label", {class: "lab f-lab"}, t), x);
+  sheet("Eintrag bearbeiten", zu => [chips, h("div", {class: "feld"}, lab("Name", name)), h("div", {class: "feld"}, lab("Menge", menge)),
+    h("div", {class: "raster r2", style: {marginBottom: "12px"}}, lab("Kalorien", kcal), lab("Eiweiß g", ei), lab("Kohlenhydrate g", kh), lab("Fett g", fe)),
+    h("button", {class: "btn", onclick: () => los(async () => {
+      await api("PUT", "eintrag/" + e.id, {name: name.value, menge: menge.value, kcal: kcal.value, eiweiss: ei.value, kh: kh.value, fett: fe.value, mahlzeit: mz});
+      zu(); toast("Gespeichert"); neuLaden();
+    })}, "Speichern")]);
+}
+
 export async function gewichtSheet() {
   const verlauf = await api("GET", "gewicht");
   const letzt = verlauf.length ? verlauf[verlauf.length - 1].kg : (S.ich.profil && S.ich.profil.gewicht) || "";

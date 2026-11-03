@@ -36,6 +36,16 @@ def code_einloesen(test, admin_token, token, tage=30):
 
 
 class TestPro(Fit):
+    def test_eintrag_bearbeiten_nur_eigene(self):
+        a, b = self.neu("Edit Eva"), self.neu("Edit Emil")
+        eid = self.api("POST", "/api/eintrag", {"name": "Reis", "kcal": 200, "mahlzeit": "mittag"}, token=a)[1]["id"]
+        s, _ = self.api("PUT", f"/api/eintrag/{eid}", {"name": "Reis mit Huhn", "menge": "300 g", "kcal": 450, "eiweiss": 35, "mahlzeit": "abend"}, token=a)
+        self.assertEqual(s, 200)
+        e = self.api("GET", "/api/tag", token=a)[1]["eintraege"][0]
+        self.assertEqual((e["name"], e["kcal"], e["eiweiss"], e["mahlzeit"]), ("Reis mit Huhn", 450, 35, "abend"))
+        self.assertEqual(self.api("PUT", f"/api/eintrag/{eid}", {"name": "Hack", "kcal": 1}, token=b)[0], 404)
+        self.assertEqual(self.api("PUT", f"/api/eintrag/{eid}", {"name": "", "kcal": 1}, token=a)[0], 400)
+
     def test_frei_ist_nicht_pro_admin_schon(self):
         frei, chef = self.neu("Frei Frida"), self.chef()
         self.assertFalse(self.api("GET", "/api/ich", token=frei)[1]["plan"]["pro"])
