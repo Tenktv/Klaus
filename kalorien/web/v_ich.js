@@ -24,6 +24,7 @@ export async function ichSeite(ctx) {
       row("blitz", "Klesro Fit Pro", plan.pro ? (plan.admin ? "Aktiv (Admin)" : "Aktiv bis " + tagName(new Date(plan.bis * 1000).toISOString().slice(0, 10), {day: "numeric", month: "long", year: "numeric"})) : "Coach, eigene KI, mehr Reels", () => { location.hash = "#/pro"; }, plan.pro ? null : proMarke()),
       row("funke", "KI-Coach", "Fragen zu Training & Ernährung", () => { location.hash = "#/coach"; }, plan.pro ? null : proMarke()),
       row("schluessel", "Eigene KI", ich.ki || plan.pro ? "Eigenen API-Schlüssel nutzen" : "Gemini, OpenAI, Claude …", () => { location.hash = "#/ki"; }, plan.pro ? null : proMarke()),
+      row("schuh", "Apple Health", "Schritte automatisch übernehmen", () => { location.hash = "#/apple-health"; }),
       row("regler", "Schnittstelle", "Für Klaus, Telegram, Kurzbefehle", () => { location.hash = "#/schnittstelle"; })),
     ich.admin ? h("div", {class: "karte", style: {padding: "4px 16px"}}, row("sperren", "Admin", "Nutzer, Pro-Codes, Meldungen", () => { location.hash = "#/admin"; })) : null,
     h("div", {class: "abschnitt"}, h("h2", {}, "Daten & Konto")),
@@ -139,6 +140,28 @@ export async function schnittstelleSeite(ctx) {
     l.length ? h("div", {class: "karte", style: {padding: "4px 16px"}}, l.map(z => h("div", {class: "liste-zeile", style: {cursor: "default"}}, h("span", {class: "ikon"}, icon("schluessel")), h("div", {class: "fuell"}, h("div", {class: "fett"}, z.name), h("div", {class: "mut klein"}, z.zuletzt ? "Zuletzt " + vor(z.zuletzt) : "Noch nie benutzt")),
       h("button", {class: "ikon ohne", "aria-label": "Schlüssel löschen", onclick: async () => { if (await bestaetigen(`Schlüssel „${z.name}“ löschen?`, "Löschen", true)) los(async () => { await api("DELETE", "zugang/" + z.hash); window.dispatchEvent(new HashChangeEvent("hashchange")); }); }}, icon("papierkorb")))))
       : leer("Noch kein Schlüssel", "Erstelle einen, wenn du Klaus oder einen Kurzbefehl verbinden willst.")));
+}
+
+/* ---------- Apple Health (iPhone-Kurzbefehl) ---------- */
+export async function appleHealthSeite(ctx) {
+  const url = location.origin + "/api/schritte";
+  const kopier = (text, name) => h("button", {class: "btn zweit klein", onclick: () => navigator.clipboard.writeText(text).then(() => toast(name + " kopiert"), () => toast("Markiere den Text und kopiere ihn von Hand.", true))}, "Kopieren");
+  const zeile = (n, titel, text, extra) => h("div", {class: "karte", style: {marginBottom: "10px"}}, h("div", {class: "zeile", style: {gap: "12px", alignItems: "flex-start"}},
+    h("b", {class: "disp volt", style: {fontSize: "22px", minWidth: "22px"}}, String(n)), h("div", {class: "fuell"}, h("div", {class: "fett"}, titel), h("div", {class: "mut klein", style: {marginTop: "3px"}}, text), extra || null)));
+  const schluesselBox = h("div", {});
+  const erstellen = h("button", {class: "btn", onclick: () => los(async () => {
+    const d = await api("POST", "zugang", {name: "Apple Health"});
+    leeren(schluesselBox, h("div", {class: "karte", style: {wordBreak: "break-all", fontFamily: "monospace", fontSize: "13px", margin: "10px 0"}}, "Bearer " + d.token), kopier("Bearer " + d.token, "Schlüssel"),
+      h("div", {class: "mut klein", style: {marginTop: "6px"}}, "Nur jetzt sichtbar – kopiere ihn gleich in den Kurzbefehl."));
+  })}, "Schlüssel für Apple Health erstellen");
+  leeren(ctx.box, h("div", {class: "in"}, zurueck("#/heute", "Heute"), kopf("Apple Health", "Schritte automatisch"),
+    h("div", {class: "hinweisbox"}, icon("schuh"), "Eine Web-App darf Apple Health nicht direkt lesen – das erlaubt Apple nur echten App-Store-Apps. Mit einem Kurzbefehl schickt dein iPhone deine Schritte aber jeden Tag von allein hierher."),
+    zeile(1, "Schlüssel erstellen", "Er gehört nur zu deinem Konto und darf nur Daten eintragen, die du auch selbst eintragen könntest.", h("div", {style: {marginTop: "10px"}}, erstellen, schluesselBox)),
+    zeile(2, "Kurzbefehle-App → Automation → „+“", "„Tageszeit“ wählen, z. B. 22:00 täglich, „Sofort ausführen“ einschalten."),
+    zeile(3, "Aktion „Health-Beispiele finden“", "Typ: Schritte · Startdatum: ist heute · Sortieren egal. Danach „Statistik berechnen“ → Summe."),
+    zeile(4, "Aktion „Inhalte von URL abrufen“", "Methode POST · Anfragetext JSON · Feld „schritte“ = Ergebnis der Statistik.", h("div", {style: {marginTop: "10px"}}, h("div", {class: "karte", style: {wordBreak: "break-all", fontFamily: "monospace", fontSize: "13px", margin: "0 0 8px"}}, url), kopier(url, "Adresse"))),
+    zeile(5, "Kopfzeile hinzufügen", "Name „Authorization“, Wert: der kopierte Schlüssel („Bearer kt_…“). Für mehr Aktualität eine zweite Automation um 12:00 anlegen."),
+    h("div", {class: "mut klein", style: {padding: "4px 4px 24px"}}, "Der Tageswert wird bei jedem Senden überschrieben, nicht addiert. Die Kalorien aus Schritten sind eine grobe Schätzung (ca. 0,04 kcal je Schritt bei 70 kg). Läufe und Spaziergänge, die du als Training einträgst, zählt die App an Tagen mit Schrittdaten nicht doppelt.")));
 }
 
 /* ---------- Admin ---------- */

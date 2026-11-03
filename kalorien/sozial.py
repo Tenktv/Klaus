@@ -17,6 +17,8 @@ MET = {"laufen": 9.8, "gehen": 3.5, "radfahren": 7.5, "schwimmen": 7.0, "krafttr
 TRAININGSNAMEN = {"laufen": "Laufen", "gehen": "Gehen", "radfahren": "Radfahren", "schwimmen": "Schwimmen", "krafttraining": "Krafttraining",
                   "yoga": "Yoga", "hiit": "HIIT", "fussball": "Fußball", "wandern": "Wandern", "tanzen": "Tanzen", "sonstiges": "Sonstiges"}
 WASSER_ZIEL = 2500
+SCHRITT_ZIEL = 10000
+SCHRITT_ARTEN = ("laufen", "gehen", "wandern")   # stecken schon in den Tagesschritten: nicht doppelt als Verbrauch zaehlen
 MAX_BILD = 900 * 1024
 
 
@@ -107,10 +109,34 @@ def training_eintragen(c, z, d: dict, datum: str, text, zahl) -> dict:
     return {"id": cur.lastrowid, "kcal": kcal, "art": art, "minuten": minuten}
 
 
+def schritte_kcal(c, z, schritte: int) -> int:
+    """Grobe Schaetzung: ca. 0,04 kcal je Schritt bei 70 kg, nach Gewicht skaliert."""
+    return round(schritte * 0.04 * gewicht_aktuell(c, z) / 70)
+
+
 def tag_zusatz(c, z, datum: str) -> dict:
     tr = [dict(r) for r in c.execute("SELECT id, art, minuten, kcal, notiz FROM training WHERE nutzer=? AND datum=? ORDER BY id", (z["id"], datum))]
     w = c.execute("SELECT ml FROM wasser WHERE nutzer=? AND datum=?", (z["id"], datum)).fetchone()
-    return {"training": tr, "verbrannt": sum(t["kcal"] for t in tr), "wasser_ml": w["ml"] if w else 0, "ziel_wasser": WASSER_ZIEL}
+    s = c.execute("SELECT schritte, quelle FROM schritte WHERE nutzer=? AND datum=?", (z["id"], datum)).fetchone()
+    n = s["schritte"] if s else 0
+    sk = schritte_kcal(c, z, n) if n else 0
+    for t in tr:
+        t["zaehlt"] = not (n and t["art"] in SCHRITT_ARTEN)
+    sport = sum(t["kcal"] for t in tr if t["zaehlt"])
+    return {"training": tr, "verbrannt": sport + sk, "wasser_ml": w["ml"] if w else 0, "ziel_wasser": WASSER_ZIEL,
+            "schritte": n, "schritte_kcal": sk, "schritte_quelle": s["quelle"] if s else "", "ziel_schritte": SCHRITT_ZIEL}
+
+
+def schritte_setzen(c, z, datum: str, n: int, quelle: str = "hand") -> dict:
+    if not 0 <= n <= 100000:
+        raise SozialFehler(400, "Schritte bitte zwischen 0 und 100.000.")
+    c.execute("INSERT INTO schritte(nutzer, datum, schritte, quelle) VALUES (?,?,?,?) ON CONFLICT(nutzer, datum) DO UPDATE SET schritte=excluded.schritte, quelle=excluded.quelle",
+              (z["id"], datum, n, quelle))
+    return {"schritte": n, "kcal": schritte_kcal(c, z, n)}
+
+
+def schritte_verlauf(c, z) -> list[dict]:
+    return [dict(r) for r in c.execute("SELECT datum, schritte FROM schritte WHERE nutzer=? ORDER BY datum DESC LIMIT 14", (z["id"],))][::-1]
 
 
 def wasser_addieren(c, z, datum: str, ml: int) -> dict:

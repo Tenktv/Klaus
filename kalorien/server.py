@@ -395,6 +395,7 @@ def export(c, z) -> dict:
             "training": [dict(r) for r in c.execute("SELECT datum, art, minuten, kcal, notiz FROM training WHERE nutzer=? ORDER BY datum", (z["id"],))],
             "gewicht": [dict(r) for r in c.execute("SELECT datum, kg FROM gewicht WHERE nutzer=? ORDER BY datum", (z["id"],))],
             "wasser": [dict(r) for r in c.execute("SELECT datum, ml FROM wasser WHERE nutzer=? ORDER BY datum", (z["id"],))],
+            "schritte": [dict(r) for r in c.execute("SELECT datum, schritte FROM schritte WHERE nutzer=? ORDER BY datum", (z["id"],))],
             "rezepte": [dict(r) for r in c.execute("SELECT titel, beschreibung, portionen, zutaten, schritte, kcal, eiweiss, kh, fett FROM rezept "
                                                    "WHERE nutzer=? AND versteckt=0", (z["id"],))],
             "workouts": [dict(r) for r in c.execute("SELECT w.datum, w.name, s.uebung, s.nr, s.wdh, s.kg FROM workout w JOIN satz s ON s.workout=w.id "
@@ -664,6 +665,20 @@ class Handler(BaseHTTPRequestHandler):
             if m == "DELETE" and len(teile) == 2:
                 c.execute("DELETE FROM training WHERE id=? AND nutzer=?", (int(teile[1]), z["id"]))
                 return {"text": "Gelöscht."}
+        if t0 == "schritte":
+            if m == "GET":
+                return sozial.schritte_verlauf(c, z)
+            if m == "POST":
+                roh = re.sub(r"[^\d.,]", "", str(d.get("schritte")))
+                if "," in roh and "." in roh:
+                    roh = roh.replace(".", "").replace(",", ".")
+                elif roh.count(".") > 1 or (roh.count(".") == 1 and len(roh.split(".")[1]) == 3):
+                    roh = roh.replace(".", "")
+                try:
+                    n = int(float(roh.replace(",", ".")))
+                except ValueError:
+                    raise Fehler(400, "Schritte sind keine Zahl.")
+                return sozial.schritte_setzen(c, z, _datum(d.get("datum")), n, "kurzbefehl" if z["zugang_art"] == "api" else "hand")
         if t0 == "wasser" and m == "POST":
             try:
                 ml = int(float(str(d.get("ml")).replace(",", ".")))

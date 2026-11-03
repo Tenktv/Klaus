@@ -79,6 +79,22 @@ function produkt(box, p) {
       ergebnis(box, [{name: p.name, menge: gramm.value + " g", kcal: p.pro100.kcal * f, eiweiss: p.pro100.eiweiss * f, kh: p.pro100.kh * f, fett: p.pro100.fett * f}], "barcode"); }}, "Weiter"));
 }
 
+/* Menge in Gramm/ml aendern -> Kalorien und Makros rechnen mit (aus den Ausgangswerten, ohne Rundungsdrift). */
+function menge(text) {
+  const m = String(text || "").trim().replace(",", ".").match(/^(\d+(?:\.\d+)?)\s*(?:g|gr|gramm|ml)?$|^(\d+(?:\.\d+)?)\s*(?:g|gr|gramm|ml)/i);
+  const w = m ? Number(m[1] || m[2]) : 0;
+  return w > 0 ? w : 0;
+}
+function mitwachsen(mengeFeld, werte) {   // werte: [[inputFeld, rundenFn], ...]
+  const basis = menge(mengeFeld.value), start = werte.map(([f]) => f.value === "" ? null : Number(f.value));
+  if (!basis) return;
+  mengeFeld.addEventListener("input", () => {
+    const neu = menge(mengeFeld.value);
+    if (!neu) return;
+    werte.forEach(([f, rund], i) => { if (start[i] != null && !Number.isNaN(start[i])) f.value = rund(start[i] * neu / basis); });
+  });
+}
+
 /* Pruefen & eintragen (gemeinsam fuer alle Wege). Alles bleibt aenderbar. */
 export function ergebnis(box, gerichte, quelle, hinweis, vorschau) {
   let mahlzeit = S.mahlzeit || mahlzeitJetzt(); S.mahlzeit = null;
@@ -86,6 +102,7 @@ export function ergebnis(box, gerichte, quelle, hinweis, vorschau) {
   const felder = gerichte.map(g => ({
     name: h("input", {value: g.name, placeholder: "Name", maxlength: 120, "aria-label": "Name"}), menge: h("input", {value: g.menge, placeholder: "Menge", maxlength: 40, "aria-label": "Menge"}),
     kcal: num(g.kcal, "kcal", zahl), eiweiss: num(g.eiweiss, "Eiweiß g", eins), kh: num(g.kh, "KH g", eins), fett: num(g.fett, "Fett g", eins)}));
+  felder.forEach(f => mitwachsen(f.menge, [[f.kcal, zahl], [f.eiweiss, eins], [f.kh, eins], [f.fett, eins]]));
   const chips = h("div", {class: "seg", style: {margin: "4px 0 14px"}});
   const male = () => leeren(chips, Object.entries(MAHLZEITEN).map(([k, n]) => h("button", {class: mahlzeit === k ? "an" : "", onclick: () => { mahlzeit = k; male(); }}, n)));
   male();
@@ -119,20 +136,30 @@ export async function wasserSheet() {
 
 export function eintragSheet(e) {
   const f = (n, wert, extra = {}) => h("input", {value: wert ?? "", "aria-label": n, ...extra});
-  const name = f("Name", e.name, {maxlength: 120}), menge = f("Menge", e.menge, {maxlength: 40, placeholder: "Menge (z. B. 150 g)"});
+  const name = f("Name", e.name, {maxlength: 120}), menge_ = f("Menge", e.menge, {maxlength: 40, placeholder: "Menge (z. B. 150 g)"});
   const zahlFeld = (n, w) => f(n, w, {type: "number", inputmode: "decimal", step: "0.1"});
   const kcal = zahlFeld("Kalorien", e.kcal), ei = zahlFeld("Eiweiß g", e.eiweiss), kh = zahlFeld("Kohlenhydrate g", e.kh), fe = zahlFeld("Fett g", e.fett);
+  mitwachsen(menge_, [[kcal, zahl], [ei, eins], [kh, eins], [fe, eins]]);
   let mz = e.mahlzeit;
   const chips = h("div", {class: "chips", style: {marginBottom: "12px"}});
   const male = () => leeren(chips, Object.entries(MAHLZEITEN).map(([k, n]) => h("button", {class: "chip" + (mz === k ? " an" : ""), onclick: () => { mz = k; male(); }}, n)));
   male();
   const lab = (t, x) => h("div", {}, h("label", {class: "lab f-lab"}, t), x);
-  sheet("Eintrag bearbeiten", zu => [chips, h("div", {class: "feld"}, lab("Name", name)), h("div", {class: "feld"}, lab("Menge", menge)),
+  sheet("Eintrag bearbeiten", zu => [chips, h("div", {class: "feld"}, lab("Name", name)), h("div", {class: "feld"}, lab("Menge (Gramm ändern → Kalorien rechnen mit)", menge_)),
     h("div", {class: "raster r2", style: {marginBottom: "12px"}}, lab("Kalorien", kcal), lab("Eiweiß g", ei), lab("Kohlenhydrate g", kh), lab("Fett g", fe)),
     h("button", {class: "btn", onclick: () => los(async () => {
-      await api("PUT", "eintrag/" + e.id, {name: name.value, menge: menge.value, kcal: kcal.value, eiweiss: ei.value, kh: kh.value, fett: fe.value, mahlzeit: mz});
+      await api("PUT", "eintrag/" + e.id, {name: name.value, menge: menge_.value, kcal: kcal.value, eiweiss: ei.value, kh: kh.value, fett: fe.value, mahlzeit: mz});
       zu(); toast("Gespeichert"); neuLaden();
     })}, "Speichern")]);
+}
+
+export function schritteSheet(t) {
+  const eingabe = h("input", {type: "number", inputmode: "numeric", step: "1", min: "0", value: t.schritte || "", placeholder: "0", "aria-label": "Schritte heute", style: {fontSize: "34px", fontFamily: "var(--disp)", fontWeight: 700, textAlign: "center", minHeight: "64px"}});
+  sheet("Schritte", zu => [
+    h("p", {class: "mut", style: {margin: "0 0 12px"}}, "Trag deinen Tagesstand ein – oder lass ihn automatisch aus Apple Health kommen (iPhone-Kurzbefehl)."),
+    h("label", {class: "lab"}, "Schritte heute"), eingabe, h("div", {style: {height: "12px"}}),
+    h("button", {class: "btn", onclick: () => los(async () => { await api("POST", "schritte", {schritte: eingabe.value, datum: S.datum}); zu(); toast("Schritte gespeichert"); neuLaden(); })}, "Speichern"),
+    h("button", {class: "btn zweit", style: {marginTop: "10px"}, onclick: () => { zu(); location.hash = "#/apple-health"; }}, "Mit Apple Health verbinden")]);
 }
 
 export async function gewichtSheet() {

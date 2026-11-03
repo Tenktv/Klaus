@@ -46,6 +46,22 @@ class TestPro(Fit):
         self.assertEqual(self.api("PUT", f"/api/eintrag/{eid}", {"name": "Hack", "kcal": 1}, token=b)[0], 404)
         self.assertEqual(self.api("PUT", f"/api/eintrag/{eid}", {"name": "", "kcal": 1}, token=a)[0], 400)
 
+    def test_schritte_setzen_kcal_und_keine_doppelzaehlung(self):
+        t = self.neu("Schritt Sven")
+        self.assertEqual(self.api("GET", "/api/tag", token=t)[1]["schritte"], 0)
+        self.api("POST", "/api/training", {"art": "gehen", "minuten": 60, "kcal": 300}, token=t)
+        self.api("POST", "/api/training", {"art": "krafttraining", "minuten": 30, "kcal": 150}, token=t)
+        self.assertEqual(self.api("GET", "/api/tag", token=t)[1]["verbrannt"], 450)
+        s, d = self.api("POST", "/api/schritte", {"schritte": "8.234 Schritte"}, token=t)
+        self.assertEqual((s, d["schritte"]), (200, 8234))
+        tag = self.api("GET", "/api/tag", token=t)[1]
+        self.assertEqual(tag["schritte"], 8234)
+        self.assertEqual(tag["verbrannt"], 150 + tag["schritte_kcal"])   # Gehen steckt in den Schritten
+        self.api("POST", "/api/schritte", {"schritte": 9000}, token=t)
+        self.assertEqual(self.api("GET", "/api/tag", token=t)[1]["schritte"], 9000)   # ueberschreiben, nicht addieren
+        self.assertEqual(self.api("POST", "/api/schritte", {"schritte": 999999}, token=t)[0], 400)
+        self.assertEqual(self.api("POST", "/api/schritte", {"schritte": "abc"}, token=t)[0], 400)
+
     def test_frei_ist_nicht_pro_admin_schon(self):
         frei, chef = self.neu("Frei Frida"), self.chef()
         self.assertFalse(self.api("GET", "/api/ich", token=frei)[1]["plan"]["pro"])

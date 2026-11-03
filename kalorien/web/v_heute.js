@@ -1,6 +1,6 @@
 /* Heute: Kalorien-Tacho, Makros, Wasser, Gewicht, Training, Mahlzeiten, Rezept-Tipps. */
 import {S, h, api, los, leeren, icon, kopf, avatar, tacho, linie, zahl, de, heute, tagName, MAHLZEITEN, proMarke, istPro} from "./core.js";
-import {wasserSheet, gewichtSheet, eintragSheet, neuLaden} from "./v_essen.js";
+import {wasserSheet, gewichtSheet, eintragSheet, schritteSheet, neuLaden} from "./v_essen.js";
 import {rezeptKarte} from "./v_rezepte.js";
 
 export async function heuteSeite(ctx) {
@@ -36,10 +36,17 @@ export async function heuteSeite(ctx) {
       gewicht.length > 1 ? linie(gewicht.slice(-14).map(v => ({x: v.datum, y: v.kg})), "var(--volt)", 46) : h("div", {class: "mut klein"}, "Trag morgen wieder ein.")]
       : [h("div", {class: "mut"}, "Noch kein Eintrag"), h("div", {class: "volt fett", style: {marginTop: "8px"}}, "+ Wiegen")]);
 
+  const sch = t.schritte || 0, schProz = Math.min(100, sch / t.ziel_schritte * 100);
+  const schritteKarte = h("button", {class: "karte klick", style: {width: "100%", textAlign: "left"}, onclick: () => schritteSheet(t), "aria-label": "Schritte eintragen"},
+    h("div", {class: "zeile zwischen", style: {marginBottom: "8px"}}, h("div", {class: "lab"}, "Schritte"), h("span", {class: "mut klein"}, t.schritte_quelle === "kurzbefehl" ? "Aus Apple Health" : sch ? "Von Hand" : "Tippen zum Eintragen")),
+    h("div", {class: "zeile zwischen", style: {alignItems: "baseline"}}, h("div", {}, h("b", {class: "zahl", style: {fontSize: "34px"}}, de(sch)), h("span", {class: "mut"}, ` / ${de(t.ziel_schritte)}`)),
+      sch ? h("b", {class: "ember"}, `≈ ${de(t.schritte_kcal)} kcal`) : h("span", {class: "volt fett"}, "+ Schritte")),
+    h("div", {class: "makro", style: {"--c": "var(--volt)", marginTop: "10px"}}, h("div", {class: "bar"}, h("i", {style: {width: schProz + "%"}}))));
+
   const trainingKarte = t.training.length
-    ? h("div", {class: "karte"}, h("div", {class: "zeile zwischen", style: {marginBottom: "6px"}}, h("div", {class: "lab"}, "Training"), h("b", {class: "ember zahl", style: {fontSize: "20px"}}, `${de(verbrannt)} kcal`)),
-      t.training.map(x => h("div", {class: "eintrag"}, h("div", {class: "fuell"}, h("div", {class: "t"}, x.notiz || x.art.charAt(0).toUpperCase() + x.art.slice(1)), h("div", {class: "mut klein"}, `${x.minuten} Min`)),
-        h("div", {class: "kcal ember"}, x.kcal), h("button", {class: "ikon ohne", "aria-label": "Löschen", onclick: () => los(async () => { await api("DELETE", "training/" + x.id); neuLaden(); })}, icon("x")))))
+    ? h("div", {class: "karte"}, h("div", {class: "zeile zwischen", style: {marginBottom: "6px"}}, h("div", {class: "lab"}, "Training"), h("b", {class: "ember zahl", style: {fontSize: "20px"}}, `${de(t.training.filter(x => x.zaehlt !== false).reduce((a, x) => a + x.kcal, 0))} kcal`)),
+      t.training.map(x => h("div", {class: "eintrag"}, h("div", {class: "fuell"}, h("div", {class: "t"}, x.notiz || x.art.charAt(0).toUpperCase() + x.art.slice(1)), h("div", {class: "mut klein"}, `${x.minuten} Min` + (x.zaehlt === false ? " · steckt in den Schritten" : ""))),
+        h("div", {class: "kcal ember" + (x.zaehlt === false ? " mut" : "")}, x.kcal), h("button", {class: "ikon ohne", "aria-label": "Löschen", onclick: () => los(async () => { await api("DELETE", "training/" + x.id); neuLaden(); })}, icon("x")))))
     : h("button", {class: "karte klick zeile", style: {width: "100%", textAlign: "left"}, onclick: () => { location.hash = "#/training"; }},
       h("span", {class: "ikon"}, icon("hantel")), h("div", {class: "fuell"}, h("div", {class: "disp", style: {fontSize: "19px"}}, "Noch kein Training"), h("div", {class: "mut klein"}, "Workout starten oder Cardio eintragen")), icon("rechts", 20));
 
@@ -61,7 +68,7 @@ export async function heuteSeite(ctx) {
   leeren(ctx.box, h("div", {class: "in"},
     kopf(istHeute ? "Heute" : tagName(S.datum, {weekday: "long"}), tagName(S.datum, {weekday: "long", day: "numeric", month: "long"}).toUpperCase(),
       [serie, h("button", {onclick: () => { location.hash = "#/ich"; }, "aria-label": "Profil und Einstellungen"}, avatar(S.ich.name))]),
-    leiste, tachoKarte, makroKarte, h("div", {class: "raster r2", style: {marginBottom: "12px"}}, wasserKarte, gewichtKarte), trainingKarte,
+    leiste, tachoKarte, makroKarte, h("div", {class: "raster r2", style: {marginBottom: "12px"}}, wasserKarte, gewichtKarte), schritteKarte, trainingKarte,
     rezepte.length ? [h("div", {class: "abschnitt"}, h("h2", {}, "Rezepte"), h("a", {href: "#/rezepte"}, "Alle")),
       h("div", {class: "chips"}, rezepte.slice(0, 6).map(r => h("div", {style: {width: "164px", flex: "none"}}, rezeptKarte(r))))] : null,
     istPro() ? null : h("button", {class: "karte pro-held klick", style: {width: "100%", textAlign: "left", marginTop: "14px"}, onclick: () => { location.hash = "#/pro"; }},

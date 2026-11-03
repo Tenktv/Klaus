@@ -7,7 +7,7 @@ import {trainingSeite, workoutSeite, workoutDetail, uebungSeite, workoutStarten}
 import {reelsSeite, reelHochladen} from "./v_reels.js";
 import {communitySeite, profilSeite, beitragSeite, beitragNeu, forumThema, chatSeite} from "./v_community.js";
 import {rezepteSeite, rezeptSeite, rezeptNeu} from "./v_rezepte.js";
-import {ichSeite, proSeite, kiSeite, coachSeite, adminSeite, schnittstelleSeite, zieleSeite} from "./v_ich.js";
+import {ichSeite, proSeite, kiSeite, coachSeite, adminSeite, schnittstelleSeite, appleHealthSeite, zieleSeite} from "./v_ich.js";
 
 const TABS = [
   {id: "heute", name: "Heute", ikon: "home", hash: "#/heute"},
@@ -26,7 +26,7 @@ const ROUTEN = [
   [/^\/profil\/(.+)$/, profilSeite, "community"], [/^\/beitrag\/(\d+)$/, beitragSeite, "community"], [/^\/forum\/(\d+)$/, forumThema, "community"],
   [/^\/chat$/, chatSeite, "community"],
   [/^\/ich$/, ichSeite, "heute"], [/^\/pro$/, proSeite, "heute"], [/^\/ki$/, kiSeite, "heute"], [/^\/coach$/, coachSeite, "heute"],
-  [/^\/admin$/, adminSeite, "heute"], [/^\/schnittstelle$/, schnittstelleSeite, "heute"], [/^\/ziele$/, zieleSeite, "heute"],
+  [/^\/admin$/, adminSeite, "heute"], [/^\/schnittstelle$/, schnittstelleSeite, "heute"], [/^\/apple-health$/, appleHealthSeite, "heute"], [/^\/ziele$/, zieleSeite, "heute"],
 ];
 let aufraeumen = null, zaehler = 0;
 
