@@ -15,19 +15,19 @@ import re
 import urllib.error
 import urllib.request
 
-MODELL = os.getenv("KALORIEN_MODELL", "gemini-2.5-flash")
+MODELL = os.getenv("KALORIEN_MODELL", "gemini-3.5-flash")
 URL = "https://generativelanguage.googleapis.com/v1beta/models/{modell}:generateContent"
 
 # Feste Anbieter. "bild": versteht das Standardmodell Fotos?
 ANBIETER = {
-    "gemini": {"name": "Google Gemini", "modell": "gemini-2.5-flash", "bild": True, "hilfe": "aistudio.google.com/apikey"},
+    "gemini": {"name": "Google Gemini", "modell": "gemini-3.5-flash", "bild": True, "hilfe": "aistudio.google.com/apikey"},
     "openai": {"name": "OpenAI", "modell": "gpt-4o-mini", "bild": True, "url": "https://api.openai.com/v1/chat/completions",
                "hilfe": "platform.openai.com/api-keys"},
     "anthropic": {"name": "Anthropic (Claude)", "modell": "claude-haiku-4-5", "bild": True, "url": "https://api.anthropic.com/v1/messages",
                   "hilfe": "console.anthropic.com/settings/keys"},
     "groq": {"name": "Groq", "modell": "meta-llama/llama-4-scout-17b-16e-instruct", "bild": True,
              "url": "https://api.groq.com/openai/v1/chat/completions", "hilfe": "console.groq.com/keys"},
-    "openrouter": {"name": "OpenRouter", "modell": "google/gemini-2.5-flash", "bild": True,
+    "openrouter": {"name": "OpenRouter", "modell": "google/gemini-3.5-flash", "bild": True,
                    "url": "https://openrouter.ai/api/v1/chat/completions", "hilfe": "openrouter.ai/keys"},
 }
 MODELL_MUSTER = re.compile(r"^[\w./:@-]{2,80}$")
