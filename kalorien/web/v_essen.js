@@ -28,7 +28,7 @@ function fotoModus(box) {
       ergebnis(box, r.gerichte, "foto", r.hinweis, bild);
     } finally { knopf.disabled = auswahl.disabled = false; status.textContent = ""; datei.value = ""; }
   }));
-  leeren(box, h("div", {class: "karte"}, h("div", {class: "feld"}, hinweis), h("div", {class: "raster"}, knopf, auswahl), status),
+  leeren(box, h("div", {class: "karte"}, h("div", {class: "feld"}, hinweis), h("div", {class: "raster"}, knopf, auswahl), datei, status),   // datei muss im DOM haengen, sonst oeffnet iOS die Kamera nicht
     ki("Das Foto geht einmal zur Schätzung an die KI und wird nicht gespeichert. Korrigiere die Werte danach, wenn sie nicht passen."));
 }
 
