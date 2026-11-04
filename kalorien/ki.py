@@ -12,6 +12,7 @@ import base64
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 
@@ -42,7 +43,14 @@ TEXT = "Du bist ein Ernährungs-Assistent. Schätze Menge und Nährwerte der bes
 
 
 class KiFehler(Exception):
-    pass
+    def __init__(self, text: str = "", code: int = 0) -> None:
+        super().__init__(text)
+        self.code = code   # HTTP-Status des Anbieters (0 = kein HTTP-Fehler)
+
+
+# Wenn das Hauptmodell kurz ueberlastet ist (503 ...), erst nochmal, dann das Ersatzmodell (nur beim Server-Schluessel)
+MODELL_ERSATZ = os.getenv("KALORIEN_MODELL_ERSATZ", "gemini-flash-latest")
+WIEDERHOLBAR = (500, 502, 503, 504)
 
 
 def schluessel() -> str:
@@ -82,10 +90,10 @@ def _post(url: str, kopf: dict, daten: dict, timeout: float) -> dict:
         if e.code == 402:
             raise KiFehler("Dein Konto beim KI-Anbieter hat kein Guthaben mehr.")
         if e.code == 404:
-            raise KiFehler("Das Modell gibt es beim Anbieter nicht. Prüfe den Modellnamen.")
+            raise KiFehler("Das Modell gibt es beim Anbieter nicht. Prüfe den Modellnamen.", 404)
         if e.code == 429:
             raise KiFehler("Dein KI-Anbieter sagt: Limit erreicht. Bitte später nochmal.")
-        raise KiFehler(f"Der KI-Anbieter antwortet gerade nicht ({e.code}).")
+        raise KiFehler(f"Der KI-Anbieter antwortet gerade nicht ({e.code}).", e.code)
     except (OSError, ValueError) as e:
         raise KiFehler(f"Die KI antwortet gerade nicht ({type(e).__name__}).")
 
@@ -93,6 +101,7 @@ def _post(url: str, kopf: dict, daten: dict, timeout: float) -> dict:
 def chat(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, konfig: dict | None = None,
          json_modus: bool = True, timeout: float = 60, max_token: int = 1800) -> str:
     """Eine Anfrage an die KI -> Text. bild = (Bytes, MIME). konfig = eigene KI des Nutzers, sonst der Server-Schluessel."""
+    eigener_schluessel_nein = konfig is None   # Ersatzmodell nur bei unserem Server-Schluessel
     if konfig is None:
         if not schluessel():
             raise KiFehler("Die KI ist auf diesem Server nicht eingerichtet (GEMINI_API_KEY fehlt).")
@@ -106,7 +115,24 @@ def chat(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, konfig
         cfg = {"temperature": 0.3, "maxOutputTokens": max_token}
         if json_modus:
             cfg["responseMimeType"] = "application/json"
-        r = _post(URL.format(modell=modell), {"x-goog-api-key": key}, {"contents": [{"parts": teile}], "generationConfig": cfg}, timeout)
+        versuche = [modell, modell] + ([MODELL_ERSATZ] if eigener_schluessel_nein and MODELL_ERSATZ and MODELL_ERSATZ != modell else [])
+        n = 0
+        while True:
+            m = versuche[n]
+            try:
+                r = _post(URL.format(modell=m), {"x-goog-api-key": key}, {"contents": [{"parts": teile}], "generationConfig": cfg}, timeout)
+                break
+            except KiFehler as e:
+                rest = versuche[n + 1:]
+                if e.code == 404:
+                    rest = [x for x in rest if x != m]   # Modell gibt es nicht: nicht nochmal dasselbe, gleich das Ersatzmodell
+                elif e.code not in WIEDERHOLBAR:
+                    raise
+                if not rest:
+                    raise
+                if e.code in WIEDERHOLBAR and rest[0] == m:
+                    time.sleep(1.5)
+                n = len(versuche) - len(rest)
         try:
             return r["candidates"][0]["content"]["parts"][0]["text"]
         except (KeyError, IndexError):
