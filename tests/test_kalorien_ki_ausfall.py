@@ -44,6 +44,7 @@ class TestKiAusfall(unittest.TestCase):
             ki.chat("s", "n")
         self.assertEqual(ctx.exception.code, 503)
         self.assertEqual(post.call_count, 3)
+        self.assertIn("Ersatzmodell", str(ctx.exception))   # so sieht man in der App, dass der neue Code gelaufen ist
 
     def test_falscher_schluessel_wird_nicht_wiederholt(self):
         with mock.patch.object(ki, "_post", side_effect=fehler(403)) as post, self.assertRaises(ki.KiFehler):
