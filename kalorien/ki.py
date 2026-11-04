@@ -93,6 +93,11 @@ def _post(url: str, kopf: dict, daten: dict, timeout: float) -> dict:
             raise KiFehler("Das Modell gibt es beim Anbieter nicht. Prüfe den Modellnamen.", 404)
         if e.code == 429:
             raise KiFehler("Dein KI-Anbieter sagt: Limit erreicht. Bitte später nochmal.")
+        try:
+            grund = re.sub(r"\s+", " ", e.read().decode("utf-8", "replace"))[:240]
+        except OSError:
+            grund = ""
+        print(f"[Kalorien-KI] HTTP {e.code} von {url.split('?')[0].split('/models/')[-1]}: {grund}", flush=True)
         raise KiFehler(f"Der KI-Anbieter antwortet gerade nicht ({e.code}).", e.code)
     except (OSError, ValueError) as e:
         raise KiFehler(f"Die KI antwortet gerade nicht ({type(e).__name__}).")
@@ -129,6 +134,9 @@ def chat(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, konfig
                 elif e.code not in WIEDERHOLBAR:
                     raise
                 if not rest:
+                    if n > 0 and e.code in WIEDERHOLBAR:
+                        raise KiFehler(f"Der KI-Anbieter antwortet gerade nicht ({e.code}, auch nach {n} Wiederholung(en)"
+                                       f"{' und Ersatzmodell' if m != modell else ''}). Versuch es gleich nochmal.", e.code)
                     raise
                 if e.code in WIEDERHOLBAR and rest[0] == m:
                     time.sleep(1.5)
