@@ -60,3 +60,32 @@ class TestKiAusfall(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAntwortLesen(unittest.TestCase):
+    def test_abgeschnittene_antwort_behaelt_fertige_gerichte(self):
+        text = ('{"gerichte":[{"name":"Brot","menge":"3 Scheiben","kcal":315,"eiweiss":10,"kh":60,"fett":2},'
+                '{"name":"Butter","menge":"8 g","kcal":60,"eiweiss":0,"kh":0,"fett":6.6},{"name":"Gurke","menge":"90 g","kc')
+        r = ki.lesen(text)
+        self.assertEqual([g["name"] for g in r["gerichte"]], ["Brot", "Butter"])
+        self.assertIn("unvollständig", r["hinweis"])
+
+    def test_json_mit_text_drumherum(self):
+        r = ki.lesen('Klar, hier ist die Schätzung:\n{"gerichte":[{"name":"Apfel","kcal":95}],"hinweis":"ok"}\nGuten Appetit!')
+        self.assertEqual(r["gerichte"][0]["name"], "Apfel")
+
+    def test_unlesbar_bleibt_fehler(self):
+        with self.assertRaises(ki.KiFehler):
+            ki.lesen("Das kann ich leider nicht.")
+
+    def test_unleserlich_wird_einmal_neu_gefragt_und_hat_viel_platz(self):
+        gut = '{"gerichte":[{"name":"Brot","kcal":100}]}'
+        with mock.patch.object(ki, "schluessel", return_value="k"), mock.patch.object(ki, "chat", side_effect=["kaputt", gut]) as chat:
+            self.assertEqual(ki.aus_text("Brot")["gerichte"][0]["name"], "Brot")
+        self.assertEqual(chat.call_count, 2)
+        self.assertEqual(chat.call_args.kwargs["max_token"], 4096)
+
+    def test_zweimal_unleserlich_gibt_fehler(self):
+        with mock.patch.object(ki, "chat", return_value="kaputt") as chat, self.assertRaises(ki.KiFehler):
+            ki.aus_text("Brot")
+        self.assertEqual(chat.call_count, 2)

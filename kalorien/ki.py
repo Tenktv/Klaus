@@ -182,13 +182,37 @@ def json_holen(text: str):
     raise KiFehler("Die KI-Antwort war nicht lesbar. Bitte nochmal versuchen.")
 
 
+def _retten(text: str):
+    """Abgeschnittene oder mit Text umgebene KI-Antwort: Json aus dem Text holen, sonst die vollstaendigen Gerichte einsammeln."""
+    dec = json.JSONDecoder()
+    anfang = text.find("{")
+    while anfang != -1:   # Json irgendwo im Text (z.B. "Hier ist die Schaetzung: {...}")
+        try:
+            obj, _ = dec.raw_decode(text[anfang:])
+            if isinstance(obj, dict) and "gerichte" in obj:
+                return obj
+        except ValueError:
+            pass
+        anfang = text.find("{", anfang + 1)
+    gerichte = []   # abgeschnitten: alle fertigen {"name": ...}-Objekte der Liste behalten
+    for m in re.finditer(r'\{\s*"name"', text):
+        try:
+            obj, _ = dec.raw_decode(text[m.start():])
+            gerichte.append(obj)
+        except ValueError:
+            break
+    return {"gerichte": gerichte, "hinweis": "Die Antwort war unvollständig – prüfe die Werte."} if gerichte else None
+
+
 def lesen(text: str) -> dict:
     """KI-Antwort -> {gerichte: [...], hinweis}. Tolerant gegenueber ```json-Zaeunen und Komma-Zahlen."""
     text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
     try:
         roh = json.loads(text)
     except ValueError:
-        raise KiFehler("Die KI-Antwort war nicht lesbar. Bitte nochmal versuchen.")
+        roh = _retten(text)
+        if roh is None:
+            raise KiFehler("Die KI-Antwort war nicht lesbar. Bitte nochmal versuchen.")
     liste = roh.get("gerichte") if isinstance(roh, dict) else roh
 
     def zahl(w, grenze: float) -> float:
@@ -207,7 +231,12 @@ def lesen(text: str) -> dict:
 
 def _aufrufen(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, konfig: dict | None = None) -> dict:
     """KI fragen und die Mahlzeiten-Antwort lesen (eigene Stelle, damit Tests die KI ersetzen koennen)."""
-    return lesen(chat(system, nutzer, bild, konfig))
+    for versuch in (0, 1):   # unleserliche Antwort: einmal neu fragen (Platz fuers "Denken" der Modelle ist grosszuegig)
+        try:
+            return lesen(chat(system, nutzer, bild, konfig, max_token=4096))
+        except KiFehler as e:
+            if versuch or "nicht lesbar" not in str(e):
+                raise
 
 
 def aus_bild(bild: bytes, mime: str, hinweis: str = "", konfig: dict | None = None) -> dict:
