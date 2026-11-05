@@ -262,3 +262,83 @@ class TestGroqModelle(unittest.TestCase):
             ki._post("https://api.groq.com/x", {}, {}, 5)
         self.assertIn("nicht mehr", str(ctx.exception))
         self.assertEqual(ctx.exception.code, 404)
+
+
+GEMINI_OK = {"candidates": [{"content": {"parts": [{"text": '{"gerichte":[{"name":"Gemini-Brot","kcal":100}]}'}]}}]}
+GROQ_OK = {"choices": [{"message": {"content": '{"gerichte":[{"name":"Groq-Brot","kcal":110}]}'}}]}
+EIGENE_GROQ = {"anbieter": "groq", "schluessel": "e" * 20, "modell": ""}
+
+
+def marker(danach=EIGENE_GROQ, **extra):
+    return {"anbieter": "server", "danach": danach, "hinweise": [], **extra}
+
+
+class TestGeminiZuerst(unittest.TestCase):
+    """Reihenfolge: Gemini des Servers -> eigene KI des Nutzers -> Groq des Servers. Ausweichwege werden dem Nutzer gemeldet."""
+
+    def setUp(self):
+        for p in (mock.patch.object(ki, "schluessel", return_value="k"), mock.patch.object(ki, "MODELL_ERSATZ", "ersatz-modell"),
+                  mock.patch.object(ki.time, "sleep"), mock.patch.dict(os.environ, {"GROQ_API_KEY": ""})):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def post(self, gemini, eigene=GROQ_OK):
+        """Antwortet je nach Adresse: Gemini -> gemini (Ergebnis oder Fehler), Groq -> eigene."""
+        def f(url, kopf, daten, timeout):
+            antwort = gemini if "googleapis" in url else eigene
+            if isinstance(antwort, Exception):
+                raise antwort
+            return antwort
+        return mock.patch.object(ki, "_post", side_effect=f)
+
+    def test_gemini_antwortet_eigene_ki_bleibt_ungenutzt(self):
+        k = marker()
+        with self.post(GEMINI_OK) as p:
+            r = ki.aus_text("Brot", k)
+        self.assertEqual(r["gerichte"][0]["name"], "Gemini-Brot")
+        self.assertTrue(all("googleapis" in c.args[0] for c in p.call_args_list))
+        self.assertEqual(k["hinweise"], [])
+        self.assertEqual(r["hinweis"], "")
+
+    def test_gemini_ausgelastet_dann_eigene_ki_mit_hinweis(self):
+        with self.post(fehler(429)):
+            r = ki.aus_text("Brot", marker())
+        self.assertEqual(r["gerichte"][0]["name"], "Groq-Brot")
+        self.assertIn("ausgelastet", r["hinweis"])
+        self.assertIn("deiner eigenen KI (Groq)", r["hinweis"])
+
+    def test_gemini_ausgefallen_503_dann_eigene_ki(self):
+        with self.post(fehler(503)):
+            r = ki.aus_bild(b"\xff\xd8\xff" + b"0" * 2000, "image/jpeg", konfig=marker())
+        self.assertEqual(r["gerichte"][0]["name"], "Groq-Brot")
+        self.assertIn("antwortet gerade nicht", r["hinweis"])
+
+    def test_eigene_ki_faellt_auch_aus_dann_gemeinsame_meldung(self):
+        with self.post(fehler(429), fehler(401)), self.assertRaises(ki.KiFehler) as ctx:
+            ki.aus_text("Brot", marker())
+        self.assertIn("ausgelastet", str(ctx.exception))
+        self.assertIn("eigene KI hat auch nicht geklappt", str(ctx.exception))
+
+    def test_tageslimit_ueberspringt_gemini_und_sagt_es(self):
+        k = marker(ueberspringen=True, hinweise=["Tageslimit der Server-KI erreicht – geschätzt mit deiner eigenen KI."])
+        with self.post(GEMINI_OK) as p:
+            r = ki.aus_text("Brot", k)
+        self.assertEqual(r["gerichte"][0]["name"], "Groq-Brot")
+        self.assertTrue(all("googleapis" not in c.args[0] for c in p.call_args_list))   # Gemini wurde gar nicht gefragt
+        self.assertIn("Tageslimit", r["hinweis"])
+
+    def test_ohne_eigene_ki_hilft_der_groq_schluessel_des_servers(self):
+        with mock.patch.dict(os.environ, {"GROQ_API_KEY": "g" * 20}), self.post(fehler(429)):
+            r = ki.aus_text("Brot", marker(danach=None))
+        self.assertEqual(r["gerichte"][0]["name"], "Groq-Brot")
+        self.assertIn("Geschätzt mit Groq", r["hinweis"])
+
+    def test_falscher_gemini_schluessel_geht_nicht_an_die_eigene_ki(self):
+        with self.post(fehler(403)) as p, self.assertRaises(ki.KiFehler):
+            ki.aus_text("Brot", marker())
+        self.assertTrue(all("googleapis" in c.args[0] for c in p.call_args_list))
+
+    def test_bild_400_von_gemini_wird_nicht_dem_modell_der_eigenen_ki_angelastet(self):
+        with self.post(fehler(400)), self.assertRaises(ki.KiFehler) as ctx:
+            ki.aus_bild(b"\xff\xd8\xff" + b"0" * 2000, "image/jpeg", konfig=marker())
+        self.assertNotIn("keine Fotos", str(ctx.exception))

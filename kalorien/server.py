@@ -239,13 +239,22 @@ def ki_zaehlen(c, z) -> None:
 
 
 def ki_vorbereiten(c, z) -> dict | None:
-    """Welche KI antwortet? Eigene KI (Pro): kein Limit, der Nutzer zahlt selbst. Sonst der Server-Schluessel mit Tageslimit."""
-    konfig = pro.eigene_ki(c, z)
-    if konfig is None:
+    """Welche KI antwortet? IMMER zuerst die Server-KI (Gemini, zaehlt zum Tageslimit). Hat der Nutzer eine eigene KI (Pro), springt sie ein,
+    wenn Gemini ausgelastet/ausgefallen ist oder sein Tageslimit erreicht ist - mit Hinweis in der Antwort. Ohne Server-KI: nur die eigene."""
+    eigene = pro.eigene_ki(c, z)
+    if eigene is None:
         if not ki.verfuegbar():
             raise Fehler(503, "Die KI ist auf diesem Server nicht eingerichtet.")
         ki_zaehlen(c, z)
-    return konfig
+        return None
+    if not ki.verfuegbar():
+        return eigene
+    try:
+        ki_zaehlen(c, z)
+        return {"anbieter": "server", "danach": eigene, "hinweise": []}
+    except Fehler:   # Tageslimit der Server-KI erreicht: direkt die eigene KI, mit Hinweis
+        return {"anbieter": "server", "danach": eigene, "ueberspringen": True,
+                "hinweise": ["Tageslimit der Server-KI erreicht – geschätzt mit deiner eigenen KI."]}
 
 
 COACH = ("Du bist ein erfahrener, ehrlicher Fitness- und Ernährungscoach in einer App. Antworte auf Deutsch, konkret und knapp "

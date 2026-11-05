@@ -95,3 +95,46 @@ class TestStatusStand(Basis):
             d = json.loads(r.read())
         self.assertTrue(d["ok"])
         self.assertGreater(d["stand"], 1_600_000_000)   # Zeitstempel einer echten Datei
+
+
+class TestReihenfolgeUeberHttp(Basis):
+    def chef_mit_eigener_ki(self):
+        s, d = self.api("POST", "/api/anmelden", {"name": "Chef", "passwort": "geheim1234"})
+        boss = d["token"] if s == 200 else self.neu("Chef")
+        self.api("PUT", "/api/ki", {"anbieter": "groq", "schluessel": "gsk_" + "c" * 40, "modell": ""}, boss)
+        return boss
+
+    def antwort(self, url, *a):
+        if "googleapis" in url:
+            raise ki.KiFehler("Der KI-Anbieter antwortet gerade nicht (429).", 429)
+        return {"choices": [{"message": {"content": '{"gerichte":[{"name":"Groq-Nudeln","kcal":600}]}'}}]}
+
+    def test_gemini_zuerst_dann_eigene_ki_mit_hinweis_in_der_antwort(self):
+        boss = self.chef_mit_eigener_ki()
+        urls = []
+        with mock.patch.object(ki, "schluessel", return_value="k"), mock.patch.object(ki.time, "sleep"), \
+                mock.patch.object(ki, "_post", side_effect=lambda url, *a: (urls.append(url), self.antwort(url))[1]):
+            s, d = self.api("POST", "/api/schaetzen/text", {"text": "Nudeln mit Speck"}, boss)
+        self.assertEqual(s, 200, d)
+        self.assertIn("googleapis", urls[0])           # Gemini wurde ZUERST gefragt
+        self.assertIn("groq.com", urls[-1])
+        self.assertEqual(d["gerichte"][0]["name"], "Groq-Nudeln")
+        self.assertIn("ausgelastet", d["hinweis"])
+
+    def test_tageslimit_erreicht_geht_direkt_an_die_eigene_ki(self):
+        boss = self.chef_mit_eigener_ki()
+        urls = []
+        from kalorien import server as srv
+        with mock.patch.object(ki, "schluessel", return_value="k"), mock.patch.object(srv, "ki_zaehlen", side_effect=srv.Fehler(429, "Limit")), \
+                mock.patch.object(ki, "_post", side_effect=lambda url, *a: (urls.append(url), self.antwort(url))[1]):
+            s, d = self.api("POST", "/api/schaetzen/text", {"text": "Nudeln"}, boss)
+        self.assertEqual(s, 200, d)
+        self.assertTrue(all("groq.com" in u for u in urls))   # Gemini gar nicht gefragt
+        self.assertIn("Tageslimit", d["hinweis"])
+
+    def test_normaler_nutzer_ohne_eigene_ki_bleibt_beim_tageslimit_fehler(self):
+        t = self.neu("Limit Lars")
+        from kalorien import server as srv
+        with mock.patch.object(ki, "schluessel", return_value="k"), mock.patch.object(srv, "ki_zaehlen", side_effect=srv.Fehler(429, "Heute aufgebraucht")):
+            s, d = self.api("POST", "/api/schaetzen/text", {"text": "Brot"}, t)
+        self.assertEqual(s, 429)
