@@ -87,3 +87,15 @@ class TestSchalter(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCodeWaechter(unittest.TestCase):
+    def test_nur_neu_starten_wenn_neuer_code_und_stabil(self):
+        f = server.neustart_faellig
+        self.assertEqual(f(100.0, 100.0, None), (False, None))        # nichts geaendert
+        self.assertEqual(f(100.0, 200.0, None), (False, 200.0))       # erste Beobachtung: Update koennte noch kopieren
+        self.assertEqual(f(100.0, 200.0, 200.0), (True, 200.0))       # beim zweiten Blick unveraendert -> neu starten
+        self.assertEqual(f(100.0, 250.0, 200.0), (False, 250.0))      # wurde zwischendurch wieder geaendert -> weiter warten
+
+    def test_code_stand_ist_eine_zahl(self):
+        self.assertGreater(server.code_stand(), 0)

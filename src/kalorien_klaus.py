@@ -165,6 +165,17 @@ def _app_prozesse() -> list[int]:
     return [int(x) for x in r.stdout.split() if x.isdigit() and int(x) != os.getpid()]
 
 
+def _diagnose() -> str:
+    """Was laeuft auf dem Server mit 'kalorien' im Namen (egal welcher Benutzer)? Damit man sieht, warum der Neustart nicht greift."""
+    try:
+        r = subprocess.run(["ps", "-eo", "user:20,pid,ppid,args"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"(Prozessliste nicht lesbar: {type(e).__name__})"
+    zeilen = [z.strip()[:170] for z in r.stdout.splitlines()[1:] if "kalorien" in z.lower() and " ps -eo " not in z]
+    me = f"Ich laufe als Benutzer {os.environ.get('USER') or os.getuid()}."
+    return me + (" Gefunden:\n" + "\n".join(zeilen[:4]) if zeilen else " Kein Prozess mit „kalorien“ im Namen gefunden – die App läuft nicht oder startet anders.")
+
+
 def _unter_systemd(pid: int) -> bool:
     """Nur Prozesse killen, die systemd (PID 1) selbst gestartet hat - nur die kommen von allein wieder (Restart=always)."""
     try:
@@ -183,7 +194,7 @@ def neu_starten(nur_wenn_veraltet: bool = True) -> str:
     nur_wenn_veraltet: nur wenn die App aelter ist als ihr Code (Normalfall nach Klaus-Start); sonst (Befehl /fit_neustart) immer."""
     pids = _app_prozesse()
     if not pids:
-        return "Die Kalorien-App läuft nicht (oder nicht unter diesem Benutzer) – nichts neu gestartet."
+        return "Ich finde die Kalorien-App unter meinem Benutzer nicht – nichts neu gestartet.\n" + _diagnose()
     stand, gestartet = _code_stand(), []
     for pid in pids:
         try:

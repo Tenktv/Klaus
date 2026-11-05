@@ -45,7 +45,8 @@ class TestNeustart(unittest.TestCase):
 
     def test_keine_app_laeuft(self):
         kill = self.lauf([])
-        self.assertIn("läuft nicht", K.neu_starten(True))
+        with mock.patch.object(K, "_diagnose", return_value="DIAG"):
+            self.assertIn("nicht", K.neu_starten(True))
         kill.assert_not_called()
 
     def test_befehl_ist_angemeldet(self):
@@ -73,3 +74,23 @@ class TestNeustart(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDiagnose(unittest.TestCase):
+    def test_diagnose_zeigt_gefundene_prozesse_und_benutzer(self):
+        ps = ("USER PID PPID COMMAND\nroot 812 1 /home/klaus/klaus/.venv/bin/python -m kalorien.server\n"
+              "klaus 900 1 /usr/bin/python3 src/server_gehirn.py\n")
+        with mock.patch.object(K.subprocess, "run", return_value=mock.Mock(stdout=ps)):
+            text = K._diagnose()
+        self.assertIn("root 812", text)
+        self.assertNotIn("server_gehirn", text)
+
+    def test_diagnose_ohne_treffer_und_ohne_ps(self):
+        with mock.patch.object(K.subprocess, "run", return_value=mock.Mock(stdout="USER PID PPID COMMAND\n")):
+            self.assertIn("Kein Prozess", K._diagnose())
+        with mock.patch.object(K.subprocess, "run", side_effect=OSError):
+            self.assertIn("nicht lesbar", K._diagnose())
+
+    def test_neustart_ohne_prozess_enthaelt_diagnose(self):
+        with mock.patch.object(K, "_app_prozesse", return_value=[]), mock.patch.object(K, "_diagnose", return_value="DIAG"):
+            self.assertIn("DIAG", K.neu_starten(True))
