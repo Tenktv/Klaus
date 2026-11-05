@@ -724,6 +724,9 @@ class Handler(BaseHTTPRequestHandler):
             if m == "POST" and teile[1:] == ["test"]:
                 _bremse(f"kitest:{z['id']}", 5, 600)
                 return pro.ki_testen(c, z)
+            if m == "GET" and teile[1:] == ["modelle"]:
+                _bremse(f"kimodelle:{z['id']}", 10, 600)
+                return pro.ki_modelle(c, z)
         if t0 == "coach" and m == "POST":
             return coach(c, z, d)
         # ---- Rezepte

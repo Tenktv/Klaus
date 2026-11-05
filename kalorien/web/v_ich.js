@@ -89,9 +89,18 @@ export async function kiSeite(ctx) {
   const st = await api("GET", "ki");
   if (!ctx.aktuell()) return;
   let auswahl = st.eigene ? st.eigene.anbieter : st.anbieter[0].id;
-  const key = h("input", {type: "password", placeholder: st.eigene ? "Neuer Schlüssel (leer = unverändert nicht möglich)" : "API-Schlüssel einfügen", autocomplete: "off", autocapitalize: "off", spellcheck: false, "aria-label": "API-Schlüssel"});
+  const key = h("input", {type: "password", placeholder: st.eigene ? "Neuer Schlüssel (leer = gespeicherten behalten)" : "API-Schlüssel einfügen", autocomplete: "off", autocapitalize: "off", spellcheck: false, "aria-label": "API-Schlüssel"});
   const modell = h("input", {placeholder: "Modell (leer = Standard)", value: st.eigene ? st.eigene.modell : "", maxlength: 80, "aria-label": "Modell"});
   const liste = h("div", {}), hilfe = h("p", {class: "hilfe"});
+  const modellListe = h("div", {});
+  const modellKnopf = st.eigene ? h("button", {class: "btn zweit klein", style: {marginBottom: "10px"}, onclick: ev => los(async () => {
+    const knopf = ev.currentTarget; knopf.disabled = true;
+    try {
+      const r = await api("GET", "ki/modelle");
+      leeren(modellListe, h("p", {class: "mut klein"}, "Tippe ein Modell an. „Fotos“ = versteht vermutlich Bilder (nötig für den Foto-Scan). Danach auf Speichern – der Schlüssel bleibt."),
+        r.modelle.length ? r.modelle.map(m => h("button", {class: "btn zweit klein", style: {marginBottom: "6px", textAlign: "left"}, onclick: () => { auswahl = st.eigene.anbieter; modell.value = m.id; toast("Modell eingetragen – tippe auf Speichern"); }}, (m.bild ? "📷 " : "") + m.id)) : h("p", {class: "mut"}, "Keine Modelle gefunden."));
+    } finally { knopf.disabled = false; }
+  })}, "Verfügbare Modelle anzeigen") : null;
   const male = () => {
     leeren(liste, st.anbieter.map(a => h("div", {class: "anbieter" + (auswahl === a.id ? " an" : ""), onclick: () => { auswahl = a.id; if (!st.eigene || st.eigene.anbieter !== a.id) modell.value = ""; modell.placeholder = `Standard: ${a.modell}`; male(); }}, h("span", {class: "punkt"}), h("div", {class: "fuell"}, h("div", {class: "fett"}, a.name), h("div", {class: "mut klein"}, `Standard: ${a.modell}`)))));
     const a = st.anbieter.find(x => x.id === auswahl); leeren(hilfe, "Schlüssel erstellen: ", h("a", {href: "https://" + a.hilfe, target: "_blank", rel: "noopener noreferrer", class: "volt"}, a.hilfe));
@@ -103,7 +112,7 @@ export async function kiSeite(ctx) {
     h("div", {class: "sperre" + (gesperrt ? " zu" : "")}, h("div", {class: "hinweisbox"}, icon("schloss"), "Der Schlüssel wird nur auf dem Server gespeichert und nie wieder angezeigt. Anfragen gehen direkt von dort an deinen Anbieter und werden von dir bezahlt – ohne Tageslimit. Du kannst den Schlüssel bei deinem Anbieter jederzeit widerrufen."),
       st.eigene ? h("div", {class: "karte", style: {borderColor: "rgba(212,255,58,.35)"}}, h("div", {class: "zeile zwischen"}, h("div", {}, h("div", {class: "lab volt"}, "Aktiv"), h("div", {class: "fett", style: {marginTop: "4px"}}, `${st.anbieter.find(a => a.id === st.eigene.anbieter).name} · ${st.eigene.modell}`), h("div", {class: "mut klein"}, "Schlüssel " + st.eigene.schluessel)),
         h("button", {class: "btn klein", onclick: ev => los(async () => { const knopf = ev.currentTarget; knopf.disabled = true; try { toast((await api("POST", "ki/test", {})).text); } finally { knopf.disabled = false; } })}, "Testen"))) : null,
-      h("div", {class: "lab", style: {margin: "6px 0 8px"}}, "Anbieter"), liste, h("div", {class: "feld"}, key), h("div", {class: "feld"}, modell), hilfe,
+      h("div", {class: "lab", style: {margin: "6px 0 8px"}}, "Anbieter"), liste, h("div", {class: "feld"}, key), h("div", {class: "feld"}, modell), modellKnopf, modellListe, hilfe,
       h("button", {class: "btn", style: {margin: "14px 0 10px"}, onclick: () => los(async () => { const d = await api("PUT", "ki", {anbieter: auswahl, schluessel: key.value, modell: modell.value}); key.value = ""; toast(d.text, false, 4500); window.dispatchEvent(new HashChangeEvent("hashchange")); })}, "Speichern"),
       st.eigene ? h("button", {class: "btn gefahr", onclick: async () => { if (await bestaetigen("Eigene KI entfernen und den Schlüssel löschen?", "Entfernen", true)) los(async () => { toast((await api("DELETE", "ki")).text); window.dispatchEvent(new HashChangeEvent("hashchange")); }); }}, "Entfernen und Schlüssel löschen") : null)));
 }

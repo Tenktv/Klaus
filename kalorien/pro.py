@@ -69,8 +69,13 @@ def ki_status(c, z) -> dict:
 
 def ki_speichern(c, z, d: dict) -> dict:
     verlangen(z, "Eine eigene KI")
+    schluessel = str(d.get("schluessel") or "").strip()
+    if not schluessel:   # nur Modell aendern: den gespeicherten Schluessel desselben Anbieters behalten (er wird nie angezeigt)
+        alt = c.execute("SELECT anbieter, schluessel FROM nutzer_ki WHERE nutzer=?", (z["id"],)).fetchone()
+        if alt and alt["anbieter"] == str(d.get("anbieter") or ""):
+            schluessel = alt["schluessel"]
     try:
-        k = ki.konfig_pruefen(str(d.get("anbieter") or ""), str(d.get("schluessel") or ""), str(d.get("modell") or ""))
+        k = ki.konfig_pruefen(str(d.get("anbieter") or ""), schluessel, str(d.get("modell") or ""))
     except ki.KiFehler as e:
         raise ProFehler(400, str(e))
     c.execute("INSERT INTO nutzer_ki(nutzer, anbieter, schluessel, modell, erstellt) VALUES (?,?,?,?,?) "
@@ -83,6 +88,16 @@ def ki_speichern(c, z, d: dict) -> dict:
 def ki_loeschen(c, z) -> dict:
     c.execute("DELETE FROM nutzer_ki WHERE nutzer=?", (z["id"],))
     return {"text": "Deine KI ist entfernt, der Schlüssel gelöscht."}
+
+
+def ki_modelle(c, z) -> dict:
+    k = eigene_ki(c, z)
+    if not k:
+        raise ProFehler(400, "Du hast noch keine eigene KI eingetragen.")
+    try:
+        return {"modelle": ki.modelle_liste(k)}
+    except ki.KiFehler as e:
+        raise ProFehler(502, str(e))
 
 
 def ki_testen(c, z) -> dict:
