@@ -89,7 +89,7 @@ def maskiert(key: str) -> str:
 
 def _post(url: str, kopf: dict, daten: dict, timeout: float) -> dict:
     # Eigene Kennung: Anbieter hinter Cloudflare (z.B. Groq) blocken die Standard-Kennung "Python-urllib" mit 403 - sieht aus wie ein falscher Schluessel
-    anfrage = urllib.request.Request(url, data=json.dumps(daten).encode(),
+    anfrage = urllib.request.Request(url, data=None if daten is None else json.dumps(daten).encode(),   # daten=None -> GET
                                      headers={"Content-Type": "application/json", "User-Agent": "KlesroFit/1.0", **kopf})
     try:
         with urllib.request.urlopen(anfrage, timeout=timeout) as r:
@@ -286,6 +286,26 @@ def testen(konfig: dict) -> str:
     """Kleine Probe-Anfrage mit dem Schluessel des Nutzers (verbraucht Centbruchteile)."""
     antwort = chat("Antworte nur mit dem JSON {\"ok\": true}.", "Test", None, konfig, True, 20, 30)
     return "ok" if "ok" in antwort.lower() else "antwortet"
+
+
+NICHT_CHAT = re.compile(r"whisper|tts|guard|embed|orpheus|moderation|dall-e|image|audio|realtime|transcribe|speech|imagen|veo|aqa", re.I)
+BILD_MODELL = re.compile(r"scout|maverick|vision|-vl|gpt-4o|gpt-4\.1|gpt-5|gemini|claude|pixtral|llava|qwen.*vl", re.I)
+
+
+def modelle_liste(konfig: dict, timeout: float = 20) -> list[dict]:
+    """Welche Modelle darf dieser Schluessel nutzen? -> [{id, bild}] (bild = Modell versteht vermutlich Fotos). Fuer die Auswahl in der App."""
+    anbieter, key = konfig["anbieter"], konfig["schluessel"]
+    if anbieter == "gemini":
+        r = _post("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", {"x-goog-api-key": key}, None, timeout)
+        ids = [m["name"].split("/", 1)[-1] for m in r.get("models", []) if "generateContent" in (m.get("supportedGenerationMethods") or [])]
+    elif anbieter == "anthropic":
+        r = _post("https://api.anthropic.com/v1/models?limit=100", {"x-api-key": key, "anthropic-version": "2023-06-01"}, None, timeout)
+        ids = [m.get("id", "") for m in r.get("data", [])]
+    else:
+        r = _post(ANBIETER[anbieter]["url"].rsplit("/chat/completions", 1)[0] + "/models", {"Authorization": f"Bearer {key}"}, None, timeout)
+        ids = [m.get("id", "") for m in r.get("data", [])]
+    modelle = [{"id": i, "bild": bool(BILD_MODELL.search(i))} for i in sorted(set(ids)) if i and not NICHT_CHAT.search(i) and MODELL_MUSTER.match(i)]
+    return sorted(modelle, key=lambda m: (not m["bild"], m["id"]))[:80]
 
 
 def ANBIETER_LISTE() -> list[dict]:
