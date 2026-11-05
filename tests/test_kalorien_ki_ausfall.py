@@ -89,3 +89,30 @@ class TestAntwortLesen(unittest.TestCase):
         with mock.patch.object(ki, "chat", return_value="kaputt") as chat, self.assertRaises(ki.KiFehler):
             ki.aus_text("Brot")
         self.assertEqual(chat.call_count, 2)
+
+
+class TestLimit(unittest.TestCase):
+    def setUp(self):
+        for p in (mock.patch.object(ki, "schluessel", return_value="k"), mock.patch.object(ki, "MODELL_ERSATZ", "ersatz-modell"),
+                  mock.patch.object(ki.time, "sleep")):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_limit_beim_hauptmodell_geht_gleich_zum_ersatzmodell(self):
+        with mock.patch.object(ki, "_post", side_effect=[fehler(429), OK]) as post:
+            ki.chat("s", "n")
+        self.assertEqual([c.args[0].split("/models/")[1].split(":")[0] for c in post.call_args_list], [ki.MODELL, "ersatz-modell"])
+
+    def test_beide_modelle_am_limit_gibt_freundliche_meldung(self):
+        with mock.patch.object(ki, "_post", side_effect=fehler(429)), self.assertRaises(ki.KiFehler) as ctx:
+            ki.chat("s", "n")
+        self.assertIn("ausgelastet", str(ctx.exception))
+        self.assertEqual(ctx.exception.code, 429)
+
+    def test_eigene_ki_behaelt_meldung_des_anbieters_und_probiert_kein_ersatzmodell(self):
+        konfig = {"anbieter": "gemini", "schluessel": "eigener", "modell": "mein-modell"}
+        with mock.patch.object(ki, "_post", side_effect=ki.KiFehler("Dein KI-Anbieter sagt: Limit erreicht.", 429)) as post, \
+                self.assertRaises(ki.KiFehler) as ctx:
+            ki.chat("s", "n", konfig=konfig)
+        self.assertIn("Limit erreicht", str(ctx.exception))
+        self.assertEqual(post.call_count, 1)

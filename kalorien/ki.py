@@ -84,7 +84,12 @@ def _post(url: str, kopf: dict, daten: dict, timeout: float) -> dict:
         with urllib.request.urlopen(anfrage, timeout=timeout) as r:
             return json.loads(r.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as e:
-        # Nie den Schluessel oder Rohtext des Anbieters weitergeben - nur eine klare Ursache
+        # Nie den Schluessel oder Rohtext des Anbieters an die App weitergeben - nur eine klare Ursache; Grund nur ins Server-Log
+        try:
+            grund = re.sub(r"\s+", " ", e.read().decode("utf-8", "replace"))[:240]
+        except OSError:
+            grund = ""
+        print(f"[Kalorien-KI] HTTP {e.code} von {url.split('?')[0].split('/models/')[-1]}: {grund}", flush=True)
         if e.code in (401, 403):
             raise KiFehler("Der Anbieter hat den API-Schlüssel abgelehnt. Stimmt er, und hat er Guthaben?")
         if e.code == 402:
@@ -92,12 +97,7 @@ def _post(url: str, kopf: dict, daten: dict, timeout: float) -> dict:
         if e.code == 404:
             raise KiFehler("Das Modell gibt es beim Anbieter nicht. Prüfe den Modellnamen.", 404)
         if e.code == 429:
-            raise KiFehler("Dein KI-Anbieter sagt: Limit erreicht. Bitte später nochmal.")
-        try:
-            grund = re.sub(r"\s+", " ", e.read().decode("utf-8", "replace"))[:240]
-        except OSError:
-            grund = ""
-        print(f"[Kalorien-KI] HTTP {e.code} von {url.split('?')[0].split('/models/')[-1]}: {grund}", flush=True)
+            raise KiFehler("Dein KI-Anbieter sagt: Limit erreicht. Bitte später nochmal.", 429)
         raise KiFehler(f"Der KI-Anbieter antwortet gerade nicht ({e.code}).", e.code)
     except (OSError, ValueError) as e:
         raise KiFehler(f"Die KI antwortet gerade nicht ({type(e).__name__}).")
@@ -129,11 +129,14 @@ def chat(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, konfig
                 break
             except KiFehler as e:
                 rest = versuche[n + 1:]
-                if e.code == 404:
-                    rest = [x for x in rest if x != m]   # Modell gibt es nicht: nicht nochmal dasselbe, gleich das Ersatzmodell
+                if e.code in (404, 429):
+                    rest = [x for x in rest if x != m]   # Modell fehlt oder Kontingent leer (gilt je Modell): gleich das Ersatzmodell
                 elif e.code not in WIEDERHOLBAR:
                     raise
                 if not rest:
+                    if e.code == 429 and eigener_schluessel_nein:
+                        raise KiFehler("Die KI-Schätzung ist heute ausgelastet (gemeinsames Limit der App). Trag das Essen von Hand ein "
+                                       "oder versuch es später nochmal.", 429)
                     if n > 0 and e.code in WIEDERHOLBAR:
                         raise KiFehler(f"Der KI-Anbieter antwortet gerade nicht ({e.code}, auch nach {n} Wiederholung(en)"
                                        f"{' und Ersatzmodell' if m != modell else ''}). Versuch es gleich nochmal.", e.code)
