@@ -791,6 +791,31 @@ class Handler(BaseHTTPRequestHandler):
         raise Fehler(404, "Unbekannte Adresse.")
 
 
+def code_stand() -> float:
+    return max((f.stat().st_mtime for f in Path(__file__).resolve().parent.glob("*.py")), default=0.0)
+
+
+def neustart_faellig(start: float, jetzt: float, zuletzt: float | None) -> tuple[bool, float | None]:
+    """Code auf der Platte neuer als beim Start UND beim zweiten Blick unveraendert (Update fertig kopiert) -> neu starten."""
+    if jetzt <= start:
+        return False, None
+    return zuletzt == jetzt, jetzt
+
+
+def code_waechter(start: float, pause: float = 60.0) -> None:
+    """Unter systemd: bei neuem Code beenden (Exit-Code 3), systemd startet mit dem neuen Code. Aus mit KALORIEN_AUTO_NEUSTART=0."""
+    zuletzt = None
+    while True:
+        time.sleep(pause)
+        try:
+            los, zuletzt = neustart_faellig(start, code_stand(), zuletzt)
+        except OSError:
+            continue
+        if los:
+            print("[Kalorien] neuer Code erkannt – starte neu (systemd bringt die App zurück)", flush=True)
+            os._exit(3)
+
+
 def starten(host: str = "127.0.0.1", port: int | None = None) -> ThreadingHTTPServer:
     server = ThreadingHTTPServer((host, PORT if port is None else port), Handler)
     server.daemon_threads = True
@@ -808,5 +833,7 @@ if __name__ == "__main__":
     except ImportError:
         pass
     s = starten(port=int(os.getenv("KALORIEN_PORT", "7730") or 7730))
+    if os.getenv("INVOCATION_ID") and os.getenv("KALORIEN_AUTO_NEUSTART", "1") != "0":   # INVOCATION_ID setzt systemd
+        threading.Thread(target=code_waechter, args=(code_stand(),), daemon=True, name="code-waechter").start()
     print(f"[Kalorien] läuft auf http://127.0.0.1:{s.server_address[1]}  (KI: {'an' if ki.verfuegbar() else 'aus – GEMINI_API_KEY oder GROQ_API_KEY fehlt'})", flush=True)
     s.serve_forever()
