@@ -209,3 +209,20 @@ class TestAnfrageKopf(unittest.TestCase):
         with mock.patch("urllib.request.urlopen", side_effect=err), self.assertRaises(ki.KiFehler) as ctx:
             ki._post("https://api.groq.com/x", {}, {}, 5)
         self.assertIn("Schlüssel", str(ctx.exception))
+
+
+class TestFotoMitTextModell(unittest.TestCase):
+    def test_eigene_ki_400_beim_foto_gibt_klare_modell_meldung(self):
+        konfig = {"anbieter": "groq", "schluessel": "g" * 20, "modell": "openai/gpt-oss-120b"}
+        with mock.patch.object(ki, "_post", side_effect=ki.KiFehler("Der KI-Anbieter antwortet gerade nicht (400).", 400)), \
+                self.assertRaises(ki.KiFehler) as ctx:
+            ki.aus_bild(b"\xff\xd8\xff" + b"0" * 2000, "image/jpeg", konfig=konfig)
+        self.assertIn("keine Fotos", str(ctx.exception))
+        self.assertIn("llama-4-scout", str(ctx.exception))
+
+    def test_text_mit_400_bleibt_unveraendert(self):
+        konfig = {"anbieter": "groq", "schluessel": "g" * 20, "modell": "openai/gpt-oss-120b"}
+        with mock.patch.object(ki, "_post", side_effect=ki.KiFehler("Der KI-Anbieter antwortet gerade nicht (400).", 400)), \
+                self.assertRaises(ki.KiFehler) as ctx:
+            ki.aus_text("Nudeln", konfig=konfig)
+        self.assertNotIn("keine Fotos", str(ctx.exception))
