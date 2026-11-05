@@ -77,3 +77,11 @@ oder einem eigenen Bot. Endpunkte: `GET /api/tag?datum=`, `POST /api/eintrag`, `
 - Passwörter werden mit scrypt gehasht, Schlüssel nur als SHA-256 gespeichert. Kein Tracking, keine Werbe-SDKs.
 - Kalorienwerte sind **Schätzungen**, keine medizinische Beratung (Hinweis steht in der App). Keine Crash-Diäten empfehlen.
 - Kein Mindestalter-Check außer Haken (16). Für Minderjährige und Essstörungs-Themen ist ein Moderationskonzept sinnvoll.
+
+## KI-Reihenfolge auf dem Server
+
+Foto-/Text-Schätzung fragen zuerst Gemini (`KALORIEN_MODELL`). Bei Überlastung (5xx) wird einmal wiederholt, danach das Ersatzmodell
+(`KALORIEN_MODELL_ERSATZ`) probiert; ist das Kontingent leer (429) oder das Modell weg (404), geht es gleich dort weiter. Hilft das nicht und
+steht `GROQ_API_KEY` in der `.env` (gratis: console.groq.com/keys), antwortet **Groq** (`KALORIEN_GROQ_MODELL`, Standard Llama 4 Scout mit Bildern).
+Fehlt der Gemini-Schlüssel ganz, läuft alles über Groq. Falsche Schlüssel (401/403) werden nie umgangen. Die eigene KI eines Nutzers nutzt
+nie die Server-Schlüssel.

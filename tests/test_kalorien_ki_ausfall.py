@@ -1,4 +1,5 @@
 """KI kurz ueberlastet (503): erst nochmal, dann Ersatzmodell - aber nur beim Server-Schluessel."""
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -6,6 +7,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from kalorien import ki  # noqa: E402
+
+os.environ.pop("GROQ_API_KEY", None)   # die Ausfall-Tests pruefen Gemini allein; Groq-Ersatz hat eigene Tests unten
 
 OK = {"candidates": [{"content": {"parts": [{"text": '{"gerichte":[]}'}]}}]}
 
@@ -116,3 +119,58 @@ class TestLimit(unittest.TestCase):
             ki.chat("s", "n", konfig=konfig)
         self.assertIn("Limit erreicht", str(ctx.exception))
         self.assertEqual(post.call_count, 1)
+
+
+class TestGroqErsatz(unittest.TestCase):
+    def setUp(self):
+        for p in (mock.patch.object(ki, "MODELL_ERSATZ", "ersatz-modell"), mock.patch.object(ki.time, "sleep"),
+                  mock.patch.dict(os.environ, {"GROQ_API_KEY": "g" * 20})):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_gemini_am_limit_dann_groq(self):
+        def post(url, kopf, daten, timeout):
+            if "groq.com" in url:
+                return {"choices": [{"message": {"content": '{"gerichte":[{"name":"Brot","kcal":100}]}'}}]}
+            raise fehler(429)
+        with mock.patch.object(ki, "schluessel", return_value="k"), mock.patch.object(ki, "_post", side_effect=post) as p:
+            self.assertEqual(ki.aus_text("Brot")["gerichte"][0]["name"], "Brot")
+        urls = [c.args[0] for c in p.call_args_list]
+        self.assertIn("groq.com", urls[-1])
+        self.assertEqual(p.call_args_list[-1].args[1]["Authorization"], "Bearer " + "g" * 20)
+        self.assertEqual(p.call_args_list[-1].args[2]["model"], ki.ANBIETER["groq"]["modell"])
+
+    def test_foto_geht_an_groq_mit_bild(self):
+        def post(url, kopf, daten, timeout):
+            if "groq.com" in url:
+                bild = daten["messages"][1]["content"][1]["image_url"]["url"]
+                self.assertTrue(bild.startswith("data:image/jpeg;base64,"))
+                return {"choices": [{"message": {"content": '{"gerichte":[{"name":"Apfel","kcal":95}]}'}}]}
+            raise fehler(503)
+        with mock.patch.object(ki, "schluessel", return_value="k"), mock.patch.object(ki, "_post", side_effect=post):
+            self.assertEqual(ki.aus_bild(b"\xff\xd8\xff" + b"0" * 2000, "image/jpeg")["gerichte"][0]["name"], "Apfel")
+
+    def test_ganz_ohne_gemini_schluessel_nur_groq(self):
+        with mock.patch.object(ki, "schluessel", return_value=""), mock.patch.object(ki, "_post", return_value={
+                "choices": [{"message": {"content": '{"gerichte":[{"name":"Reis","kcal":200}]}'}}]}) as p:
+            self.assertTrue(ki.verfuegbar())
+            self.assertEqual(ki.aus_text("Reis")["gerichte"][0]["name"], "Reis")
+        self.assertIn("groq.com", p.call_args.args[0])
+
+    def test_falscher_gemini_schluessel_geht_nicht_an_groq(self):
+        with mock.patch.object(ki, "schluessel", return_value="k"), mock.patch.object(ki, "_post", side_effect=fehler(403)) as p, \
+                self.assertRaises(ki.KiFehler):
+            ki.chat("s", "n")
+        self.assertEqual(p.call_count, 1)
+
+    def test_beides_am_limit_gibt_gemini_meldung(self):
+        with mock.patch.object(ki, "schluessel", return_value="k"), mock.patch.object(ki, "_post", side_effect=fehler(429)), \
+                self.assertRaises(ki.KiFehler) as ctx:
+            ki.chat("s", "n")
+        self.assertIn("ausgelastet", str(ctx.exception))
+
+    def test_eigene_ki_nutzt_nie_den_server_groq_schluessel(self):
+        konfig = {"anbieter": "gemini", "schluessel": "eigener", "modell": "m"}
+        with mock.patch.object(ki, "_post", side_effect=fehler(429)) as p, self.assertRaises(ki.KiFehler):
+            ki.chat("s", "n", konfig=konfig)
+        self.assertTrue(all("groq.com" not in c.args[0] for c in p.call_args_list))
