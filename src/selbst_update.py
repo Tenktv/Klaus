@@ -49,6 +49,12 @@ def einspielen(token: str | None) -> str:
     return _uebernehmen()
 
 
+def sofort_einspielen() -> str:
+    """Update auf Nikolas Wunsch im Telegram-Chat (nur er kann den Bot nutzen) - ohne Knopf + PIN, wie das automatische Update.
+    Geprueft wird trotzdem: nur schnelle Vorwaertsspruenge (ff-only), Test vor dem Uebernehmen, sonst zurueck auf den alten Stand."""
+    return _uebernehmen()
+
+
 def _uebernehmen() -> str:
     alt = _git("rev-parse", "--short", "HEAD")
     if _git("status", "--porcelain", "--untracked-files=no", "--", ".", ":(exclude)data"):   # Laufzeitdaten zaehlen nicht

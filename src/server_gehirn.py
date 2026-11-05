@@ -143,8 +143,8 @@ def bauen(innen: bool = True):
 
     if not PROFIL:   # Tester-Profile aktualisiert der Verteiler mit Nikolas Stand
         tg.deklarationen.append({"name": "update_einspielen", "description": "Klaus' eigenen Code auf dem Server aktualisieren (neuer "
-                                 "Stand aus GitHub). Zeigt die neuen Aenderungen, braucht Nikolas Freigabe (Knopf + PIN), testet vor "
-                                 "dem Uebernehmen und bleibt bei einem Fehler auf der alten Version. Nur wenn Nikola ein Update will.",
+                                 "Stand aus GitHub). Spielt es ohne PIN ein (Nikola hat das so entschieden), testet vor dem "
+                                 "Uebernehmen und bleibt bei einem Fehler auf der alten Version. Nur wenn Nikola ein Update will.",
                                  "parameters": {"type": "OBJECT", "properties": {}}})
 
     def update_werkzeug() -> str:
@@ -155,8 +155,8 @@ def bauen(innen: bool = True):
         if not neu:
             return "Klaus ist auf dem neuesten Stand, es gibt kein Update."
         liste = "; ".join(z.split(" ", 1)[-1] for z in neu[:5])
-        return a._mit_freigabe("update", f"Update einspielen ({len(neu)} Änderung{'en' if len(neu) != 1 else ''}: {liste[:180]})",
-                               selbst_update.einspielen, an="Klaus-Server")
+        # Wunsch Nikola: Updates ohne Knopf + PIN (wie die automatischen). PIN bleibt fuer Geld, Loeschen, Hochladen usw.
+        return f"{len(neu)} Änderung{'en' if len(neu) != 1 else ''}: {liste[:180]}\n" + selbst_update.sofort_einspielen()
 
     import briefing
     import server_sicherheit as sicherheit
