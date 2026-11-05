@@ -159,7 +159,8 @@ def registrierung(text: str) -> str:
 def _app_prozesse() -> list[int]:
     """PIDs der laufenden Kalorien-App (python -m kalorien.server) des gleichen Benutzers."""
     try:
-        r = subprocess.run(["pgrep", "-u", str(os.getuid()), "-f", r"-m kalorien\.server"], capture_output=True, text=True, timeout=10)
+        # "--": das Muster beginnt mit "-" und wuerde sonst von pgrep als Option gelesen (dann findet es nie etwas)
+        r = subprocess.run(["pgrep", "-u", str(os.getuid()), "-f", "--", r"-m kalorien\.server"], capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.SubprocessError):
         return []
     return [int(x) for x in r.stdout.split() if x.isdigit() and int(x) != os.getpid()]

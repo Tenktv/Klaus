@@ -68,8 +68,25 @@ class TestNeustart(unittest.TestCase):
     def test_eigener_prozess_wird_nie_gelistet_und_pgrep_fehler_ist_leer(self):
         with mock.patch.object(K.subprocess, "run", side_effect=OSError):
             self.assertEqual(K._app_prozesse(), [])
-        with mock.patch.object(K.subprocess, "run", return_value=mock.Mock(stdout=f"{os.getpid()}\n555\n")):
+        with mock.patch.object(K.subprocess, "run", return_value=mock.Mock(stdout=f"{os.getpid()}\n555\n")) as run:
             self.assertEqual(K._app_prozesse(), [555])
+        args = run.call_args.args[0]
+        self.assertEqual(args[args.index("--") + 1], r"-m kalorien\.server")   # Muster mit fuehrendem "-" nur nach "--"
+
+    def test_pgrep_findet_echten_prozess_mit_dem_muster(self):
+        """Echter pgrep-Lauf (wenn vorhanden): ein Prozess mit '-m kalorien.server' in der Kommandozeile wird gefunden."""
+        import shutil
+        import subprocess
+        import time
+        if not shutil.which("pgrep"):
+            self.skipTest("pgrep fehlt")
+        kind = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)", "-m", "kalorien.server"])
+        try:
+            time.sleep(0.5)
+            self.assertIn(kind.pid, K._app_prozesse())
+        finally:
+            kind.kill()
+            kind.wait()
 
 
 if __name__ == "__main__":
