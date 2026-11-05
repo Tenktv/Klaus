@@ -85,3 +85,11 @@ Foto-/Text-Schätzung fragen zuerst Gemini (`KALORIEN_MODELL`). Bei Überlastung
 steht `GROQ_API_KEY` in der `.env` (gratis: console.groq.com/keys), antwortet **Groq** (`KALORIEN_GROQ_MODELL`, Standard Llama 4 Scout mit Bildern).
 Fehlt der Gemini-Schlüssel ganz, läuft alles über Groq. Falsche Schlüssel (401/403) werden nie umgangen. Die eigene KI eines Nutzers nutzt
 nie die Server-Schlüssel.
+
+### Reihenfolge mit eigener KI (Pro)
+
+Gemini des Servers antwortet **immer zuerst** (zählt zum Tageslimit des Nutzers), auch wenn er eine eigene KI hinterlegt hat. Ist Gemini
+ausgelastet (429), nicht erreichbar (5xx) oder das Modell weg (404) – oder das Tageslimit des Nutzers erreicht –, schätzt danach seine
+**eigene KI** (z. B. Groq), dann der `GROQ_API_KEY` des Servers. Die App zeigt dazu einen Hinweis („Gemini ist gerade ausgelastet.
+Geschätzt mit deiner eigenen KI (Groq).“). Falsche Gemini-Schlüssel (401/403) werden nicht umgangen. Die eigene KI nutzt nie
+Server-Schlüssel.

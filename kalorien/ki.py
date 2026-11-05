@@ -133,14 +133,51 @@ def _post(url: str, kopf: dict, daten: dict, timeout: float) -> dict:
         raise KiFehler(f"Die KI antwortet gerade nicht ({type(e).__name__}).")
 
 
+def _merken(hinweise, text: str) -> None:
+    if hinweise is not None and text not in hinweise:
+        hinweise.append(text)
+
+
+def _weiter(system, nutzer, bild, danach, json_modus, timeout, max_token, hinweise, grund):
+    """Die Server-KI (Gemini) faellt aus: erst die eigene KI des Nutzers, dann Groq des Servers. -> (Text oder None, Fehler der eigenen KI oder None)."""
+    eigener_fehler = None
+    if danach:
+        try:
+            text = chat(system, nutzer, bild, danach, json_modus, timeout, max_token)
+            _merken(hinweise, (f"{grund} " if grund else "") + f"Geschätzt mit deiner eigenen KI ({ANBIETER[danach['anbieter']]['name']}).")
+            return text, None
+        except KiFehler as e:
+            eigener_fehler = e
+            print(f"[Kalorien-KI] eigene KI ({danach['anbieter']}) auch nicht: {e}", flush=True)
+    if groq_schluessel() and not (danach and danach["anbieter"] == "groq" and danach["schluessel"] == groq_schluessel()):
+        try:
+            text = chat(system, nutzer, bild, groq_konfig(bool(bild)), json_modus, timeout, max_token)
+            _merken(hinweise, (f"{grund} " if grund else "") + "Geschätzt mit Groq.")
+            return text, None
+        except KiFehler as g:
+            print(f"[Kalorien-KI] Groq des Servers auch nicht: {g}", flush=True)
+    return None, eigener_fehler
+
+
 def chat(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, konfig: dict | None = None,
          json_modus: bool = True, timeout: float = 60, max_token: int = 1800) -> str:
-    """Eine Anfrage an die KI -> Text. bild = (Bytes, MIME). konfig = eigene KI des Nutzers, sonst der Server-Schluessel."""
+    """Eine Anfrage an die KI -> Text. bild = (Bytes, MIME).
+    konfig: None = Server-KI (Gemini, dann Groq des Servers) | eigene KI des Nutzers (nur diese) |
+            {"anbieter": "server", "danach": eigene KI, "hinweise": [...], "ueberspringen": bool} = ZUERST Gemini des Servers; ist es
+            ausgelastet/ausgefallen (oder ueberspringen), antwortet danach die eigene KI, dann Groq des Servers. Genutzte Ausweichwege
+            stehen als Text in konfig["hinweise"] (die App zeigt sie dem Nutzer)."""
+    hinweise, danach, ueberspringen = None, None, False
+    if isinstance(konfig, dict) and konfig.get("anbieter") == "server":
+        hinweise, danach, ueberspringen = konfig.setdefault("hinweise", []), konfig.get("danach"), bool(konfig.get("ueberspringen"))
+        konfig = None
     eigener_schluessel_nein = konfig is None   # Ersatzmodell nur bei unserem Server-Schluessel
     if konfig is None:
-        if not schluessel():
-            if groq_schluessel():
-                return chat(system, nutzer, bild, groq_konfig(bool(bild)), json_modus, timeout, max_token)
+        if ueberspringen or not schluessel():
+            text, fehler = _weiter(system, nutzer, bild, danach, json_modus, timeout, max_token, hinweise, "")
+            if text is not None:
+                return text
+            if fehler:
+                raise fehler
             raise KiFehler("Die KI ist auf diesem Server nicht eingerichtet (GEMINI_API_KEY fehlt).")
         konfig = {"anbieter": "gemini", "schluessel": schluessel(), "modell": MODELL}
     anbieter, key = konfig["anbieter"], konfig["schluessel"]
@@ -166,12 +203,15 @@ def chat(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, konfig
                     rest = [x for x in rest if x != m]   # Modell fehlt oder Kontingent leer (gilt je Modell): gleich das Ersatzmodell
                 elif e.code not in WIEDERHOLBAR:
                     raise
-                if not rest and eigener_schluessel_nein and groq_schluessel() and e.code in (404, 429) + WIEDERHOLBAR:
-                    print(f"[Kalorien-KI] Gemini nicht verfuegbar ({e.code}) - nehme Groq", flush=True)
-                    try:
-                        return chat(system, nutzer, bild, groq_konfig(bool(bild)), json_modus, timeout, max_token)
-                    except KiFehler as g:
-                        print(f"[Kalorien-KI] Groq auch nicht: {g}", flush=True)   # dann gilt die Meldung zu Gemini unten
+                eigener_fehler = None
+                if not rest and eigener_schluessel_nein and (danach or groq_schluessel()) and e.code in (404, 429) + WIEDERHOLBAR:
+                    print(f"[Kalorien-KI] Gemini nicht verfuegbar ({e.code}) - weiter mit eigener KI/Groq", flush=True)
+                    grund = "Gemini ist gerade ausgelastet." if e.code == 429 else "Gemini antwortet gerade nicht."
+                    text, eigener_fehler = _weiter(system, nutzer, bild, danach, json_modus, timeout, max_token, hinweise, grund)
+                    if text is not None:
+                        return text   # sonst gilt die Meldung zu Gemini unten (plus Hinweis zur eigenen KI)
+                    if eigener_fehler is not None and not rest:
+                        raise KiFehler(f"{grund} Deine eigene KI hat auch nicht geklappt: {eigener_fehler}", e.code)
                 if not rest:
                     if e.code == 429 and eigener_schluessel_nein:
                         raise KiFehler("Die KI-Schätzung ist heute ausgelastet (gemeinsames Limit der App). Trag das Essen von Hand ein "
@@ -275,7 +315,10 @@ def _aufrufen(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, k
     """KI fragen und die Mahlzeiten-Antwort lesen (eigene Stelle, damit Tests die KI ersetzen koennen)."""
     for versuch in (0, 1):   # unleserliche Antwort: einmal neu fragen (Platz fuers "Denken" der Modelle ist grosszuegig)
         try:
-            return lesen(chat(system, nutzer, bild, konfig, max_token=4096))
+            ergebnis = lesen(chat(system, nutzer, bild, konfig, max_token=4096))
+            if isinstance(konfig, dict) and konfig.get("hinweise"):   # Ausweichweg benutzt: dem Nutzer sagen, womit geschaetzt wurde
+                ergebnis["hinweis"] = (" ".join(konfig["hinweise"]) + " " + ergebnis.get("hinweis", "")).strip()[:300]
+            return ergebnis
         except KiFehler as e:
             if versuch or "nicht lesbar" not in str(e):
                 raise
@@ -288,7 +331,7 @@ def aus_bild(bild: bytes, mime: str, hinweis: str = "", konfig: dict | None = No
     try:
         return _aufrufen(BILD + FORMAT, "Foto der Mahlzeit." + zusatz, (bild, mime), konfig)
     except KiFehler as e:
-        if konfig is not None and e.code == 400:   # eigene KI: 400 beim Foto = fast immer ein Modell ohne Bildverstehen (z.B. gpt-oss, Llama 3.3)
+        if konfig is not None and konfig.get("anbieter") != "server" and e.code == 400:   # eigene KI: 400 beim Foto = fast immer ein Modell ohne Bildverstehen (z.B. gpt-oss, Llama 3.3)
             raise KiFehler("Dein gewähltes Modell versteht keine Fotos. Nimm ein Bildmodell (bei Groq: qwen/qwen3.8-27b – leer lassen wählt es, "
                            "bei Gemini/OpenAI/Claude das Standardmodell) oder entferne die eigene KI – dann nutzt die App die Server-KI.", 400)
         raise
