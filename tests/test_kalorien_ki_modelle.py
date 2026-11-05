@@ -86,3 +86,12 @@ class TestModelleApi(Basis):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestStatusStand(Basis):
+    def test_status_liefert_stand_der_app_dateien_ohne_anmeldung(self):
+        import urllib.request, json
+        with urllib.request.urlopen(self.url + "/api/status") as r:
+            d = json.loads(r.read())
+        self.assertTrue(d["ok"])
+        self.assertGreater(d["stand"], 1_600_000_000)   # Zeitstempel einer echten Datei

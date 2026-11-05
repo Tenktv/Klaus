@@ -575,7 +575,7 @@ class Handler(BaseHTTPRequestHandler):
             n = (registrieren if t0 == "registrieren" else anmelden)(c, str(d.get("name") or ""), str(d.get("passwort") or ""))
             return {"token": zugang_anlegen(c, n["id"], "sitzung"), "name": n["name"]}
         if m == "GET" and t0 == "status":
-            return {"ok": True, "ki": ki.verfuegbar()}
+            return {"ok": True, "ki": ki.verfuegbar(), "stand": web_stand()}
         z = nutzer_aus(c, self.headers.get("Authorization", ""))
         _bremse(f"api:{z['id']}", 240)
         if t0 == "ich":
@@ -792,6 +792,15 @@ class Handler(BaseHTTPRequestHandler):
                       (str(d.get("name")), *(_admins() or {""})))
             return {"text": "Gesperrt."}
         raise Fehler(404, "Unbekannte Adresse.")
+
+
+def web_stand() -> int:
+    """Aenderungszeit der neuesten App-Datei (Oberflaeche + Python). Die App vergleicht sie, um 'Neue Version' anzuzeigen."""
+    basis = Path(__file__).resolve().parent
+    try:
+        return int(max(f.stat().st_mtime for pat in ("*.py", "web/*.js", "web/*.css", "web/*.html") for f in basis.glob(pat)))
+    except (OSError, ValueError):
+        return 0
 
 
 def code_stand() -> float:
