@@ -39,7 +39,7 @@ export async function reelsSeite(ctx) {
       } else { letzterTipp = jetzt; setTimeout(() => { if (letzterTipp === jetzt) { S.ton = !S.ton; tonAnzeige(); feed.querySelectorAll("video").forEach(x => { x.muted = !S.ton; }); toast(S.ton ? "Ton an" : "Ton aus", false, 900); } }, 330); }
     }});
     const kommBtn = h("button", {"aria-label": "Kommentare", onclick: () => kommentare(r, k => { r.kommentare = k; kommBtn.lastChild.textContent = de(k); })}, icon("kommentar"), h("span", {}, de(r.kommentare)));
-    const folgen = !r.eigen ? h("button", {class: "folgen" + (r.folgt ? " an" : ""), onclick: e => los(async () => { const d = await api(r.folgt ? "DELETE" : "POST", "folgen", {name: r.name}); r.folgt = d.folgt; e.currentTarget.classList.toggle("an", r.folgt); e.currentTarget.textContent = r.folgt ? "Folge ich" : "Folgen"; })}, r.folgt ? "Folge ich" : "Folgen") : null;
+    const folgen = !r.eigen ? h("button", {class: "folgen" + (r.folgt ? " an" : ""), onclick: e => { const knopf = e.currentTarget; los(async () => { const d = await api(r.folgt ? "DELETE" : "POST", "folgen", {name: r.name}); r.folgt = d.folgt; knopf.classList.toggle("an", r.folgt); knopf.textContent = r.folgt ? "Folge ich" : "Folgen"; }); }}, r.folgt ? "Folge ich" : "Folgen") : null;
     return h("div", {class: "reel"}, v, flaeche,
       h("div", {class: "unten"}, h("div", {class: "autor"}, h("button", {onclick: () => { location.hash = "#/profil/" + encodeURIComponent(r.name); }, "aria-label": "Profil von " + r.name}, avatar(r.name, "mittel")),
         h("b", {}, r.name), folgen), r.text ? h("div", {class: "text"}, r.text) : null),
