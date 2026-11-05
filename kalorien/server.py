@@ -808,5 +808,5 @@ if __name__ == "__main__":
     except ImportError:
         pass
     s = starten(port=int(os.getenv("KALORIEN_PORT", "7730") or 7730))
-    print(f"[Kalorien] läuft auf http://127.0.0.1:{s.server_address[1]}  (KI: {'an' if ki.verfuegbar() else 'aus – GEMINI_API_KEY fehlt'})", flush=True)
+    print(f"[Kalorien] läuft auf http://127.0.0.1:{s.server_address[1]}  (KI: {'an' if ki.verfuegbar() else 'aus – GEMINI_API_KEY oder GROQ_API_KEY fehlt'})", flush=True)
     s.serve_forever()

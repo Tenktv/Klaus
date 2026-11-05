@@ -57,8 +57,17 @@ def schluessel() -> str:
     return (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
 
 
+def groq_schluessel() -> str:
+    """Zweite KI fuer den Server (Groq, kostenlos): springt ein, wenn Gemini am Limit oder ausgefallen ist - oder fehlt."""
+    return os.getenv("GROQ_API_KEY", "").strip()
+
+
+def groq_konfig() -> dict:
+    return {"anbieter": "groq", "schluessel": groq_schluessel(), "modell": os.getenv("KALORIEN_GROQ_MODELL", "").strip() or ANBIETER["groq"]["modell"]}
+
+
 def verfuegbar() -> bool:
-    return bool(schluessel())
+    return bool(schluessel() or groq_schluessel())
 
 
 def konfig_pruefen(anbieter: str, key: str, modell: str = "") -> dict:
@@ -109,6 +118,8 @@ def chat(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, konfig
     eigener_schluessel_nein = konfig is None   # Ersatzmodell nur bei unserem Server-Schluessel
     if konfig is None:
         if not schluessel():
+            if groq_schluessel():
+                return chat(system, nutzer, bild, groq_konfig(), json_modus, timeout, max_token)
             raise KiFehler("Die KI ist auf diesem Server nicht eingerichtet (GEMINI_API_KEY fehlt).")
         konfig = {"anbieter": "gemini", "schluessel": schluessel(), "modell": MODELL}
     anbieter, key, modell = konfig["anbieter"], konfig["schluessel"], konfig.get("modell") or ANBIETER[konfig["anbieter"]]["modell"]
@@ -133,6 +144,12 @@ def chat(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, konfig
                     rest = [x for x in rest if x != m]   # Modell fehlt oder Kontingent leer (gilt je Modell): gleich das Ersatzmodell
                 elif e.code not in WIEDERHOLBAR:
                     raise
+                if not rest and eigener_schluessel_nein and groq_schluessel() and e.code in (404, 429) + WIEDERHOLBAR:
+                    print(f"[Kalorien-KI] Gemini nicht verfuegbar ({e.code}) - nehme Groq", flush=True)
+                    try:
+                        return chat(system, nutzer, bild, groq_konfig(), json_modus, timeout, max_token)
+                    except KiFehler as g:
+                        print(f"[Kalorien-KI] Groq auch nicht: {g}", flush=True)   # dann gilt die Meldung zu Gemini unten
                 if not rest:
                     if e.code == 429 and eigener_schluessel_nein:
                         raise KiFehler("Die KI-Schätzung ist heute ausgelastet (gemeinsames Limit der App). Trag das Essen von Hand ein "
