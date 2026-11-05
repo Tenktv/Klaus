@@ -174,3 +174,38 @@ class TestGroqErsatz(unittest.TestCase):
         with mock.patch.object(ki, "_post", side_effect=fehler(429)) as p, self.assertRaises(ki.KiFehler):
             ki.chat("s", "n", konfig=konfig)
         self.assertTrue(all("groq.com" not in c.args[0] for c in p.call_args_list))
+
+
+class TestAnfrageKopf(unittest.TestCase):
+    def test_eigene_kennung_statt_python_urllib(self):
+        gesehen = {}
+
+        class Antwort:
+            def __enter__(s): return s
+            def __exit__(s, *a): return False
+            def read(s): return b"{}"
+
+        def fake(anfrage, timeout=0):
+            gesehen["ua"] = anfrage.get_header("User-agent")
+            return Antwort()
+        with mock.patch("urllib.request.urlopen", side_effect=fake):
+            ki._post("https://api.groq.com/openai/v1/chat/completions", {"Authorization": "Bearer x"}, {}, 5)
+        self.assertEqual(gesehen["ua"], "KlesroFit/1.0")
+
+    def test_schutzdienst_sperre_wird_nicht_als_schluesselfehler_gemeldet(self):
+        import io
+        import urllib.error
+        err = urllib.error.HTTPError("u", 403, "Forbidden", {}, io.BytesIO(b"error code: 1010"))
+        with mock.patch("urllib.request.urlopen", side_effect=err), self.assertRaises(ki.KiFehler) as ctx:
+            ki._post("https://api.groq.com/x", {}, {}, 5)
+        self.assertIn("Schutzdienst", str(ctx.exception))
+        self.assertNotIn("Schlüssel abgelehnt", str(ctx.exception))
+
+    def test_echter_schluesselfehler_bleibt_schluesselfehler(self):
+        import io
+        import urllib.error
+        body = b'{"error":{"message":"Invalid API Key","type":"invalid_request_error","code":"invalid_api_key"}}'
+        err = urllib.error.HTTPError("u", 401, "Unauthorized", {}, io.BytesIO(body))
+        with mock.patch("urllib.request.urlopen", side_effect=err), self.assertRaises(ki.KiFehler) as ctx:
+            ki._post("https://api.groq.com/x", {}, {}, 5)
+        self.assertIn("Schlüssel", str(ctx.exception))

@@ -88,7 +88,9 @@ def maskiert(key: str) -> str:
 
 
 def _post(url: str, kopf: dict, daten: dict, timeout: float) -> dict:
-    anfrage = urllib.request.Request(url, data=json.dumps(daten).encode(), headers={"Content-Type": "application/json", **kopf})
+    # Eigene Kennung: Anbieter hinter Cloudflare (z.B. Groq) blocken die Standard-Kennung "Python-urllib" mit 403 - sieht aus wie ein falscher Schluessel
+    anfrage = urllib.request.Request(url, data=json.dumps(daten).encode(),
+                                     headers={"Content-Type": "application/json", "User-Agent": "KlesroFit/1.0", **kopf})
     try:
         with urllib.request.urlopen(anfrage, timeout=timeout) as r:
             return json.loads(r.read().decode("utf-8", "replace"))
@@ -99,6 +101,8 @@ def _post(url: str, kopf: dict, daten: dict, timeout: float) -> dict:
         except OSError:
             grund = ""
         print(f"[Kalorien-KI] HTTP {e.code} von {url.split('?')[0].split('/models/')[-1]}: {grund}", flush=True)
+        if e.code == 403 and re.search(r"1010|1020|cloudflare|access denied|blocked", grund, re.I) and "api_key" not in grund.lower():
+            raise KiFehler("Der KI-Anbieter blockiert Anfragen von diesem Server (Schutzdienst) – das liegt nicht an deinem Schlüssel.", 403)
         if e.code in (401, 403):
             raise KiFehler("Der Anbieter hat den API-Schlüssel abgelehnt. Stimmt er, und hat er Guthaben?")
         if e.code == 402:
