@@ -267,7 +267,13 @@ def aus_bild(bild: bytes, mime: str, hinweis: str = "", konfig: dict | None = No
     if mime not in ("image/jpeg", "image/png", "image/webp"):
         raise KiFehler("Bitte ein JPEG-, PNG- oder WebP-Foto senden.")
     zusatz = f' Hinweis des Nutzers: "{hinweis[:300]}".' if hinweis.strip() else ""
-    return _aufrufen(BILD + FORMAT, "Foto der Mahlzeit." + zusatz, (bild, mime), konfig)
+    try:
+        return _aufrufen(BILD + FORMAT, "Foto der Mahlzeit." + zusatz, (bild, mime), konfig)
+    except KiFehler as e:
+        if konfig is not None and e.code == 400:   # eigene KI: 400 beim Foto = fast immer ein Modell ohne Bildverstehen (z.B. gpt-oss, Llama 3.3)
+            raise KiFehler("Dein gewähltes Modell versteht keine Fotos. Nimm ein Bildmodell (bei Groq: meta-llama/llama-4-scout-17b-16e-instruct, "
+                           "bei Gemini/OpenAI/Claude das Standardmodell) oder entferne die eigene KI – dann nutzt die App die Server-KI.", 400)
+        raise
 
 
 def aus_text(beschreibung: str, konfig: dict | None = None) -> dict:
