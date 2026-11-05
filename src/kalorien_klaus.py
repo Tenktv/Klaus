@@ -14,6 +14,9 @@ from __future__ import annotations
 import base64
 import os
 import re
+import signal
+import subprocess
+from pathlib import Path
 
 import requests
 
@@ -131,6 +134,7 @@ def befehle_einrichten(tg) -> None:
     tg.befehle["/essen"] = lambda t: essen(t) if bereit() else kalorien()
     tg.befehle["/essen_weg"] = essen_weg
     tg.befehle["/fit_registrierung"] = registrierung
+    tg.befehle["/fit_neustart"] = lambda _t: neu_starten(False)
 
 
 def registrierung(text: str) -> str:
@@ -149,3 +153,47 @@ def registrierung(text: str) -> str:
         return "Schreib: /fit_registrierung an  oder  /fit_registrierung aus"
     return (f"Registrierung der Kalorien-App ist jetzt {'🟢 OFFEN' if schalter.offen() else '🔴 GESCHLOSSEN'} "
             f"(gilt über: {schalter.quelle()}). Umschalten: /fit_registrierung an|aus")
+
+
+# ------------------------------------------------------------------ Kalorien-App nach einem Update neu starten
+def _app_prozesse() -> list[int]:
+    """PIDs der laufenden Kalorien-App (python -m kalorien.server) des gleichen Benutzers."""
+    try:
+        r = subprocess.run(["pgrep", "-u", str(os.getuid()), "-f", r"-m kalorien\.server"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return [int(x) for x in r.stdout.split() if x.isdigit() and int(x) != os.getpid()]
+
+
+def _unter_systemd(pid: int) -> bool:
+    """Nur Prozesse killen, die systemd (PID 1) selbst gestartet hat - nur die kommen von allein wieder (Restart=always)."""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+        return int(stat.rsplit(")", 1)[1].split()[1]) == 1
+    except (OSError, ValueError, IndexError):
+        return False
+
+
+def _code_stand() -> float:
+    return max((f.stat().st_mtime for f in (Path(__file__).resolve().parent.parent / "kalorien").glob("*.py")), default=0.0)
+
+
+def neu_starten(nur_wenn_veraltet: bool = True) -> str:
+    """Kalorien-App beenden; systemd startet sie mit dem neuen Code. Der Update-Weg ueber Klaus erneuert sonst nur Klaus selbst.
+    nur_wenn_veraltet: nur wenn die App aelter ist als ihr Code (Normalfall nach Klaus-Start); sonst (Befehl /fit_neustart) immer."""
+    pids = _app_prozesse()
+    if not pids:
+        return "Die Kalorien-App läuft nicht (oder nicht unter diesem Benutzer) – nichts neu gestartet."
+    stand, gestartet = _code_stand(), []
+    for pid in pids:
+        try:
+            if nur_wenn_veraltet and os.stat(f"/proc/{pid}").st_ctime >= stand - 1:
+                continue   # laeuft schon mit dem neuesten Code
+            if not _unter_systemd(pid):
+                return "Die Kalorien-App läuft nicht als Dienst (systemd) – ich starte sie nicht neu, sonst käme sie nicht zurück."
+            os.kill(pid, signal.SIGTERM)
+            gestartet.append(pid)
+        except OSError as e:
+            return f"Neustart nicht möglich: {e}"
+    return (f"Kalorien-App wird neu gestartet (Prozess {', '.join(map(str, gestartet))}) – in ein paar Sekunden mit dem neuen Code wieder da."
+            if gestartet else "Die Kalorien-App läuft schon mit dem neuesten Code.")
