@@ -218,7 +218,7 @@ class TestFotoMitTextModell(unittest.TestCase):
                 self.assertRaises(ki.KiFehler) as ctx:
             ki.aus_bild(b"\xff\xd8\xff" + b"0" * 2000, "image/jpeg", konfig=konfig)
         self.assertIn("keine Fotos", str(ctx.exception))
-        self.assertIn("llama-4-scout", str(ctx.exception))
+        self.assertIn("qwen3.8-27b", str(ctx.exception))
 
     def test_text_mit_400_bleibt_unveraendert(self):
         konfig = {"anbieter": "groq", "schluessel": "g" * 20, "modell": "openai/gpt-oss-120b"}
@@ -226,3 +226,39 @@ class TestFotoMitTextModell(unittest.TestCase):
                 self.assertRaises(ki.KiFehler) as ctx:
             ki.aus_text("Nudeln", konfig=konfig)
         self.assertNotIn("keine Fotos", str(ctx.exception))
+
+
+class TestGroqModelle(unittest.TestCase):
+    def test_standard_je_nach_text_oder_foto(self):
+        self.assertEqual(ki.modell_waehlen("groq", "", False), "openai/gpt-oss-120b")
+        self.assertEqual(ki.modell_waehlen("groq", "", True), "qwen/qwen3.8-27b")
+        self.assertEqual(ki.modell_waehlen("groq", "mein/modell", True), "mein/modell")          # eigene Wahl bleibt
+        self.assertEqual(ki.modell_waehlen("gemini", "", True), ki.ANBIETER["gemini"]["modell"])  # ohne eigenen Bild-Standard: normaler Standard
+
+    def test_abgeschaltetes_modell_wird_automatisch_ersetzt(self):
+        self.assertEqual(ki.modell_waehlen("groq", "meta-llama/llama-4-scout-17b-16e-instruct", True), "qwen/qwen3.8-27b")
+        self.assertEqual(ki.modell_waehlen("groq", "meta-llama/llama-4-scout-17b-16e-instruct", False), "openai/gpt-oss-120b")
+
+    def test_gespeichertes_scout_geht_beim_foto_an_das_neue_bildmodell(self):
+        konfig = {"anbieter": "groq", "schluessel": "g" * 20, "modell": "meta-llama/llama-4-scout-17b-16e-instruct"}
+        with mock.patch.object(ki, "_post", return_value={"choices": [{"message": {"content": '{"gerichte":[{"name":"Apfel","kcal":95}]}'}}]}) as post:
+            ki.aus_bild(b"\xff\xd8\xff" + b"0" * 2000, "image/jpeg", konfig=konfig)
+        self.assertEqual(post.call_args.args[2]["model"], "qwen/qwen3.8-27b")
+
+    def test_speichern_ohne_modell_laesst_das_feld_leer(self):
+        self.assertEqual(ki.konfig_pruefen("groq", "g" * 20, "")["modell"], "")
+
+    def test_server_groq_nimmt_bild_standard_bei_foto_und_env_ueberschreibt(self):
+        with mock.patch.dict(os.environ, {"GROQ_API_KEY": "g" * 20, "KALORIEN_GROQ_BILD_MODELL": "x/bild", "KALORIEN_GROQ_MODELL": "x/text"}):
+            self.assertEqual(ki.groq_konfig(True)["modell"], "x/bild")
+            self.assertEqual(ki.groq_konfig(False)["modell"], "x/text")
+
+    def test_abgeschaltetes_modell_bekommt_klare_meldung(self):
+        import io
+        import urllib.error
+        body = b'{"error":{"message":"The model `x` has been decommissioned and is no longer supported.","code":"model_decommissioned"}}'
+        err = urllib.error.HTTPError("u", 400, "Bad Request", {}, io.BytesIO(body))
+        with mock.patch("urllib.request.urlopen", side_effect=err), self.assertRaises(ki.KiFehler) as ctx:
+            ki._post("https://api.groq.com/x", {}, {}, 5)
+        self.assertIn("nicht mehr", str(ctx.exception))
+        self.assertEqual(ctx.exception.code, 404)

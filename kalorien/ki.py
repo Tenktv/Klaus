@@ -26,11 +26,14 @@ ANBIETER = {
                "hilfe": "platform.openai.com/api-keys"},
     "anthropic": {"name": "Anthropic (Claude)", "modell": "claude-haiku-4-5", "bild": True, "url": "https://api.anthropic.com/v1/messages",
                   "hilfe": "console.anthropic.com/settings/keys"},
-    "groq": {"name": "Groq", "modell": "meta-llama/llama-4-scout-17b-16e-instruct", "bild": True,
+    # Groq: Text mit gpt-oss; Fotos mit einem Bildmodell (llama-4-scout wurde von Groq abgeschaltet, Stand Nov 2026: qwen/qwen3.8-27b in der Vorschau)
+    "groq": {"name": "Groq", "modell": "openai/gpt-oss-120b", "bild_modell": "qwen/qwen3.8-27b", "bild": True,
              "url": "https://api.groq.com/openai/v1/chat/completions", "hilfe": "console.groq.com/keys"},
     "openrouter": {"name": "OpenRouter", "modell": "google/gemini-3.5-flash", "bild": True,
                    "url": "https://openrouter.ai/api/v1/chat/completions", "hilfe": "openrouter.ai/keys"},
 }
+# Vom Anbieter abgeschaltete Modelle: gespeicherte Eintraege damit werden automatisch durch den Standard ersetzt
+ABGESCHALTET = {"groq": {"meta-llama/llama-4-scout-17b-16e-instruct", "meta-llama/llama-4-maverick-17b-128e-instruct"}}
 MODELL_MUSTER = re.compile(r"^[\w./:@-]{2,80}$")
 SCHLUESSEL_MUSTER = re.compile(r"^[\w.\-]{16,300}$")
 
@@ -62,8 +65,9 @@ def groq_schluessel() -> str:
     return os.getenv("GROQ_API_KEY", "").strip()
 
 
-def groq_konfig() -> dict:
-    return {"anbieter": "groq", "schluessel": groq_schluessel(), "modell": os.getenv("KALORIEN_GROQ_MODELL", "").strip() or ANBIETER["groq"]["modell"]}
+def groq_konfig(mit_bild: bool = False) -> dict:
+    env = "KALORIEN_GROQ_BILD_MODELL" if mit_bild else "KALORIEN_GROQ_MODELL"
+    return {"anbieter": "groq", "schluessel": groq_schluessel(), "modell": os.getenv(env, "").strip()}   # leer = Standard je nach Foto/Text
 
 
 def verfuegbar() -> bool:
@@ -80,7 +84,18 @@ def konfig_pruefen(anbieter: str, key: str, modell: str = "") -> dict:
     modell = (modell or "").strip()
     if modell and not MODELL_MUSTER.match(modell):
         raise KiFehler("Der Modellname ist ungültig.")
-    return {"anbieter": anbieter, "schluessel": key, "modell": modell or ANBIETER[anbieter]["modell"]}
+    return {"anbieter": anbieter, "schluessel": key, "modell": modell}   # leer = Standard; wird erst beim Anfragen gewaehlt (Text oder Foto)
+
+
+def modell_waehlen(anbieter: str, gespeichert: str, mit_bild: bool) -> str:
+    """Welches Modell wirklich gefragt wird: das gespeicherte, sonst der Standard (bei Fotos der Bild-Standard); Abgeschaltetes wird ersetzt."""
+    m = (gespeichert or "").strip()
+    if m in ABGESCHALTET.get(anbieter, ()):
+        m = ""
+    if m:
+        return m
+    a = ANBIETER[anbieter]
+    return a.get("bild_modell") if mit_bild and a.get("bild_modell") else a["modell"]
 
 
 def maskiert(key: str) -> str:
@@ -103,6 +118,8 @@ def _post(url: str, kopf: dict, daten: dict, timeout: float) -> dict:
         print(f"[Kalorien-KI] HTTP {e.code} von {url.split('?')[0].split('/models/')[-1]}: {grund}", flush=True)
         if e.code == 403 and re.search(r"1010|1020|cloudflare|access denied|blocked", grund, re.I) and "api_key" not in grund.lower():
             raise KiFehler("Der KI-Anbieter blockiert Anfragen von diesem Server (Schutzdienst) – das liegt nicht an deinem Schlüssel.", 403)
+        if e.code in (400, 404) and re.search(r"decommission|model_not_found|does not exist|no longer supported", grund, re.I):
+            raise KiFehler("Dieses Modell gibt es beim Anbieter nicht mehr. Wähle ein anderes: Eigene KI → „Verfügbare Modelle anzeigen“.", 404)
         if e.code in (401, 403):
             raise KiFehler("Der Anbieter hat den API-Schlüssel abgelehnt. Stimmt er, und hat er Guthaben?")
         if e.code == 402:
@@ -123,10 +140,11 @@ def chat(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, konfig
     if konfig is None:
         if not schluessel():
             if groq_schluessel():
-                return chat(system, nutzer, bild, groq_konfig(), json_modus, timeout, max_token)
+                return chat(system, nutzer, bild, groq_konfig(bool(bild)), json_modus, timeout, max_token)
             raise KiFehler("Die KI ist auf diesem Server nicht eingerichtet (GEMINI_API_KEY fehlt).")
         konfig = {"anbieter": "gemini", "schluessel": schluessel(), "modell": MODELL}
-    anbieter, key, modell = konfig["anbieter"], konfig["schluessel"], konfig.get("modell") or ANBIETER[konfig["anbieter"]]["modell"]
+    anbieter, key = konfig["anbieter"], konfig["schluessel"]
+    modell = modell_waehlen(anbieter, konfig.get("modell") or "", bool(bild))
     b64 = base64.b64encode(bild[0]).decode() if bild else ""
     if anbieter == "gemini":
         teile = [{"text": (system + "\n\n" + nutzer).strip()}]
@@ -151,7 +169,7 @@ def chat(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, konfig
                 if not rest and eigener_schluessel_nein and groq_schluessel() and e.code in (404, 429) + WIEDERHOLBAR:
                     print(f"[Kalorien-KI] Gemini nicht verfuegbar ({e.code}) - nehme Groq", flush=True)
                     try:
-                        return chat(system, nutzer, bild, groq_konfig(), json_modus, timeout, max_token)
+                        return chat(system, nutzer, bild, groq_konfig(bool(bild)), json_modus, timeout, max_token)
                     except KiFehler as g:
                         print(f"[Kalorien-KI] Groq auch nicht: {g}", flush=True)   # dann gilt die Meldung zu Gemini unten
                 if not rest:
@@ -271,7 +289,7 @@ def aus_bild(bild: bytes, mime: str, hinweis: str = "", konfig: dict | None = No
         return _aufrufen(BILD + FORMAT, "Foto der Mahlzeit." + zusatz, (bild, mime), konfig)
     except KiFehler as e:
         if konfig is not None and e.code == 400:   # eigene KI: 400 beim Foto = fast immer ein Modell ohne Bildverstehen (z.B. gpt-oss, Llama 3.3)
-            raise KiFehler("Dein gewähltes Modell versteht keine Fotos. Nimm ein Bildmodell (bei Groq: meta-llama/llama-4-scout-17b-16e-instruct, "
+            raise KiFehler("Dein gewähltes Modell versteht keine Fotos. Nimm ein Bildmodell (bei Groq: qwen/qwen3.8-27b – leer lassen wählt es, "
                            "bei Gemini/OpenAI/Claude das Standardmodell) oder entferne die eigene KI – dann nutzt die App die Server-KI.", 400)
         raise
 
@@ -289,7 +307,7 @@ def testen(konfig: dict) -> str:
 
 
 NICHT_CHAT = re.compile(r"whisper|tts|guard|embed|orpheus|moderation|dall-e|image|audio|realtime|transcribe|speech|imagen|veo|aqa", re.I)
-BILD_MODELL = re.compile(r"scout|maverick|vision|-vl|gpt-4o|gpt-4\.1|gpt-5|gemini|claude|pixtral|llava|qwen.*vl", re.I)
+BILD_MODELL = re.compile(r"scout|maverick|vision|-vl|qwen3\.[5-9]|gpt-4o|gpt-4\.1|gpt-5|gemini|claude|pixtral|llava|qwen.*vl", re.I)
 
 
 def modelle_liste(konfig: dict, timeout: float = 20) -> list[dict]:
