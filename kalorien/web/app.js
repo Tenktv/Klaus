@@ -78,6 +78,27 @@ function plusSheet() {
   ]);
 }
 
+/* ---------- Neue Version erkennen ----------
+   Eine Home-Bildschirm-App laeuft auf dem iPhone oft tagelang weiter, ohne die Dateien neu zu laden. Beim Zurueckkehren in die App
+   (und alle 5 Minuten) fragen wir den Server nach dem Stand der App-Dateien; ist er neuer, erscheint oben ein Streifen zum Aktualisieren. */
+let standGeladen = null, hinweisDa = false;
+async function standPruefen() {
+  try {
+    const d = await (await fetch("/api/status", {cache: "no-store"})).json();
+    if (!d.stand) return;
+    if (standGeladen === null) { standGeladen = d.stand; return; }
+    if (d.stand !== standGeladen && !hinweisDa) {
+      hinweisDa = true;
+      const streifen = h("button", {id: "update-streifen", style: {position: "fixed", top: 0, left: 0, right: 0, zIndex: 99999, padding: "calc(env(safe-area-inset-top) + 10px) 14px 10px", background: "var(--volt, #d4ff3a)", color: "#0a0a0a", border: 0, font: "inherit", fontWeight: 700, textAlign: "center", cursor: "pointer"},
+        onclick: () => { try { navigator.serviceWorker.getRegistrations().then(r => r.forEach(x => x.update())); } catch (e) {} location.reload(); }}, "Neue Version – hier tippen zum Aktualisieren");
+      document.body.append(streifen);
+    }
+  } catch (e) {}
+}
+standPruefen();
+document.addEventListener("visibilitychange", () => { if (!document.hidden) standPruefen(); });
+setInterval(() => { if (!document.hidden) standPruefen(); }, 5 * 60 * 1000);
+
 /* ---------- Start ---------- */
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 window.addEventListener("hashchange", navigieren);
