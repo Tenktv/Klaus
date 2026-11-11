@@ -693,7 +693,7 @@ def obs_spielfenster(exe: str) -> str:
     kennung = _fenster_kennung(exe if exe.lower().endswith(".exe") else exe + ".exe")
     if not kennung:
         return f"Kein Fenster von {exe} gefunden."
-    einst = {"window": kennung, "method": 2, "priority": 2, "cursor": False, "client_area": True}
+    einst = {"window": kennung, "method": 2, "priority": 2, "cursor": True, "client_area": True}
     namen = {i["inputName"] for i in obs_anfrage("GetInputList").get("inputs", [])}
     if "Spielfenster" in namen:
         obs_anfrage("SetInputSettings", {"inputName": "Spielfenster", "inputSettings": einst})
