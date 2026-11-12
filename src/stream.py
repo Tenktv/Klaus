@@ -700,6 +700,16 @@ def obs_spielfenster(exe: str) -> str:
     else:
         obs_anfrage("CreateInput", {"sceneName": "Spiel", "inputName": "Spielfenster", "inputKind": "window_capture",
                                     "inputSettings": einst})
+    # Spielton: nur der Ton dieses Spiels (Anwendungs-Audioaufnahme) – so landet Discord & Co. nicht im Stream
+    ton = {"window": kennung, "priority": 2}
+    if "Spielton" in namen:
+        obs_anfrage("SetInputSettings", {"inputName": "Spielton", "inputSettings": ton})
+    else:
+        obs_anfrage("CreateInput", {"sceneName": "Spiel", "inputName": "Spielton", "inputKind": "wasapi_process_output_capture", "inputSettings": ton})
+        try:
+            obs_anfrage("CreateSceneItem", {"sceneName": "Desktop", "sourceName": "Spielton"})
+        except RuntimeError:
+            pass
     sid = obs_anfrage("GetSceneItemId", {"sceneName": "Spiel", "sourceName": "Spielfenster"})["sceneItemId"]
     obs_anfrage("SetSceneItemIndex", {"sceneName": "Spiel", "sceneItemId": sid, "sceneItemIndex": 0})
     video = obs_anfrage("GetVideoSettings")
