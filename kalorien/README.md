@@ -93,3 +93,11 @@ ausgelastet (429), nicht erreichbar (5xx) oder das Modell weg (404) – oder das
 **eigene KI** (z. B. Groq), dann der `GROQ_API_KEY` des Servers. Die App zeigt dazu einen Hinweis („Gemini ist gerade ausgelastet.
 Geschätzt mit deiner eigenen KI (Groq).“). Falsche Gemini-Schlüssel (401/403) werden nicht umgangen. Die eigene KI nutzt nie
 Server-Schlüssel.
+
+## Pro für alle (Beta / Aktion)
+
+Telegram (nur Nikola, Haupt-Klaus): `/fit_pro_alle an` schaltet Pro für **alle Mitglieder** frei (Coach, eigene KI, mehr Reels, mehr
+KI-Schätzungen), `/fit_pro_alle aus` beendet es, `/fit_pro_alle` zeigt den Stand. Wirkt sofort, ohne Neustart; gespeichert in
+`data/kalorien_pro_alle.txt` (schlägt `KALORIEN_PRO_FUER_ALLE=1` in der `.env`). Admins und Pro-Code-Inhaber behalten ihr Pro unabhängig davon.
+Achtung: Coach und KI-Schätzungen laufen über den Gemini-Schlüssel des Servers – mehr Nutzung, schneller am Limit.
+

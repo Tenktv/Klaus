@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 import secrets
 
-from . import db, ki
+from . import db, ki, schalter
 
 # Grenzen je Tag und Nutzer. KI-Schaetzungen ueber den Server-Schluessel kosten den Betreiber Geld -> frei knapp, Pro grosszuegiger.
 # Mit eigenem Schluessel (nur Pro) zahlt der Nutzer selbst: dann kein Server-Limit.
@@ -31,7 +31,7 @@ def ist_admin(z) -> bool:
 
 
 def ist_pro(z) -> bool:
-    return ist_admin(z) or (z["pro_bis"] or 0) > db.jetzt()
+    return schalter.pro_fuer_alle() or ist_admin(z) or (z["pro_bis"] or 0) > db.jetzt()
 
 
 def grenzen(z) -> dict:
@@ -43,7 +43,9 @@ def grenzen(z) -> dict:
 
 
 def plan(z) -> dict:
-    return {"pro": ist_pro(z), "bis": 0 if ist_admin(z) else int(z["pro_bis"] or 0), "admin": ist_admin(z), "grenzen": grenzen(z)}
+    eigen = ist_admin(z) or (z["pro_bis"] or 0) > db.jetzt()
+    return {"pro": ist_pro(z), "bis": 0 if ist_admin(z) else int(z["pro_bis"] or 0), "admin": ist_admin(z), "grenzen": grenzen(z),
+            "alle": schalter.pro_fuer_alle() and not eigen}   # Pro nur wegen der Aktion "Pro fuer alle" (nicht durch Code/Admin)
 
 
 def verlangen(z, was: str = "Das") -> None:
