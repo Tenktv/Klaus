@@ -135,6 +135,7 @@ def befehle_einrichten(tg) -> None:
     tg.befehle["/essen_weg"] = essen_weg
     tg.befehle["/fit_registrierung"] = registrierung
     tg.befehle["/fit_neustart"] = lambda _t: neu_starten(False)
+    tg.befehle["/fit_pro_alle"] = pro_alle
 
 
 def registrierung(text: str) -> str:
@@ -153,6 +154,26 @@ def registrierung(text: str) -> str:
         return "Schreib: /fit_registrierung an  oder  /fit_registrierung aus"
     return (f"Registrierung der Kalorien-App ist jetzt {'🟢 OFFEN' if schalter.offen() else '🔴 GESCHLOSSEN'} "
             f"(gilt über: {schalter.quelle()}). Umschalten: /fit_registrierung an|aus")
+
+
+def pro_alle(text: str) -> str:
+    """/fit_pro_alle an|aus  (nur Nikola): Pro fuer ALLE Mitglieder der Kalorien-App ein-/ausschalten, wirkt sofort."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from kalorien import schalter
+    teile = text.split()
+    wunsch = teile[1].lower() if len(teile) > 1 else ""
+    if wunsch in ("an", "ein", "ja"):
+        schalter.pro_fuer_alle_setzen(True)
+    elif wunsch in ("aus", "nein"):
+        schalter.pro_fuer_alle_setzen(False)
+    elif wunsch:
+        return "Schreib: /fit_pro_alle an  oder  /fit_pro_alle aus"
+    if schalter.pro_fuer_alle():
+        return ("Pro ist jetzt für ALLE Mitglieder der Kalorien-App 🟢 freigeschaltet (Coach, eigene KI, mehr Reels, mehr KI-Schätzungen).\n"
+                "Achtung: Coach und KI-Schätzungen laufen über deinen Gemini-Schlüssel – mehr Nutzung, schneller am Limit.\n"
+                "Zurück: /fit_pro_alle aus")
+    return "Pro für alle ist 🔴 aus: nur Admins und Mitglieder mit Pro-Code haben Pro. Einschalten: /fit_pro_alle an"
 
 
 # ------------------------------------------------------------------ Kalorien-App nach einem Update neu starten

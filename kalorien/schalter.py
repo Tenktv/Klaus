@@ -36,3 +36,27 @@ def quelle() -> str:
     except OSError:
         pass
     return "Einstellung KALORIEN_OFFEN in der .env"
+
+
+# ------------------------------------------------------------------ Pro fuer alle
+def pro_datei() -> Path:
+    return Path(os.getenv("KALORIEN_SCHALTER_PRO") or Path(__file__).resolve().parent.parent / "data" / "kalorien_pro_alle.txt")
+
+
+def pro_fuer_alle() -> bool:
+    """Alle Nutzer haben Pro (Beta/Aktion). Datei data/kalorien_pro_alle.txt ("an"/"aus") schlaegt KALORIEN_PRO_FUER_ALLE in der .env; Standard: aus.
+    Gelesen bei jeder Anfrage - Umschalten wirkt sofort. Gesetzt per Telegram: /fit_pro_alle an|aus (nur Nikola)."""
+    try:
+        wert = pro_datei().read_text(encoding="utf-8").strip().lower()
+    except OSError:
+        wert = ""
+    if wert in ("an", "aus"):
+        return wert == "an"
+    return os.getenv("KALORIEN_PRO_FUER_ALLE", "0").strip() == "1"
+
+
+def pro_fuer_alle_setzen(an: bool) -> None:
+    d = pro_datei()
+    d.parent.mkdir(parents=True, exist_ok=True)
+    d.write_text("an" if an else "aus", encoding="utf-8")
+

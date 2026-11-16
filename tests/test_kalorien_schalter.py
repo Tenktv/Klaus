@@ -12,6 +12,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+from tests.test_kalorien import Basis  # noqa: E402  (setzt Test-Datenbank und KALORIEN_ADMINS=chef)
 _TMP = tempfile.mkdtemp()
 os.environ["KALORIEN_DB"] = str(Path(_TMP) / "k.db")
 from kalorien import schalter, server  # noqa: E402
@@ -99,3 +100,55 @@ class TestCodeWaechter(unittest.TestCase):
 
     def test_code_stand_ist_eine_zahl(self):
         self.assertGreater(server.code_stand(), 0)
+
+
+class TestProFuerAlle(Basis):
+    def setUp(self):
+        super().setUp()
+        self.datei = Path(tempfile.mkdtemp()) / "pro.txt"
+        p = mock.patch.dict(os.environ, {"KALORIEN_SCHALTER_PRO": str(self.datei)})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_standard_aus_env_und_datei(self):
+        with mock.patch.dict(os.environ):
+            os.environ.pop("KALORIEN_PRO_FUER_ALLE", None)
+            self.assertFalse(schalter.pro_fuer_alle())
+        with mock.patch.dict(os.environ, {"KALORIEN_PRO_FUER_ALLE": "1"}):
+            self.assertTrue(schalter.pro_fuer_alle())
+            schalter.pro_fuer_alle_setzen(False)       # Datei schlaegt die .env
+            self.assertFalse(schalter.pro_fuer_alle())
+        schalter.pro_fuer_alle_setzen(True)
+        self.assertTrue(schalter.pro_fuer_alle())
+
+    def test_nutzer_wird_sofort_pro_und_wieder_nicht(self):
+        t = self.neu("Alle-Pro Anton")
+        plan = self.api("GET", "/api/ich", token=t)[1]["plan"]
+        self.assertFalse(plan["pro"])
+        self.assertFalse(plan["alle"])
+        schalter.pro_fuer_alle_setzen(True)                                   # ohne Neustart
+        plan = self.api("GET", "/api/ich", token=t)[1]["plan"]
+        self.assertTrue(plan["pro"])
+        self.assertTrue(plan["alle"])                                          # Pro nur wegen der Aktion
+        self.assertGreater(plan["grenzen"]["ki"], 8)                           # Pro-Grenzen statt Frei-Grenzen
+        schalter.pro_fuer_alle_setzen(False)
+        self.assertFalse(self.api("GET", "/api/ich", token=t)[1]["plan"]["pro"])
+
+    def test_admin_und_codeinhaber_bleiben_unabhaengig_vom_schalter(self):
+        boss = self.neu("Chef") if self.api("POST", "/api/anmelden", {"name": "Chef", "passwort": "geheim1234"})[0] != 200 else \
+            self.api("POST", "/api/anmelden", {"name": "Chef", "passwort": "geheim1234"})[1]["token"]
+        schalter.pro_fuer_alle_setzen(False)
+        plan = self.api("GET", "/api/ich", token=boss)[1]["plan"]
+        self.assertTrue(plan["pro"] and plan["admin"])
+        schalter.pro_fuer_alle_setzen(True)
+        plan = self.api("GET", "/api/ich", token=boss)[1]["plan"]
+        self.assertFalse(plan["alle"])                                         # Admin ist schon Pro, "alle" betrifft ihn nicht
+
+    def test_telegram_befehl(self):
+        import kalorien_klaus as K
+        self.assertIn("aus", K.pro_alle("/fit_pro_alle"))
+        self.assertIn("ALLE", K.pro_alle("/fit_pro_alle an"))
+        self.assertTrue(schalter.pro_fuer_alle())
+        self.assertIn("🔴", K.pro_alle("/fit_pro_alle aus"))
+        self.assertFalse(schalter.pro_fuer_alle())
+        self.assertIn("Schreib:", K.pro_alle("/fit_pro_alle vielleicht"))

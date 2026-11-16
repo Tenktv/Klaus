@@ -22,7 +22,7 @@ export async function ichSeite(ctx) {
     h("div", {class: "abschnitt"}, h("h2", {}, "Einstellungen")),
     h("div", {class: "karte", style: {padding: "4px 16px"}},
       row("ziel", "Tagesziele", `${de(z.kcal)} kcal · ${z.eiweiss} g Eiweiß`, () => { location.hash = "#/ziele"; }),
-      row("blitz", "Klesro Fit Pro", plan.pro ? (plan.admin ? "Aktiv (Admin)" : "Aktiv bis " + tagName(new Date(plan.bis * 1000).toISOString().slice(0, 10), {day: "numeric", month: "long", year: "numeric"})) : "Coach, eigene KI, mehr Reels", () => { location.hash = "#/pro"; }, plan.pro ? null : proMarke()),
+      row("blitz", "Klesro Fit Pro", plan.pro ? (plan.admin ? "Aktiv (Admin)" : plan.alle ? "Für alle freigeschaltet" : "Aktiv bis " + tagName(new Date(plan.bis * 1000).toISOString().slice(0, 10), {day: "numeric", month: "long", year: "numeric"})) : "Coach, eigene KI, mehr Reels", () => { location.hash = "#/pro"; }, plan.pro ? null : proMarke()),
       row("funke", "KI-Coach", "Fragen zu Training & Ernährung", () => { location.hash = "#/coach"; }, plan.pro ? null : proMarke()),
       row("schluessel", "Eigene KI", ich.ki || plan.pro ? "Eigenen API-Schlüssel nutzen" : "Gemini, OpenAI, Claude …", () => { location.hash = "#/ki"; }, plan.pro ? null : proMarke()),
       row("schuh", "Apple Health", "Schritte automatisch übernehmen", () => { location.hash = "#/apple-health"; }),
@@ -72,7 +72,7 @@ export async function proSeite(ctx) {
   const v = (t, s) => h("div", {class: "vorteil"}, icon("haken"), h("div", {}, h("div", {class: "fett"}, t), s ? h("div", {class: "mut klein"}, s) : null));
   leeren(ctx.box, h("div", {class: "in"}, zurueck("#/ich", "Ich"),
     h("div", {class: "karte pro-held"}, proMarke(), h("h1", {style: {fontSize: "44px", margin: "12px 0 6px"}}, "Klesro Fit", h("br"), h("span", {class: "gold"}, "Pro")),
-      h("p", {class: "mut", style: {maxWidth: "30ch"}}, plan.pro ? (plan.admin ? "Du bist Admin und hast Pro unbegrenzt." : "Pro ist aktiv bis " + tagName(new Date(plan.bis * 1000).toISOString().slice(0, 10), {day: "numeric", month: "long", year: "numeric"}) + ".") : "Mehr KI, mehr Reels und dein eigener KI-Anbieter.")),
+      h("p", {class: "mut", style: {maxWidth: "30ch"}}, plan.pro ? (plan.admin ? "Du bist Admin und hast Pro unbegrenzt." : plan.alle ? "Pro ist gerade für alle Mitglieder freigeschaltet – mit Coach, eigener KI und mehr Reels." : "Pro ist aktiv bis " + tagName(new Date(plan.bis * 1000).toISOString().slice(0, 10), {day: "numeric", month: "long", year: "numeric"}) + ".") : "Mehr KI, mehr Reels und dein eigener KI-Anbieter.")),
     h("div", {class: "karte", style: {marginTop: "14px"}}, v("KI-Coach", "Fragt dich aus, kennt deine Daten, gibt Pläne und Tipps"), v("Eigene KI", "Nutze deinen eigenen API-Schlüssel (Gemini, OpenAI, Claude, Groq, OpenRouter) – ohne Tageslimit"),
       v("KI-Rezeptgenerator", "Rezepte aus Wunsch oder Zutaten, mit Nährwerten"), v(`${g.ki > 8 ? g.ki : 60} statt 8 KI-Schätzungen pro Tag`, "Foto- und Text-Erkennung über den Server"), v("20 statt 3 Reels pro Tag"), v("Pro-Abzeichen im Profil")),
     plan.pro ? null : h("div", {class: "karte"}, h("div", {class: "lab", style: {marginBottom: "8px"}}, "Code einlösen"), code, h("button", {class: "btn", style: {marginTop: "10px"}, onclick: () => los(async () => { const d = await api("POST", "pro/einloesen", {code: code.value}); toast(d.text); S.ich = await api("GET", "ich"); location.hash = "#/pro"; window.dispatchEvent(new HashChangeEvent("hashchange")); })}, "Freischalten"),
