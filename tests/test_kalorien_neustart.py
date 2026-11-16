@@ -111,3 +111,49 @@ class TestDiagnose(unittest.TestCase):
     def test_neustart_ohne_prozess_enthaelt_diagnose(self):
         with mock.patch.object(K, "_app_prozesse", return_value=[]), mock.patch.object(K, "_diagnose", return_value="DIAG"):
             self.assertIn("DIAG", K.neu_starten(True))
+
+
+class TestGroqSchluesselBefehl(unittest.TestCase):
+    KEY = "gsk_" + "A1b2C3d4E5" * 5
+
+    def lauf(self, text, vorher=""):
+        gespeichert = {}
+        with mock.patch.dict(os.environ, {"GROQ_API_KEY": vorher}), mock.patch.object(K, "neu_starten", return_value="App startet neu.") as neu:
+            antwort = K.groq_schluessel_setzen(text, lambda n, w: gespeichert.__setitem__(n, w))
+        return antwort, gespeichert, neu
+
+    def test_gueltiger_schluessel_wird_gespeichert_und_nie_zurueckgesendet(self):
+        antwort, gespeichert, neu = self.lauf(f"/fit_groq {self.KEY}")
+        self.assertEqual(gespeichert, {"GROQ_API_KEY": self.KEY})
+        self.assertNotIn(self.KEY, antwort)
+        self.assertNotIn("A1b2C3d4E5", antwort)
+        neu.assert_called_once_with(False)   # Kalorien-App neu starten, damit sie den Schluessel liest
+
+    def test_falsche_eingaben_speichern_nichts(self):
+        for text in ("/fit_groq sk-ant-irgendwas", "/fit_groq gsk_kurz", "/fit_groq gsk_" + "x" * 20 + "!!", "/fit_groq a b c"):
+            antwort, gespeichert, neu = self.lauf(text)
+            self.assertEqual(gespeichert, {}, text)
+            neu.assert_not_called()
+
+    def test_stand_ohne_argument_zeigt_nie_den_wert(self):
+        antwort, gespeichert, _ = self.lauf("/fit_groq", vorher=self.KEY)
+        self.assertIn("✅", antwort)
+        self.assertNotIn(self.KEY, antwort)
+        self.assertIn("nicht eingetragen", self.lauf("/fit_groq", vorher="")[0])
+        self.assertEqual(gespeichert, {})
+
+    def test_weg_loescht_den_schluessel(self):
+        antwort, gespeichert, neu = self.lauf("/fit_groq weg", vorher=self.KEY)
+        self.assertEqual(gespeichert, {"GROQ_API_KEY": ""})
+        neu.assert_called_once()
+
+    def test_befehl_ist_geheim_und_nur_mit_env_setzen_angemeldet(self):
+        class TG:
+            def __init__(self):
+                self.befehle, self.geheime_befehle = {}, set()
+        ohne, mit = TG(), TG()
+        K.befehle_einrichten(ohne)
+        K.befehle_einrichten(mit, lambda n, w: None)
+        self.assertNotIn("/fit_groq", ohne.befehle)
+        self.assertIn("/fit_groq", mit.befehle)
+        self.assertIn("/fit_groq", mit.geheime_befehle)   # Nachricht wird im Chat geloescht

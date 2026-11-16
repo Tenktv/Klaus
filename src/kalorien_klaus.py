@@ -129,13 +129,34 @@ def foto(bild: bytes, beschriftung: str) -> str:
         return "⚠️ " + _fehler(e)
 
 
-def befehle_einrichten(tg) -> None:
+def groq_schluessel_setzen(text: str, env_setzen) -> str:
+    """/fit_groq gsk_...  (nur Nikola, die Nachricht wird sofort geloescht, der Schluessel geht nie an eine KI): Groq-Schluessel des SERVERS.
+    Er springt fuer ALLE Mitglieder der Kalorien-App ein, wenn Gemini ausgelastet ist. '/fit_groq' = Stand, '/fit_groq weg' = loeschen."""
+    teile = text.split()
+    wert = teile[1].strip() if len(teile) > 1 else ""
+    if not wert:
+        da = bool(os.getenv("GROQ_API_KEY", "").strip())
+        return ("Groq-Schlüssel auf dem Server: " + ("✅ eingetragen – springt für alle Mitglieder ein, wenn Gemini ausgelastet ist." if da else
+                "– nicht eingetragen.") + "\nNeuer Schlüssel: /fit_groq gsk_… (die Nachricht wird sofort gelöscht). Löschen: /fit_groq weg")
+    if wert.lower() == "weg":
+        env_setzen("GROQ_API_KEY", "")
+        return "🗑 Groq-Schlüssel gelöscht. " + neu_starten(False)
+    if not re.fullmatch(r"gsk_[A-Za-z0-9]{20,200}", wert):
+        return "Das sieht nicht nach einem Groq-Schlüssel aus (er beginnt mit gsk_) – nichts gespeichert."
+    env_setzen("GROQ_API_KEY", wert)
+    return "🔑 Groq-Schlüssel gespeichert, deine Nachricht ist gelöscht. " + neu_starten(False)
+
+
+def befehle_einrichten(tg, env_setzen=None) -> None:
     tg.befehle["/kalorien"] = kalorien
     tg.befehle["/essen"] = lambda t: essen(t) if bereit() else kalorien()
     tg.befehle["/essen_weg"] = essen_weg
     tg.befehle["/fit_registrierung"] = registrierung
     tg.befehle["/fit_neustart"] = lambda _t: neu_starten(False)
     tg.befehle["/fit_pro_alle"] = pro_alle
+    if env_setzen is not None:
+        tg.befehle["/fit_groq"] = lambda t: groq_schluessel_setzen(t, env_setzen)
+        tg.geheime_befehle.add("/fit_groq")   # Nachricht mit dem Schluessel wird sofort geloescht
 
 
 def registrierung(text: str) -> str:
