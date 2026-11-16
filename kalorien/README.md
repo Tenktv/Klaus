@@ -101,3 +101,10 @@ KI-Schätzungen), `/fit_pro_alle aus` beendet es, `/fit_pro_alle` zeigt den Stan
 `data/kalorien_pro_alle.txt` (schlägt `KALORIEN_PRO_FUER_ALLE=1` in der `.env`). Admins und Pro-Code-Inhaber behalten ihr Pro unabhängig davon.
 Achtung: Coach und KI-Schätzungen laufen über den Gemini-Schlüssel des Servers – mehr Nutzung, schneller am Limit.
 
+## Groq-Schlüssel für alle Mitglieder
+
+Ein Groq-Schlüssel auf dem Server (`GROQ_API_KEY`) springt für **alle** Mitglieder ein, wenn Gemini ausgelastet ist. Vom Handy setzen:
+Telegram `/fit_groq gsk_…` (nur Nikola; die Nachricht mit dem Schlüssel wird sofort gelöscht und geht nie an eine KI) – Klaus speichert ihn in der
+`.env` und startet die Kalorien-App neu. `/fit_groq` zeigt nur, ob einer eingetragen ist, `/fit_groq weg` löscht ihn. Jeder Schlüssel gehört zu
+einem Groq-Konto; eigene Schlüssel pro Mitglied kann nur das Mitglied selbst bei Groq erstellen (in der App unter „Eigene KI“, nur Pro).
+

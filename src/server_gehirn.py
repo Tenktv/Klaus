@@ -651,7 +651,7 @@ def main() -> None:
     whatsapp_kunden.voll_antwort = whatsapp_voll
     whatsapp_kunden.starten()
     import kalorien_klaus   # Kalorien-App (kalorien/) als Kunde ihrer Schnittstelle: /kalorien, /essen, Foto mit "Essen"
-    kalorien_klaus.befehle_einrichten(tg)
+    kalorien_klaus.befehle_einrichten(tg, TB._env_setzen)
     # Update ueber Klaus startet nur Klaus neu - die Kalorien-App (eigener Dienst) danach auch, damit sie den neuen Code nutzt
     threading.Timer(25, lambda: print(f"[Kalorien] {kalorien_klaus.neu_starten(True)}", flush=True)).start()
     print(f"[Server] Klaus-Gehirn laeuft (Telegram, Werkzeuge lokal: {sorted(LOKAL)})", flush=True)
