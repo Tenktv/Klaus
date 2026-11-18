@@ -342,3 +342,72 @@ class TestGeminiZuerst(unittest.TestCase):
         with self.post(fehler(400)), self.assertRaises(ki.KiFehler) as ctx:
             ki.aus_bild(b"\xff\xd8\xff" + b"0" * 2000, "image/jpeg", konfig=marker())
         self.assertNotIn("keine Fotos", str(ctx.exception))
+
+
+class TestZeitueberschreitung(unittest.TestCase):
+    """Timeout/Netzwerkfehler: nicht dasselbe nochmal, sondern gleich Ersatzmodell -> eigene KI -> Groq; klare Meldung statt 'TimeoutError'."""
+
+    def setUp(self):
+        for p in (mock.patch.object(ki, "schluessel", return_value="k"), mock.patch.object(ki, "MODELL_ERSATZ", "ersatz-modell"),
+                  mock.patch.object(ki.time, "sleep"), mock.patch.dict(os.environ, {"GROQ_API_KEY": ""})):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_timeout_wird_zu_klarer_meldung_mit_code_599(self):
+        import socket
+        for fehlerart in (socket.timeout("timed out"), TimeoutError("timed out")):
+            with mock.patch("urllib.request.urlopen", side_effect=fehlerart), self.assertRaises(ki.KiFehler) as ctx:
+                ki._post("https://example.org/x", {}, {}, 5)
+            self.assertEqual(ctx.exception.code, 599)
+            self.assertIn("zu lange gebraucht", str(ctx.exception))
+            self.assertNotIn("TimeoutError", str(ctx.exception))
+
+    def test_urlerror_mit_timeout_grund_ist_auch_599(self):
+        import socket
+        import urllib.error
+        with mock.patch("urllib.request.urlopen", side_effect=urllib.error.URLError(socket.timeout("timed out"))), self.assertRaises(ki.KiFehler) as ctx:
+            ki._post("https://example.org/x", {}, {}, 5)
+        self.assertEqual(ctx.exception.code, 599)
+
+    def test_anderer_netzwerkfehler_ist_598(self):
+        with mock.patch("urllib.request.urlopen", side_effect=ConnectionResetError("reset")), self.assertRaises(ki.KiFehler) as ctx:
+            ki._post("https://example.org/x", {}, {}, 5)
+        self.assertEqual(ctx.exception.code, 598)
+
+    def test_gemini_zu_langsam_geht_ohne_wiederholung_zum_ersatzmodell(self):
+        zeiten = []
+        with mock.patch.object(ki, "_post", side_effect=[fehler(599), GEMINI_OK]) as p:
+            r = ki.chat("s", "n")
+        self.assertEqual([c.args[0].split("/models/")[1].split(":")[0] for c in p.call_args_list], [ki.MODELL, "ersatz-modell"])
+        self.assertIn("gemini", r.lower())
+
+    def test_timeout_bei_allen_gemini_modellen_dann_eigene_ki_mit_hinweis(self):
+        def post(url, kopf, daten, timeout):
+            if "googleapis" in url:
+                raise fehler(599)
+            return GROQ_OK
+        with mock.patch.object(ki, "_post", side_effect=post):
+            r = ki.aus_text("Brot", marker())
+        self.assertEqual(r["gerichte"][0]["name"], "Groq-Brot")
+        self.assertIn("zu lange gebraucht", r["hinweis"])
+        self.assertIn("eigenen KI (Groq)", r["hinweis"])
+
+    def test_timeout_nur_gemini_ohne_ausweg_gibt_klare_meldung(self):
+        with mock.patch.object(ki, "_post", side_effect=fehler(599)), self.assertRaises(ki.KiFehler) as ctx:
+            ki.chat("s", "n")
+        self.assertEqual(ctx.exception.code, 599)
+
+    def test_server_schluessel_gemini_bekommt_kurzes_zeitlimit_eigener_nicht(self):
+        with mock.patch.object(ki, "_post", return_value=GEMINI_OK) as p:
+            ki.chat("s", "n")                       # Server-Schluessel
+            ki.chat("s", "n", konfig={"anbieter": "gemini", "schluessel": "eigen", "modell": "m"})   # eigener Gemini-Schluessel
+        self.assertLessEqual(p.call_args_list[0].args[3], ki.GEMINI_TIMEOUT)
+        self.assertEqual(p.call_args_list[1].args[3], 60)
+
+    def test_verbindung_weg_ist_auch_ein_ausweg_fall(self):
+        def post(url, kopf, daten, timeout):
+            if "googleapis" in url:
+                raise fehler(598)
+            return GROQ_OK
+        with mock.patch.object(ki, "_post", side_effect=post):
+            self.assertEqual(ki.aus_text("Brot", marker())["gerichte"][0]["name"], "Groq-Brot")

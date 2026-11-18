@@ -157,3 +157,49 @@ class TestGroqSchluesselBefehl(unittest.TestCase):
         self.assertNotIn("/fit_groq", ohne.befehle)
         self.assertIn("/fit_groq", mit.befehle)
         self.assertIn("/fit_groq", mit.geheime_befehle)   # Nachricht wird im Chat geloescht
+
+
+class TestKiTestBefehl(unittest.TestCase):
+    def lauf(self, gemini_key="k", groq_key="g" * 20, chat=None):
+        from kalorien import ki
+        with mock.patch.object(ki, "schluessel", return_value=gemini_key), mock.patch.dict(os.environ, {"GROQ_API_KEY": groq_key}), \
+                mock.patch.object(ki, "chat", side_effect=chat or (lambda *a, **k: '{"ok": true}')) as c:
+            return K.ki_test(), c
+
+    def test_zeigt_alle_drei_proben_mit_zeit(self):
+        text, c = self.lauf()
+        self.assertEqual(c.call_count, 3)               # Gemini Haupt, Gemini Ersatz, Groq
+        self.assertEqual(text.count("✅"), 3)
+        self.assertIn("Groq", text)
+
+    def test_timeout_limit_und_fehlender_schluessel_werden_unterschieden(self):
+        from kalorien import ki
+        antworten = iter([ki.KiFehler("zu lange", 599), ki.KiFehler("ausgelastet", 429), '{"ok": true}'])
+
+        def chat(*a, **k):
+            x = next(antworten)
+            if isinstance(x, Exception):
+                raise x
+            return x
+        text, _ = self.lauf(chat=chat)
+        self.assertIn("⏱", text)
+        self.assertIn("❌", text)
+        self.assertIn("✅", text)
+        ohne, c = self.lauf(gemini_key="", groq_key="")
+        self.assertEqual(ohne.count("kein Schlüssel eingetragen"), 2)
+        c.assert_not_called()
+
+    def test_schluessel_tauchen_nie_im_text_auf(self):
+        from kalorien import ki
+        geheim = "gsk_" + "Z9y8X7w6V5" * 3
+        text, _ = self.lauf(gemini_key="AIzaGeheimerGeminiKey123", groq_key=geheim,
+                            chat=lambda *a, **k: (_ for _ in ()).throw(RuntimeError(f"kaputt {geheim}")))
+        self.assertNotIn(geheim, text)
+        self.assertNotIn("AIzaGeheimerGeminiKey123", text)
+
+    def test_befehl_ist_angemeldet(self):
+        class TG:
+            befehle, geheime_befehle = {}, set()
+        tg = TG()
+        K.befehle_einrichten(tg)
+        self.assertIn("/fit_ki_test", tg.befehle)

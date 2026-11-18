@@ -12,6 +12,7 @@ import base64
 import json
 import os
 import re
+import socket
 import time
 import urllib.error
 import urllib.request
@@ -54,6 +55,8 @@ class KiFehler(Exception):
 # Wenn das Hauptmodell kurz ueberlastet ist (503 ...), erst nochmal, dann das Ersatzmodell (nur beim Server-Schluessel)
 MODELL_ERSATZ = os.getenv("KALORIEN_MODELL_ERSATZ", "gemini-flash-latest")
 WIEDERHOLBAR = (500, 502, 503, 504)
+NETZ = (598, 599)   # 599 = Zeitueberschreitung, 598 = anderer Netzwerkfehler (Verbindung weg, DNS ...): gleich weiter zum Ersatzweg, nicht dasselbe nochmal
+GEMINI_TIMEOUT = float(os.getenv("KALORIEN_GEMINI_TIMEOUT", "35") or 35)   # beim Server-Schluessel: bleibt Zeit fuer Ersatzmodell/eigene KI/Groq
 
 
 def schluessel() -> str:
@@ -130,7 +133,12 @@ def _post(url: str, kopf: dict, daten: dict, timeout: float) -> dict:
             raise KiFehler("Dein KI-Anbieter sagt: Limit erreicht. Bitte später nochmal.", 429)
         raise KiFehler(f"Der KI-Anbieter antwortet gerade nicht ({e.code}).", e.code)
     except (OSError, ValueError) as e:
-        raise KiFehler(f"Die KI antwortet gerade nicht ({type(e).__name__}).")
+        grund = getattr(e, "reason", e)
+        if isinstance(e, (TimeoutError, socket.timeout)) or isinstance(grund, (TimeoutError, socket.timeout)) or "timed out" in str(e).lower():
+            print(f"[Kalorien-KI] Zeitueberschreitung nach {timeout:g}s bei {url.split('?')[0].split('/models/')[-1]}", flush=True)
+            raise KiFehler("Die KI hat zu lange gebraucht (Zeitüberschreitung). Versuch es gleich nochmal.", 599)
+        print(f"[Kalorien-KI] Netzwerkfehler {type(e).__name__}: {str(e)[:120]}", flush=True)
+        raise KiFehler(f"Die KI antwortet gerade nicht ({type(e).__name__}).", 598)
 
 
 def _merken(hinweise, text: str) -> None:
@@ -195,18 +203,20 @@ def chat(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, konfig
         while True:
             m = versuche[n]
             try:
-                r = _post(URL.format(modell=m), {"x-goog-api-key": key}, {"contents": [{"parts": teile}], "generationConfig": cfg}, timeout)
+                r = _post(URL.format(modell=m), {"x-goog-api-key": key}, {"contents": [{"parts": teile}], "generationConfig": cfg},
+                          min(timeout, GEMINI_TIMEOUT) if eigener_schluessel_nein else timeout)
                 break
             except KiFehler as e:
                 rest = versuche[n + 1:]
-                if e.code in (404, 429):
-                    rest = [x for x in rest if x != m]   # Modell fehlt oder Kontingent leer (gilt je Modell): gleich das Ersatzmodell
+                if e.code in (404, 429) + NETZ:
+                    rest = [x for x in rest if x != m]   # Modell fehlt, Kontingent leer (gilt je Modell) oder zu langsam: gleich das Ersatzmodell, nicht dasselbe nochmal
                 elif e.code not in WIEDERHOLBAR:
                     raise
                 eigener_fehler = None
-                if not rest and eigener_schluessel_nein and (danach or groq_schluessel()) and e.code in (404, 429) + WIEDERHOLBAR:
+                if not rest and eigener_schluessel_nein and (danach or groq_schluessel()) and e.code in (404, 429) + NETZ + WIEDERHOLBAR:
                     print(f"[Kalorien-KI] Gemini nicht verfuegbar ({e.code}) - weiter mit eigener KI/Groq", flush=True)
-                    grund = "Gemini ist gerade ausgelastet." if e.code == 429 else "Gemini antwortet gerade nicht."
+                    grund = ("Gemini ist gerade ausgelastet." if e.code == 429 else
+                             "Gemini hat zu lange gebraucht." if e.code == 599 else "Gemini antwortet gerade nicht.")
                     text, eigener_fehler = _weiter(system, nutzer, bild, danach, json_modus, timeout, max_token, hinweise, grund)
                     if text is not None:
                         return text   # sonst gilt die Meldung zu Gemini unten (plus Hinweis zur eigenen KI)

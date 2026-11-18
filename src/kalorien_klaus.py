@@ -15,6 +15,7 @@ import base64
 import os
 import re
 import signal
+import time
 import subprocess
 from pathlib import Path
 
@@ -129,6 +130,40 @@ def foto(bild: bytes, beschriftung: str) -> str:
         return "⚠️ " + _fehler(e)
 
 
+def ki_test(_text: str = "") -> str:
+    """/fit_ki_test: fragt Gemini (Hauptmodell + Ersatzmodell) und Groq mit dem Server-Schluessel kurz ab und zeigt, ob und wie schnell sie
+    antworten. So sieht man vom Handy aus, wo es haengt (Timeout, Limit, falscher Schluessel). Kostet nur Bruchteile eines Cents."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from kalorien import ki
+    proben = []
+    if ki.schluessel():
+        proben += [(f"Gemini {ki.MODELL}", {"anbieter": "gemini", "schluessel": ki.schluessel(), "modell": ki.MODELL}),
+                   (f"Gemini {ki.MODELL_ERSATZ} (Ersatz)", {"anbieter": "gemini", "schluessel": ki.schluessel(), "modell": ki.MODELL_ERSATZ})]
+    else:
+        proben.append(("Gemini", None))
+    if ki.groq_schluessel():
+        proben.append((f"Groq {ki.modell_waehlen('groq', ki.groq_konfig()['modell'], False)}", ki.groq_konfig()))
+    else:
+        proben.append(("Groq", None))
+    zeilen = ["🔬 KI-Test vom Server aus (Antwortzeit je Anbieter):"]
+    for name, konfig in proben:
+        if konfig is None:
+            zeilen.append(f"– {name}: kein Schlüssel eingetragen")
+            continue
+        start = time.time()
+        try:
+            ki.chat('Antworte nur mit dem JSON {"ok": true}.', "Test", None, konfig, True, 30, 40)
+            zeilen.append(f"✅ {name}: {time.time() - start:.1f} s")
+        except ki.KiFehler as e:
+            symbol = "⏱" if e.code == 599 else "❌"
+            zeilen.append(f"{symbol} {name}: {str(e)[:110]} ({time.time() - start:.0f} s)")
+        except Exception as e:   # nie Interna oder Schluessel zeigen
+            zeilen.append(f"❌ {name}: {type(e).__name__}")
+    zeilen.append("Gemini-Zeitlimit in der App: " + f"{ki.GEMINI_TIMEOUT:g} s, dann geht es weiter zu Ersatzmodell, eigener KI, Groq.")
+    return "\n".join(zeilen)
+
+
 def groq_schluessel_setzen(text: str, env_setzen) -> str:
     """/fit_groq gsk_...  (nur Nikola, die Nachricht wird sofort geloescht, der Schluessel geht nie an eine KI): Groq-Schluessel des SERVERS.
     Er springt fuer ALLE Mitglieder der Kalorien-App ein, wenn Gemini ausgelastet ist. '/fit_groq' = Stand, '/fit_groq weg' = loeschen."""
@@ -154,6 +189,7 @@ def befehle_einrichten(tg, env_setzen=None) -> None:
     tg.befehle["/fit_registrierung"] = registrierung
     tg.befehle["/fit_neustart"] = lambda _t: neu_starten(False)
     tg.befehle["/fit_pro_alle"] = pro_alle
+    tg.befehle["/fit_ki_test"] = ki_test
     if env_setzen is not None:
         tg.befehle["/fit_groq"] = lambda t: groq_schluessel_setzen(t, env_setzen)
         tg.geheime_befehle.add("/fit_groq")   # Nachricht mit dem Schluessel wird sofort geloescht

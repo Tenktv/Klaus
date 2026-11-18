@@ -108,3 +108,10 @@ Telegram `/fit_groq gsk_…` (nur Nikola; die Nachricht mit dem Schlüssel wird 
 `.env` und startet die Kalorien-App neu. `/fit_groq` zeigt nur, ob einer eingetragen ist, `/fit_groq weg` löscht ihn. Jeder Schlüssel gehört zu
 einem Groq-Konto; eigene Schlüssel pro Mitglied kann nur das Mitglied selbst bei Groq erstellen (in der App unter „Eigene KI“, nur Pro).
 
+## Zeitüberschreitung / KI-Test
+
+Gemini des Servers bekommt `KALORIEN_GEMINI_TIMEOUT` Sekunden (Standard 35). Zeitüberschreitung (599) oder Netzwerkfehler (598) wiederholen **nicht**
+dasselbe Modell, sondern gehen gleich zum Ersatzmodell, dann zur eigenen KI des Nutzers, dann zu `GROQ_API_KEY` – mit Hinweis in der App
+(„Gemini hat zu lange gebraucht. Geschätzt mit …“). Telegram `/fit_ki_test` (nur Nikola) fragt Gemini, das Ersatzmodell und Groq vom Server aus ab und
+zeigt Antwortzeit bzw. Fehler je Anbieter (Schlüssel erscheinen nie).
+
