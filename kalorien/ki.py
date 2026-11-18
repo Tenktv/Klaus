@@ -47,15 +47,19 @@ TEXT = "Du bist ein Ernährungs-Assistent. Schätze Menge und Nährwerte der bes
 
 
 class KiFehler(Exception):
-    def __init__(self, text: str = "", code: int = 0) -> None:
+    def __init__(self, text: str = "", code: int = 0, grund: str = "") -> None:
         super().__init__(text)
         self.code = code   # HTTP-Status des Anbieters (0 = kein HTTP-Fehler)
+        self.grund = grund   # Meldung des Anbieters (Schluessel geschwaerzt) - nur fuer /fit_ki_test und das Server-Log, nie fuer die App
 
 
 # Wenn das Hauptmodell kurz ueberlastet ist (503 ...), erst nochmal, dann das Ersatzmodell (nur beim Server-Schluessel)
 MODELL_ERSATZ = os.getenv("KALORIEN_MODELL_ERSATZ", "gemini-flash-latest")
 WIEDERHOLBAR = (500, 502, 503, 504)
 NETZ = (598, 599)   # 599 = Zeitueberschreitung, 598 = anderer Netzwerkfehler (Verbindung weg, DNS ...): gleich weiter zum Ersatzweg, nicht dasselbe nochmal
+# Neuere Gemini-Modelle "denken" erst (13 s schon fuer eine Mini-Anfrage). Fuer Schaetzungen reicht wenig Denken: thinkingLevel (Gemini 3) ->
+# thinkingBudget 0 (Gemini 2.5) -> ohne, je nachdem was das Modell akzeptiert (400 -> naechste Stufe). "standard" = Modell-Voreinstellung.
+GEMINI_DENKEN = (os.getenv("KALORIEN_GEMINI_DENKEN", "low") or "low").strip().lower()
 GEMINI_TIMEOUT = float(os.getenv("KALORIEN_GEMINI_TIMEOUT", "35") or 35)   # beim Server-Schluessel: bleibt Zeit fuer Ersatzmodell/eigene KI/Groq
 
 
@@ -105,6 +109,31 @@ def maskiert(key: str) -> str:
     return "••••" + key[-4:] if len(key) >= 8 else "••••"
 
 
+def _schwaerzen(text: str) -> str:
+    """Schluessel-aehnliche Zeichenfolgen aus Anbieter-Meldungen entfernen (sie gehen nur an Nikola/ins Log, aber sicher ist sicher)."""
+    return re.sub(r"(gsk_|sk-|AIza|km_|ghp_|github_pat_)[A-Za-z0-9_\-]{6,}", r"\1…", text)
+
+
+def _http_fehler(code: int, grund: str) -> "KiFehler":
+    """HTTP-Fehler des Anbieters -> verstaendliche Meldung (nie Rohtext oder Schluessel an die App); grund bleibt als Zusatz fuer /fit_ki_test."""
+    if code == 403 and re.search(r"1010|1020|cloudflare|access denied|blocked", grund, re.I) and "api_key" not in grund.lower():
+        k = KiFehler("Der KI-Anbieter blockiert Anfragen von diesem Server (Schutzdienst) – das liegt nicht an deinem Schlüssel.", 403)
+    elif code in (400, 404) and re.search(r"decommission|model_not_found|does not exist|no longer supported", grund, re.I):
+        k = KiFehler("Dieses Modell gibt es beim Anbieter nicht mehr. Wähle ein anderes: Eigene KI → „Verfügbare Modelle anzeigen“.", 404)
+    elif code in (401, 403):
+        k = KiFehler("Der Anbieter hat den API-Schlüssel abgelehnt. Stimmt er, und hat er Guthaben?", code)
+    elif code == 402:
+        k = KiFehler("Dein Konto beim KI-Anbieter hat kein Guthaben mehr.", 402)
+    elif code == 404:
+        k = KiFehler("Das Modell gibt es beim Anbieter nicht. Prüfe den Modellnamen.", 404)
+    elif code == 429:
+        k = KiFehler("Dein KI-Anbieter sagt: Limit erreicht. Bitte später nochmal.", 429)
+    else:
+        k = KiFehler(f"Der KI-Anbieter antwortet gerade nicht ({code}).", code)
+    k.grund = grund
+    return k
+
+
 def _post(url: str, kopf: dict, daten: dict, timeout: float) -> dict:
     # Eigene Kennung: Anbieter hinter Cloudflare (z.B. Groq) blocken die Standard-Kennung "Python-urllib" mit 403 - sieht aus wie ein falscher Schluessel
     anfrage = urllib.request.Request(url, data=None if daten is None else json.dumps(daten).encode(),   # daten=None -> GET
@@ -118,20 +147,9 @@ def _post(url: str, kopf: dict, daten: dict, timeout: float) -> dict:
             grund = re.sub(r"\s+", " ", e.read().decode("utf-8", "replace"))[:240]
         except OSError:
             grund = ""
+        grund = _schwaerzen(grund)
         print(f"[Kalorien-KI] HTTP {e.code} von {url.split('?')[0].split('/models/')[-1]}: {grund}", flush=True)
-        if e.code == 403 and re.search(r"1010|1020|cloudflare|access denied|blocked", grund, re.I) and "api_key" not in grund.lower():
-            raise KiFehler("Der KI-Anbieter blockiert Anfragen von diesem Server (Schutzdienst) – das liegt nicht an deinem Schlüssel.", 403)
-        if e.code in (400, 404) and re.search(r"decommission|model_not_found|does not exist|no longer supported", grund, re.I):
-            raise KiFehler("Dieses Modell gibt es beim Anbieter nicht mehr. Wähle ein anderes: Eigene KI → „Verfügbare Modelle anzeigen“.", 404)
-        if e.code in (401, 403):
-            raise KiFehler("Der Anbieter hat den API-Schlüssel abgelehnt. Stimmt er, und hat er Guthaben?")
-        if e.code == 402:
-            raise KiFehler("Dein Konto beim KI-Anbieter hat kein Guthaben mehr.")
-        if e.code == 404:
-            raise KiFehler("Das Modell gibt es beim Anbieter nicht. Prüfe den Modellnamen.", 404)
-        if e.code == 429:
-            raise KiFehler("Dein KI-Anbieter sagt: Limit erreicht. Bitte später nochmal.", 429)
-        raise KiFehler(f"Der KI-Anbieter antwortet gerade nicht ({e.code}).", e.code)
+        raise _http_fehler(e.code, grund)
     except (OSError, ValueError) as e:
         grund = getattr(e, "reason", e)
         if isinstance(e, (TimeoutError, socket.timeout)) or isinstance(grund, (TimeoutError, socket.timeout)) or "timed out" in str(e).lower():
@@ -198,6 +216,10 @@ def chat(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, konfig
         cfg = {"temperature": 0.3, "maxOutputTokens": max_token}
         if json_modus:
             cfg["responseMimeType"] = "application/json"
+        denk = ([] if GEMINI_DENKEN == "standard" else [{"thinkingLevel": GEMINI_DENKEN}, {"thinkingBudget": 0}]) + [None]
+        di = 0
+        if denk[0]:
+            cfg["thinkingConfig"] = denk[0]
         versuche = [modell, modell] + ([MODELL_ERSATZ] if eigener_schluessel_nein and MODELL_ERSATZ and MODELL_ERSATZ != modell else [])
         n = 0
         while True:
@@ -207,6 +229,13 @@ def chat(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, konfig
                           min(timeout, GEMINI_TIMEOUT) if eigener_schluessel_nein else timeout)
                 break
             except KiFehler as e:
+                if e.code == 400 and di < len(denk) - 1:   # Modell kennt diese Denk-Einstellung nicht: naechste Stufe, dasselbe Modell gleich nochmal
+                    di += 1
+                    if denk[di]:
+                        cfg["thinkingConfig"] = denk[di]
+                    else:
+                        cfg.pop("thinkingConfig", None)
+                    continue
                 rest = versuche[n + 1:]
                 if e.code in (404, 429) + NETZ:
                     rest = [x for x in rest if x != m]   # Modell fehlt, Kontingent leer (gilt je Modell) oder zu langsam: gleich das Ersatzmodell, nicht dasselbe nochmal
@@ -248,11 +277,22 @@ def chat(system: str, nutzer: str, bild: tuple[bytes, str] | None = None, konfig
             raise KiFehler("Die KI hat nichts geantwortet.")
     # OpenAI-Format: OpenAI, Groq, OpenRouter
     inhalt = ([{"type": "text", "text": nutzer}] + ([{"type": "image_url", "image_url": {"url": f"data:{bild[1]};base64,{b64}"}}] if bild else []))
-    daten = {"model": modell, "temperature": 0.3, "max_tokens": max_token,
-             "messages": [{"role": "system", "content": system}, {"role": "user", "content": inhalt if bild else nutzer}]}
+    daten = {"model": modell, "temperature": 0.3, "messages": [{"role": "system", "content": system}, {"role": "user", "content": inhalt if bild else nutzer}]}
+    # Neuere Modelle (OpenAI-o/gpt-5, Groq gpt-oss) verlangen max_completion_tokens; OpenRouter kennt max_tokens
+    daten["max_completion_tokens" if anbieter in ("openai", "groq") else "max_tokens"] = max_token
+    if anbieter == "groq" and "gpt-oss" in modell:
+        daten["reasoning_effort"] = "low"   # schnell statt lange nachdenken
     if json_modus and anbieter in ("openai", "groq"):
         daten["response_format"] = {"type": "json_object"}
-    r = _post(ANBIETER[anbieter]["url"], {"Authorization": f"Bearer {key}"}, daten, timeout)
+    while True:
+        try:
+            r = _post(ANBIETER[anbieter]["url"], {"Authorization": f"Bearer {key}"}, daten, timeout)
+            break
+        except KiFehler as e:
+            optional = next((k for k in ("response_format", "reasoning_effort") if k in daten), None)
+            if e.code != 400 or optional is None:
+                raise
+            daten.pop(optional)   # das Modell mag diese Zusatzangabe nicht: ohne sie nochmal (der Auftrag verlangt JSON ohnehin)
     try:
         return r["choices"][0]["message"]["content"] or ""
     except (KeyError, IndexError, TypeError):
