@@ -153,11 +153,12 @@ def ki_test(_text: str = "") -> str:
             continue
         start = time.time()
         try:
-            ki.chat('Antworte nur mit dem JSON {"ok": true}.', "Test", None, konfig, True, 30, 40)
+            ki.chat('Antworte nur mit dem JSON {"ok": true}.', "Test", None, konfig, True, 30, 600)
             zeilen.append(f"✅ {name}: {time.time() - start:.1f} s")
         except ki.KiFehler as e:
             symbol = "⏱" if e.code == 599 else "❌"
-            zeilen.append(f"{symbol} {name}: {str(e)[:110]} ({time.time() - start:.0f} s)")
+            zusatz = f"\n   ↳ {e.grund[:130]}" if getattr(e, "grund", "") else ""   # Meldung des Anbieters (Schluessel geschwaerzt)
+            zeilen.append(f"{symbol} {name}: {str(e)[:110]} ({time.time() - start:.0f} s){zusatz}")
         except Exception as e:   # nie Interna oder Schluessel zeigen
             zeilen.append(f"❌ {name}: {type(e).__name__}")
     zeilen.append("Gemini-Zeitlimit in der App: " + f"{ki.GEMINI_TIMEOUT:g} s, dann geht es weiter zu Ersatzmodell, eigener KI, Groq.")

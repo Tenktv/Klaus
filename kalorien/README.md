@@ -115,3 +115,10 @@ dasselbe Modell, sondern gehen gleich zum Ersatzmodell, dann zur eigenen KI des 
 („Gemini hat zu lange gebraucht. Geschätzt mit …“). Telegram `/fit_ki_test` (nur Nikola) fragt Gemini, das Ersatzmodell und Groq vom Server aus ab und
 zeigt Antwortzeit bzw. Fehler je Anbieter (Schlüssel erscheinen nie).
 
+### Denken drosseln, Groq-Format
+
+Neue Gemini-Modelle „denken“ erst – schon eine Mini-Anfrage dauerte 13 s, echte Schätzungen liefen in den Timeout. Deshalb schickt die App
+`thinkingConfig` mit (`KALORIEN_GEMINI_DENKEN`, Standard `low`; `standard` = Modell-Voreinstellung); lehnt das Modell das mit 400 ab, probiert sie
+`thinkingBudget: 0` und dann ohne. Groq/OpenAI bekommen `max_completion_tokens` (statt `max_tokens`), `gpt-oss` zusätzlich `reasoning_effort: low`;
+bei 400 fallen `response_format` und `reasoning_effort` nacheinander weg. `/fit_ki_test` zeigt bei Fehlern die (geschwärzte) Meldung des Anbieters.
+

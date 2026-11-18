@@ -203,3 +203,14 @@ class TestKiTestBefehl(unittest.TestCase):
         tg = TG()
         K.befehle_einrichten(tg)
         self.assertIn("/fit_ki_test", tg.befehle)
+
+
+class TestKiTestZeigtGrund(unittest.TestCase):
+    def test_grund_des_anbieters_erscheint_in_der_antwort(self):
+        from kalorien import ki
+        fehler = ki.KiFehler("Der KI-Anbieter antwortet gerade nicht (400).", 400, "unsupported parameter: response_format")
+        with mock.patch.object(ki, "schluessel", return_value=""), mock.patch.dict(os.environ, {"GROQ_API_KEY": "g" * 20}), \
+                mock.patch.object(ki, "chat", side_effect=fehler):
+            text = K.ki_test()
+        self.assertIn("unsupported parameter: response_format", text)
+        self.assertIn("(400)", text)

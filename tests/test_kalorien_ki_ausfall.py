@@ -411,3 +411,73 @@ class TestZeitueberschreitung(unittest.TestCase):
             return GROQ_OK
         with mock.patch.object(ki, "_post", side_effect=post):
             self.assertEqual(ki.aus_text("Brot", marker())["gerichte"][0]["name"], "Groq-Brot")
+
+
+class TestDenkenUndGroqFormat(unittest.TestCase):
+    def setUp(self):
+        for p in (mock.patch.object(ki, "schluessel", return_value="k"), mock.patch.object(ki, "MODELL_ERSATZ", "ersatz-modell"),
+                  mock.patch.object(ki.time, "sleep"), mock.patch.dict(os.environ, {"GROQ_API_KEY": ""})):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_gemini_bekommt_wenig_denken_und_faellt_stufenweise_zurueck(self):
+        gesehen = []
+
+        def post(url, kopf, daten, timeout):
+            gesehen.append(dict(daten["generationConfig"].get("thinkingConfig") or {}))
+            if len(gesehen) < 3:
+                raise ki.KiFehler("Der KI-Anbieter antwortet gerade nicht (400).", 400)   # Modell kennt erst thinkingLevel, dann Budget nicht
+            return GEMINI_OK
+        with mock.patch.object(ki, "_post", side_effect=post):
+            ki.chat("s", "n")
+        self.assertEqual(gesehen, [{"thinkingLevel": "low"}, {"thinkingBudget": 0}, {}])   # zuletzt ohne Denk-Einstellung
+
+    def test_standard_laesst_das_denken_unveraendert(self):
+        with mock.patch.object(ki, "GEMINI_DENKEN", "standard"), mock.patch.object(ki, "_post", return_value=GEMINI_OK) as p:
+            ki.chat("s", "n")
+        self.assertNotIn("thinkingConfig", p.call_args.args[2]["generationConfig"])
+
+    def test_groq_nutzt_max_completion_tokens_und_wenig_nachdenken(self):
+        konfig = {"anbieter": "groq", "schluessel": "g" * 20, "modell": "openai/gpt-oss-120b"}
+        with mock.patch.object(ki, "_post", return_value=GROQ_OK) as p:
+            ki.chat("s", "n", konfig=konfig, max_token=700)
+        daten = p.call_args.args[2]
+        self.assertEqual(daten["max_completion_tokens"], 700)
+        self.assertNotIn("max_tokens", daten)
+        self.assertEqual(daten["reasoning_effort"], "low")
+
+    def test_groq_400_wirft_zusatzangaben_nacheinander_ab(self):
+        konfig = {"anbieter": "groq", "schluessel": "g" * 20, "modell": "openai/gpt-oss-120b"}
+        aufrufe = []
+
+        def post(url, kopf, daten, timeout):
+            aufrufe.append(sorted(k for k in ("response_format", "reasoning_effort") if k in daten))
+            if len(aufrufe) < 3:
+                raise ki.KiFehler("Der KI-Anbieter antwortet gerade nicht (400).", 400)
+            return GROQ_OK
+        with mock.patch.object(ki, "_post", side_effect=post):
+            ki.chat("s", "n", konfig=konfig)
+        self.assertEqual(aufrufe, [["reasoning_effort", "response_format"], ["reasoning_effort"], []])
+
+    def test_groq_400_ohne_zusatzangaben_wird_nicht_endlos_wiederholt(self):
+        konfig = {"anbieter": "groq", "schluessel": "g" * 20, "modell": "x/y"}
+        with mock.patch.object(ki, "_post", side_effect=ki.KiFehler("400", 400)) as p, self.assertRaises(ki.KiFehler):
+            ki.chat("s", "n", konfig=konfig)
+        self.assertLessEqual(p.call_count, 2)   # nur response_format fiel weg, dann Schluss
+
+    def test_openrouter_behaelt_max_tokens(self):
+        konfig = {"anbieter": "openrouter", "schluessel": "o" * 20, "modell": "m/x"}
+        with mock.patch.object(ki, "_post", return_value=GROQ_OK) as p:
+            ki.chat("s", "n", konfig=konfig, max_token=500)
+        self.assertEqual(p.call_args.args[2]["max_tokens"], 500)
+
+    def test_anbieter_grund_ist_geschwaerzt_und_nur_im_zusatzfeld(self):
+        import io
+        import urllib.error
+        body = b'{"error":{"message":"Invalid key gsk_ABCDEFGH12345678 for model x"}}'
+        err = urllib.error.HTTPError("u", 400, "Bad Request", {}, io.BytesIO(body))
+        with mock.patch("urllib.request.urlopen", side_effect=err), self.assertRaises(ki.KiFehler) as ctx:
+            ki._post("https://api.groq.com/x", {}, {}, 5)
+        self.assertNotIn("ABCDEFGH", ctx.exception.grund)
+        self.assertIn("gsk_…", ctx.exception.grund)
+        self.assertNotIn("gsk_", str(ctx.exception))   # die Meldung an die App enthaelt nie den Anbietertext
