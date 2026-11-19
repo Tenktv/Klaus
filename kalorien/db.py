@@ -8,6 +8,7 @@ import secrets
 import sqlite3
 import threading
 import time
+import zlib
 from pathlib import Path
 
 DATEI = Path(os.getenv("KALORIEN_DB") or Path(__file__).resolve().parent.parent / "data" / "kalorien.db")
@@ -93,8 +94,12 @@ CREATE TABLE IF NOT EXISTS routine (
 """
 
 
-_eingerichtet: set = set()
 _einricht_sperre = threading.Lock()
+NACHRUESTEN = "nachruesten-2"   # beim Hinzufuegen neuer ALTER-Spalten in _einrichten() hochzaehlen (SCHEMA-Aenderungen erkennt der Hash selbst)
+
+
+def _stand() -> int:
+    return zlib.crc32((SCHEMA + "|" + NACHRUESTEN).encode()) & 0x7FFFFFFF
 
 
 def verbinden() -> sqlite3.Connection:
@@ -102,19 +107,13 @@ def verbinden() -> sqlite3.Connection:
     c = sqlite3.connect(DATEI, timeout=15)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA foreign_keys=ON")
-    try:
-        schluessel = (str(DATEI), DATEI.stat().st_ino)
-    except OSError:
-        schluessel = None
-    # Schema und Nachruest-Befehle holen die Schreibsperre: nur einmal je Datei und Prozess, nicht bei jeder Anfrage
-    # (sonst warten alle Anfragen auf eine lange KI-Anfrage und enden mit "database is locked").
-    if schluessel is None or schluessel not in _eingerichtet:
+    # Schema und Nachruest-Befehle holen die Schreibsperre: nur einrichten, wenn die Datei noch nicht auf dem aktuellen Stand ist
+    # (steht in PRAGMA user_version) - nicht bei jeder Anfrage, sonst warten alle auf eine lange KI-Anfrage ("database is locked").
+    if c.execute("PRAGMA user_version").fetchone()[0] != _stand():
         with _einricht_sperre:
-            _einrichten(c)
-            try:
-                _eingerichtet.add((str(DATEI), DATEI.stat().st_ino))
-            except OSError:
-                pass
+            if c.execute("PRAGMA user_version").fetchone()[0] != _stand():
+                _einrichten(c)
+                c.execute(f"PRAGMA user_version={_stand()}")
     return c
 
 

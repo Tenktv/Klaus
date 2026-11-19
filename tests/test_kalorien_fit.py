@@ -98,7 +98,7 @@ class TestPro(Fit):
         self.assertEqual(ergebnis[0][0], 503)
         c = db.verbinden()
         try:
-            n = c.execute("SELECT COALESCE(SUM(n),0) FROM ki_nutzung").fetchone()[0]
+            n = c.execute("SELECT COALESCE(SUM(k.n),0) FROM ki_nutzung k JOIN nutzer u ON u.id=k.nutzer WHERE u.name=?", ("Lang Lena",)).fetchone()[0]
         finally:
             c.close()
         self.assertEqual(n, 0, "fehlgeschlagene KI-Anfrage darf das Tageslimit nicht verbrauchen")
