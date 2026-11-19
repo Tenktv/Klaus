@@ -76,6 +76,33 @@ class TestPro(Fit):
         self.api("PUT", "/api/ich", {"verbrauch": "quatsch"}, token=t)
         self.assertEqual(self.api("GET", "/api/tag", token=t)[1]["verbrauch_modus"], "ja")
 
+    def test_lange_ki_anfrage_blockiert_andere_nicht_und_fehlschlag_zaehlt_nicht(self):
+        import threading
+        langsam, frei = self.neu("Lang Lena"), self.neu("Schnell Sam")
+
+        def fake(system, nutzer, bild=None, konfig=None, json_modus=True, timeout=60, max_token=1800):
+            time.sleep(2.5)
+            raise ki.KiFehler("Die KI antwortet gerade nicht.")
+        ergebnis = []
+        with mock.patch.object(ki, "schluessel", return_value="x"), mock.patch.object(ki, "chat", fake):
+            th = threading.Thread(target=lambda: ergebnis.append(self.api("POST", "/api/schaetzen/text", {"text": "ein Apfel"}, langsam)))
+            th.start()
+            time.sleep(0.6)   # die KI-Anfrage laeuft jetzt
+            t0 = time.time()
+            s1, _ = self.api("GET", "/api/tag", token=frei)
+            s2, _ = self.api("POST", "/api/wasser", {"ml": 250}, frei)
+            dauer = time.time() - t0
+            th.join()
+        self.assertEqual((s1, s2), (200, 200))
+        self.assertLess(dauer, 2.0, "andere Anfragen duerfen nicht auf die KI warten")
+        self.assertEqual(ergebnis[0][0], 503)
+        c = db.verbinden()
+        try:
+            n = c.execute("SELECT COALESCE(SUM(n),0) FROM ki_nutzung").fetchone()[0]
+        finally:
+            c.close()
+        self.assertEqual(n, 0, "fehlgeschlagene KI-Anfrage darf das Tageslimit nicht verbrauchen")
+
     def test_frei_ist_nicht_pro_admin_schon(self):
         frei, chef = self.neu("Frei Frida"), self.chef()
         self.assertFalse(self.api("GET", "/api/ich", token=frei)[1]["plan"]["pro"])

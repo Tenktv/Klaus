@@ -133,6 +133,7 @@ def nutzer_aus(c, kopf: str):
     if not z or z["gesperrt"]:
         raise Fehler(401, "Bitte neu anmelden.")
     c.execute("UPDATE zugang SET zuletzt=? WHERE hash=?", (db.jetzt(), h))
+    c.commit()   # Schreibsperre sofort wieder frei: danach koennen langsame Anfragen (KI) andere nicht blockieren
     return z
 
 
@@ -236,6 +237,23 @@ def ki_zaehlen(c, z) -> None:
         raise Fehler(429, f"Heute sind {grenze} KI-Anfragen aufgebraucht." + (" Du kannst weiter von Hand eintragen." if pro.ist_pro(z)
                                                                               else " Mit Pro gibt es mehr – oder trag deine eigene KI ein."))
     c.execute("UPDATE ki_nutzung SET n=n+1 WHERE nutzer=? AND tag=?", (z["id"], t))
+    c.commit()   # Sperre frei, bevor die (bis zu ~100 s lange) KI-Anfrage startet
+    _ki_offen.z = (z["id"], t)
+
+
+_ki_offen = threading.local()   # gezaehlte KI-Anfrage dieses Threads: schlaegt die Anfrage fehl, wird der Verbrauch zurueckgegeben
+
+
+def _ki_erstatten() -> None:
+    z, _ki_offen.z = getattr(_ki_offen, "z", None), None
+    if not z:
+        return
+    c = db.verbinden()
+    try:
+        c.execute("UPDATE ki_nutzung SET n=MAX(0, n-1) WHERE nutzer=? AND tag=?", z)
+        c.commit()
+    finally:
+        c.close()
 
 
 def ki_vorbereiten(c, z) -> dict | None:
@@ -554,12 +572,17 @@ class Handler(BaseHTTPRequestHandler):
                     raise Fehler(400, "Kein gültiges JSON.")
                 if not isinstance(body, dict):
                     raise Fehler(400, "Kein gültiges JSON.")
+            _ki_offen.z = None
+            erfolg = False
             c = db.verbinden()
             try:
                 antwort = self._route(c, methode, u.path[5:].strip("/"), {k: v[0] for k, v in parse_qs(u.query).items()}, body)
                 c.commit()
+                erfolg = True
             finally:
                 c.close()
+                if not erfolg:
+                    _ki_erstatten()
             self._senden(200, antwort)
         except (Fehler, sozial.SozialFehler, pro.ProFehler, rezepte.RezeptFehler, workouts.WorkoutFehler, reels.ReelFehler) as e:
             self._senden(e.status, {"fehler": e.text})

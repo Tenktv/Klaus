@@ -6,6 +6,7 @@ import hmac
 import os
 import secrets
 import sqlite3
+import threading
 import time
 from pathlib import Path
 
@@ -92,11 +93,32 @@ CREATE TABLE IF NOT EXISTS routine (
 """
 
 
+_eingerichtet: set = set()
+_einricht_sperre = threading.Lock()
+
+
 def verbinden() -> sqlite3.Connection:
     DATEI.parent.mkdir(parents=True, exist_ok=True)
     c = sqlite3.connect(DATEI, timeout=15)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA foreign_keys=ON")
+    try:
+        schluessel = (str(DATEI), DATEI.stat().st_ino)
+    except OSError:
+        schluessel = None
+    # Schema und Nachruest-Befehle holen die Schreibsperre: nur einmal je Datei und Prozess, nicht bei jeder Anfrage
+    # (sonst warten alle Anfragen auf eine lange KI-Anfrage und enden mit "database is locked").
+    if schluessel is None or schluessel not in _eingerichtet:
+        with _einricht_sperre:
+            _einrichten(c)
+            try:
+                _eingerichtet.add((str(DATEI), DATEI.stat().st_ino))
+            except OSError:
+                pass
+    return c
+
+
+def _einrichten(c: sqlite3.Connection) -> None:
     c.execute("PRAGMA journal_mode=WAL")
     c.executescript(SCHEMA)
     spalten = {r["name"] for r in c.execute("PRAGMA table_info(nutzer)")}
@@ -113,7 +135,6 @@ def verbinden() -> sqlite3.Connection:
         os.chmod(DATEI, 0o600)
     except OSError:
         pass
-    return c
 
 
 def pw_hash(passwort: str, salz: str) -> str:
