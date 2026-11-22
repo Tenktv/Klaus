@@ -201,7 +201,7 @@ export async function adminSeite(ctx) {
 
 
 /* ---------- Welche Nährwerte verfolgen? ---------- */
-const verfolgtText = () => { const l = S.ich.profil && S.ich.profil.mikro_track; return Array.isArray(l) ? `${l.length} von ${S.ich.mikro_katalog.length} ausgewählt` : "Alle Vitamine & Mineralstoffe"; };
+const verfolgtText = () => { const l = S.ich.profil && S.ich.profil.mikro_track; return Array.isArray(l) ? `${l.length} von ${(S.ich.mikro_katalog || []).length} ausgewählt` : "Alle Vitamine & Mineralstoffe"; };
 function trackingSheet() {
   const kat = S.ich.mikro_katalog || [], an = new Set(kat.filter(k => verfolgt(k.key)).map(k => k.key));
   const gruppen = {basis: "Basis", vitamin: "Vitamine", mineral: "Mineralstoffe"};

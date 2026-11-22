@@ -107,3 +107,4 @@ window.addEventListener("fit:angemeldet", async e => {
   if (e.detail && e.detail.neu) { await navigieren(); willkommen(); } else navigieren();
 });
 navigieren();
+window.__fitOk = true;   // meldet dem Rettungsknopf (rettung.js): App ist gestartet
