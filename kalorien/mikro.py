@@ -35,6 +35,10 @@ KATALOG = [
 _NACH_KEY = {k["key"]: k for k in KATALOG}
 
 
+def schluessel() -> list[str]:
+    return [e["key"] for e in KATALOG]
+
+
 def katalog_oeffentlich() -> list[dict]:
     """Fuer die App: Name, Einheit, Tagesziel, Art, Gruppe (ohne die Umrechnungsdetails)."""
     return [{k: e[k] for k in ("key", "name", "einheit", "ziel", "art", "gruppe")} for e in KATALOG]

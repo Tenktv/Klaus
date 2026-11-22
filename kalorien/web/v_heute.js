@@ -1,6 +1,6 @@
 /* Heute: Kalorien-Tacho, Makros, Wasser, Gewicht, Training, Mahlzeiten, Rezept-Tipps. */
 import {S, h, api, los, leeren, icon, kopf, avatar, tacho, linie, zahl, de, heute, tagName, MAHLZEITEN, proMarke, istPro} from "./core.js";
-import {wasserSheet, gewichtSheet, eintragSheet, schritteSheet, verbrauchSheet, VERBRAUCH, neuLaden} from "./v_essen.js";
+import {verfolgt, wasserSheet, gewichtSheet, eintragSheet, schritteSheet, verbrauchSheet, VERBRAUCH, neuLaden} from "./v_essen.js";
 import {rezeptKarte} from "./v_rezepte.js";
 
 export async function heuteSeite(ctx) {
@@ -29,7 +29,7 @@ export async function heuteSeite(ctx) {
   const makroKarte = h("div", {class: "karte"}, makro("Eiweiß", t.summe.eiweiss, t.ziele.eiweiss, "var(--volt)"), makro("Kohlenhydrate", t.summe.kh, t.ziele.kh, "var(--ice)"), makro("Fett", t.summe.fett, t.ziele.fett, "var(--gold)"));
 
   // Vitamine & Mineralstoffe: Balken je Wert (Richtwert = 100 %), nur was heute vorkam
-  const kat = (S.ich && S.ich.mikro_katalog) || [], ms = t.mikro_summe || {};
+  const kat = ((S.ich && S.ich.mikro_katalog) || []).filter(k => verfolgt(k.key)), ms = t.mikro_summe || {};
   const mikroBalken = k => { const w = ms[k.key] || 0, anteil = w / k.ziel, ueber = k.art === "max" && anteil > 1;
     return h("div", {class: "makro" + (ueber ? " ueber" : ""), style: {"--c": k.art === "max" ? "var(--gold)" : "var(--volt)"}},
       h("div", {class: "kopfz"}, h("span", {}, k.name), h("span", {}, h("b", {}, de(Math.round(w * 10) / 10)), h("span", {class: "mut"}, ` / ${de(k.ziel)} ${k.einheit}`))),

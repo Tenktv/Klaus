@@ -9,6 +9,7 @@ lässt sich per Schnittstelle mit Klaus, Telegram oder Kurzbefehlen verbinden.
 | Beschreiben („2 Scheiben Vollkornbrot mit …“) → detaillierte Schätzung | ✅ |
 | Barcode scannen (Kamera) oder Nummer tippen → Open Food Facts, Menge in Gramm | ✅ |
 | Vitamine, Mineralstoffe, Ballaststoffe, Zucker, Salz je Eintrag (KI-Schätzung bzw. Open Food Facts), Tagesbalken auf „Heute“ mit Richtwerten | ✅ |
+| Einstellungen: Nährwerte auswählen, die verfolgt werden; Erinnerung per Push-Benachrichtigung nach N Tagen ohne Aktivität (installierte Web-App, iOS ab 16.4) | ✅ |
 | Von Hand eintragen, Mahlzeiten, Tagesring, 7-Tage-Übersicht, Tagesziele (auch berechnet) | ✅ |
 | Forum (Beiträge, Antworten) und Community-Chat | ✅ |
 | Melden, Blockieren, Löschen, Moderator-Liste, Textfilter, Sende-Bremsen | ✅ |
