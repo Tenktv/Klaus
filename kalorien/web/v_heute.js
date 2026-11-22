@@ -28,6 +28,19 @@ export async function heuteSeite(ctx) {
     h("div", {class: "kopfz"}, h("span", {class: "lab"}, name), h("span", {}, h("b", {}, zahl(w)), h("span", {class: "mut"}, ` / ${zahl(z)} g`))), h("div", {class: "bar"}, h("i", {style: {width: Math.min(100, z ? w / z * 100 : 0) + "%"}})));
   const makroKarte = h("div", {class: "karte"}, makro("Eiweiß", t.summe.eiweiss, t.ziele.eiweiss, "var(--volt)"), makro("Kohlenhydrate", t.summe.kh, t.ziele.kh, "var(--ice)"), makro("Fett", t.summe.fett, t.ziele.fett, "var(--gold)"));
 
+  // Vitamine & Mineralstoffe: Balken je Wert (Richtwert = 100 %), nur was heute vorkam
+  const kat = (S.ich && S.ich.mikro_katalog) || [], ms = t.mikro_summe || {};
+  const mikroBalken = k => { const w = ms[k.key] || 0, anteil = w / k.ziel, ueber = k.art === "max" && anteil > 1;
+    return h("div", {class: "makro" + (ueber ? " ueber" : ""), style: {"--c": k.art === "max" ? "var(--gold)" : "var(--volt)"}},
+      h("div", {class: "kopfz"}, h("span", {}, k.name), h("span", {}, h("b", {}, de(Math.round(w * 10) / 10)), h("span", {class: "mut"}, ` / ${de(k.ziel)} ${k.einheit}`))),
+      h("div", {class: "bar"}, h("i", {style: {width: Math.min(100, anteil * 100) + "%"}}))); };
+  const mikroKarte = kat.length && Object.keys(ms).length ? h("button", {class: "karte klick", style: {textAlign: "left", width: "100%"}, onclick: () => sheet("Vitamine & Mineralstoffe", () => [
+    h("p", {class: "mut klein", style: {margin: "0 0 12px"}}, "Grobe Schätzung aus deinen Einträgen, Richtwerte für Erwachsene (keine medizinische Beratung). Nicht jedes Lebensmittel liefert alle Werte."),
+    ["basis", "vitamin", "mineral"].map(g => [h("div", {class: "lab", style: {margin: "12px 0 6px"}}, {basis: "Basis", vitamin: "Vitamine", mineral: "Mineralstoffe"}[g]),
+      kat.filter(k => k.gruppe === g && ms[k.key] > 0).map(mikroBalken)])])},
+    h("div", {class: "lab", style: {marginBottom: "10px"}}, "Vitamine & Mineralstoffe · antippen"),
+    kat.filter(k => ["ballaststoffe", "zucker", "salz"].some(x => x === k.key) && ms[k.key] > 0).map(mikroBalken)) : null;
+
   const wasserKarte = h("button", {class: "karte klick", style: {textAlign: "left", margin: 0}, onclick: () => los(wasserSheet), "aria-label": "Wasser eintragen"},
     h("div", {class: "lab", style: {marginBottom: "10px"}}, "Wasser"),
     h("div", {class: "wasser"}, h("div", {class: "glas", style: {width: "34px", height: "50px"}}, h("i", {style: {height: Math.min(100, t.wasser_ml / t.ziel_wasser * 100) + "%"}})),
@@ -71,7 +84,7 @@ export async function heuteSeite(ctx) {
   leeren(ctx.box, h("div", {class: "in"},
     kopf(istHeute ? "Heute" : tagName(S.datum, {weekday: "long"}), tagName(S.datum, {weekday: "long", day: "numeric", month: "long"}).toUpperCase(),
       [serie, h("button", {onclick: () => { location.hash = "#/ich"; }, "aria-label": "Profil und Einstellungen"}, avatar(S.ich.name))]),
-    leiste, tachoKarte, makroKarte, h("div", {class: "raster r2", style: {marginBottom: "12px"}}, wasserKarte, gewichtKarte), schritteKarte, trainingKarte,
+    leiste, tachoKarte, makroKarte, mikroKarte, h("div", {class: "raster r2", style: {marginBottom: "12px"}}, wasserKarte, gewichtKarte), schritteKarte, trainingKarte,
     rezepte.length ? [h("div", {class: "abschnitt"}, h("h2", {}, "Rezepte"), h("a", {href: "#/rezepte"}, "Alle")),
       h("div", {class: "chips"}, rezepte.slice(0, 6).map(r => h("div", {style: {width: "164px", flex: "none"}}, rezeptKarte(r))))] : null,
     istPro() ? null : h("button", {class: "karte pro-held klick", style: {width: "100%", textAlign: "left", marginTop: "14px"}, onclick: () => { location.hash = "#/pro"; }},

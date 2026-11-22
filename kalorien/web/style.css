@@ -351,3 +351,6 @@ body.reels #leiste{background:rgba(0,0,0,.35);border-top-color:rgba(255,255,255,
 .text-knopf.bad{color:var(--bad)}
 .herz-knopf{flex:none!important;width:56px}
 .f-lab{display:block;margin:0 0 5px}
+.mikro-box{margin-top:12px;border-top:1px solid var(--s3);padding-top:10px}
+.mikro-box summary{cursor:pointer;font:600 13px/1.2 var(--body,inherit);color:var(--mut,#888);padding:4px 0}
+.mikro-liste{margin-top:8px}.mikro-liste .zeile{padding:5px 0;font-size:14px;border-bottom:1px solid var(--s3)}.mikro-liste .zeile:last-child{border:0}
