@@ -103,6 +103,18 @@ export function ergebnis(box, gerichte, quelle, hinweis, vorschau) {
     name: h("input", {value: g.name, placeholder: "Name", maxlength: 120, "aria-label": "Name"}), menge: h("input", {value: g.menge, placeholder: "Menge", maxlength: 40, "aria-label": "Menge"}),
     kcal: num(g.kcal, "kcal", zahl), eiweiss: num(g.eiweiss, "Eiweiß g", eins), kh: num(g.kh, "KH g", eins), fett: num(g.fett, "Fett g", eins)}));
   felder.forEach(f => mitwachsen(f.menge, [[f.kcal, zahl], [f.eiweiss, eins], [f.kh, eins], [f.fett, eins]]));
+  // Beschriftete Felder: in einem ausgefuellten Feld verschwindet der Platzhalter - darum steht immer ein Name darueber
+  const beschr = (text, feld) => h("label", {class: "feld", style: {display: "block"}}, h("span", {class: "lab", style: {display: "block", marginBottom: "5px"}}, text), feld);
+  // Gesamtsumme (alle Gerichte) oben, rechnet bei jeder Aenderung mit
+  const zelle = (n) => { const z = h("b", {class: "zahl", style: {display: "block", fontSize: "28px", lineHeight: 1.1}}, "0"); return [z, h("div", {class: "summe-teil"}, z, h("span", {class: "lab"}, n))]; };
+  const [zk, ck] = zelle("kcal"), [ze, ce] = zelle("Eiweiß g"), [zh, ch] = zelle("Kohlenh. g"), [zf, cf] = zelle("Fett g");
+  const summe = h("div", {class: "karte summe", style: {display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px", textAlign: "center", marginBottom: "12px"}}, ck, ce, ch, cf);
+  const zaehle = () => {
+    const sum = k => felder.reduce((a, f) => a + (Number(f[k].value) || 0), 0);
+    zk.textContent = zahl(sum("kcal")); ze.textContent = eins(sum("eiweiss")); zh.textContent = eins(sum("kh")); zf.textContent = eins(sum("fett"));
+  };
+  felder.forEach(f => [f.kcal, f.eiweiss, f.kh, f.fett, f.menge].forEach(x => x.addEventListener("input", zaehle)));   // Menge: nach dem Umrechnen von mitwachsen
+  zaehle();
   const chips = h("div", {class: "seg", style: {margin: "4px 0 14px"}});
   const male = () => leeren(chips, Object.entries(MAHLZEITEN).map(([k, n]) => h("button", {class: mahlzeit === k ? "an" : "", onclick: () => { mahlzeit = k; male(); }}, n)));
   male();
@@ -115,8 +127,10 @@ export function ergebnis(box, gerichte, quelle, hinweis, vorschau) {
   })}, icon("haken"), "Eintragen");
   leeren(box, quelle === "hand" ? null : ki("Prüfe die Werte, du kannst alles ändern. " + (hinweis || "")),
     vorschau ? h("img", {src: vorschau, alt: "", style: {width: "100%", maxHeight: "200px", objectFit: "cover", borderRadius: "14px", marginBottom: "12px"}}) : null,
-    felder.map(f => h("div", {class: "karte ergebnis-karte"}, h("div", {class: "feld"}, f.name), h("div", {class: "feld"}, f.menge),
-      h("div", {class: "r2 raster", style: {marginBottom: "10px"}}, f.kcal, f.eiweiss), h("div", {class: "r2 raster"}, f.kh, f.fett))),
+    quelle === "hand" ? null : h("div", {class: "lab", style: {margin: "4px 0 6px"}}, "Zusammen"), quelle === "hand" ? null : summe,
+    felder.map(f => h("div", {class: "karte ergebnis-karte"}, beschr("Gericht", f.name), beschr("Menge", f.menge),
+      h("div", {class: "r2 raster", style: {marginBottom: "10px"}}, beschr("Kalorien (kcal)", f.kcal), beschr("Eiweiß (g)", f.eiweiss)),
+      h("div", {class: "r2 raster"}, beschr("Kohlenhydrate (g)", f.kh), beschr("Fett (g)", f.fett)))),
     h("div", {class: "lab", style: {margin: "14px 0 6px"}}, "Mahlzeit"), chips, senden);
 }
 
