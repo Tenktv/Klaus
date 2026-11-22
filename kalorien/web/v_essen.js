@@ -96,9 +96,13 @@ function mitwachsen(mengeFeld, werte) {   // werte: [[inputFeld, rundenFn], ...]
 }
 
 /* Vitamine & Co: Liste "Name  Wert Einheit" aus {schluessel: wert}; Katalog kommt vom Server (S.ich.mikro_katalog). */
+export function verfolgt(key) {   // Einstellung "Was soll ich verfolgen?" (ohne Auswahl: alles)
+  const l = S.ich && S.ich.profil && S.ich.profil.mikro_track;
+  return !Array.isArray(l) || l.includes(key);
+}
 export function mikroListe(werte, gruppen) {
   const kat = (S.ich && S.ich.mikro_katalog) || [];
-  const zeilen = kat.filter(k => werte && werte[k.key] > 0 && (!gruppen || gruppen.includes(k.gruppe)));
+  const zeilen = kat.filter(k => werte && werte[k.key] > 0 && verfolgt(k.key) && (!gruppen || gruppen.includes(k.gruppe)));
   if (!zeilen.length) return h("div", {class: "mut klein"}, "Keine Angaben.");
   return h("div", {class: "mikro-liste"}, zeilen.map(k => h("div", {class: "zeile zwischen"}, h("span", {}, k.name), h("b", {}, de(Math.round(werte[k.key] * 10) / 10) + " " + k.einheit))));
 }
@@ -143,7 +147,7 @@ export function ergebnis(box, gerichte, quelle, hinweis, vorschau) {
     felder.map(f => h("div", {class: "karte ergebnis-karte"}, beschr("Gericht", f.name), beschr("Menge", f.menge),
       h("div", {class: "r2 raster", style: {marginBottom: "10px"}}, beschr("Kalorien (kcal)", f.kcal), beschr("Eiweiß (g)", f.eiweiss)),
       h("div", {class: "r2 raster"}, beschr("Kohlenhydrate (g)", f.kh), beschr("Fett (g)", f.fett)),
-      Object.keys(f.mikro).length ? h("details", {class: "mikro-box"}, h("summary", {}, "Vitamine & Mineralstoffe (geschätzt)"), f.mikroBox) : null)),
+      Object.keys(f.mikro).some(verfolgt) ? h("details", {class: "mikro-box"}, h("summary", {}, "Vitamine & Mineralstoffe (geschätzt)"), f.mikroBox) : null)),
     h("div", {class: "lab", style: {margin: "14px 0 6px"}}, "Mahlzeit"), chips, senden);
 }
 

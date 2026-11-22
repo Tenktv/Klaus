@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import db, ki, mikro, nahrung, pro, reels, rezepte, sozial, workouts, schalter
+from . import push, db, ki, mikro, nahrung, pro, reels, rezepte, sozial, workouts, schalter
 
 WEB = Path(__file__).resolve().parent / "web"
 PORT = int(os.getenv("KALORIEN_PORT", "7730") or 7730)   # .env wird erst im Start geladen -> dort nochmal lesen
@@ -141,7 +141,7 @@ def ich(z) -> dict:
     return {"name": z["name"], "admin": z["name"].lower() in _admins(), "ki": ki.verfuegbar(), "plan": pro.plan(z), "video": reels.verfuegbar(),
             "profil": json.loads(z["profil"] or "{}"), "bio": z["bio"] or "", "rangliste": bool(z["in_rangliste"]),
             "ziele": {"kcal": z["ziel_kcal"], "eiweiss": z["ziel_eiweiss"], "kh": z["ziel_kh"], "fett": z["ziel_fett"]},
-            "mikro_katalog": mikro.katalog_oeffentlich()}
+            "mikro_katalog": mikro.katalog_oeffentlich(), "push_moeglich": push.VERFUEGBAR}
 
 
 VERBRAUCH = {"nein": 0.0, "halb": 0.5, "ja": 1.0}   # wie viel des Verbrauchs (Training, Schritte) das Tagesbudget erhoeht
@@ -159,10 +159,18 @@ def profil_speichern(c, z, d: dict) -> dict:
             raise Fehler(400, str(e) if isinstance(e, ValueError) and str(e) else "Bitte alle Angaben ausfüllen.")
         ziele = {k[5:]: v for k, v in erg.items()}
         profil = {k: b.get(k) for k in ("geschlecht", "alter", "groesse", "gewicht", "aktivitaet", "ziel")}
-        if "verbrauch" in json.loads(z["profil"] or "{}"):
-            profil["verbrauch"] = json.loads(z["profil"])["verbrauch"]
+        for k in ("verbrauch", "mikro_track", "erinnerung_tage"):   # Einstellungen bleiben beim Neuberechnen der Ziele erhalten
+            if k in json.loads(z["profil"] or "{}"):
+                profil[k] = json.loads(z["profil"])[k]
     if d.get("verbrauch") in VERBRAUCH:
         profil["verbrauch"] = d["verbrauch"]
+    if isinstance(d.get("mikro_track"), list):   # welche Vitamine/Naehrwerte die Karte "Heute" zeigt und die Auswertung beruecksichtigt
+        profil["mikro_track"] = [k for k in mikro.schluessel() if k in d["mikro_track"]]
+    if "erinnerung_tage" in d:   # Erinnerung nach N Tagen ohne Aktivitaet (0 = aus)
+        try:
+            profil["erinnerung_tage"] = max(0, min(14, int(d["erinnerung_tage"])))
+        except (TypeError, ValueError):
+            raise Fehler(400, "Tage müssen eine Zahl sein.")
     if "bio" in d:
         c.execute("UPDATE nutzer SET bio=? WHERE id=?", (_text(d["bio"], "Über mich", 0, 160) if str(d["bio"]).strip() else "", z["id"]))
     if "rangliste" in d:
@@ -565,7 +573,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._datei(u.path) if methode in ("GET", "HEAD") else self._senden(405, {"fehler": "nicht erlaubt"})
         try:
             body = {}
-            if methode in ("POST", "PUT"):
+            if methode in ("POST", "PUT", "DELETE"):
                 laenge = int(self.headers.get("Content-Length") or 0)
                 if laenge > MAX_BODY:
                     raise Fehler(413, "Zu groß.")
@@ -620,6 +628,21 @@ class Handler(BaseHTTPRequestHandler):
                 return profil_speichern(c, z, d)
             if m == "DELETE":
                 return konto_loeschen(c, z)
+        if t0 == "push":
+            if not push.VERFUEGBAR:
+                raise Fehler(503, "Benachrichtigungen sind auf diesem Server nicht eingerichtet.")
+            if m == "GET" and len(teile) == 2 and teile[1] == "schluessel":
+                return {"key": push.oeffentlicher_schluessel()}
+            if m == "POST" and len(teile) == 2 and teile[1] == "abo":
+                try:
+                    return push.abo_speichern(c, z["id"], d)
+                except ValueError as e:
+                    raise Fehler(400, str(e))
+            if m == "DELETE" and len(teile) == 2 and teile[1] == "abo":
+                return push.abo_loeschen(c, z["id"], d.get("endpoint"))
+            if m == "POST" and len(teile) == 2 and teile[1] == "test":
+                _bremse(f"pushtest:{z['id']}", 5)
+                return {"gesendet": push.test_senden(c, z["id"])}
         if t0 == "export" and m == "GET":
             return export(c, z)
         if t0 == "tag" and m == "GET":
@@ -881,6 +904,7 @@ if __name__ == "__main__":
         pass
     s = starten(port=int(os.getenv("KALORIEN_PORT", "7730") or 7730))
     if os.getenv("INVOCATION_ID") and os.getenv("KALORIEN_AUTO_NEUSTART", "1") != "0":   # INVOCATION_ID setzt systemd
+        threading.Thread(target=push.schleife, daemon=True, name="push-erinnerung").start()
         threading.Thread(target=code_waechter, args=(code_stand(),), daemon=True, name="code-waechter").start()
     print(f"[Kalorien] läuft auf http://127.0.0.1:{s.server_address[1]}  (KI: {'an' if ki.verfuegbar() else 'aus – GEMINI_API_KEY oder GROQ_API_KEY fehlt'})", flush=True)
     s.serve_forever()

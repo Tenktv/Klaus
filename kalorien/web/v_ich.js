@@ -1,6 +1,6 @@
 /* Ich: Profil, Ziele, Pro, eigene KI, KI-Coach, Schnittstelle, Admin. */
 import {S, h, api, los, toast, leeren, icon, sheet, bestaetigen, kopf, zurueck, leer, avatar, de, tagName, vor, istPro, proMarke, abmelden} from "./core.js";
-import {verbrauchSheet, VERBRAUCH} from "./v_essen.js";
+import {verbrauchSheet, VERBRAUCH, verfolgt} from "./v_essen.js";
 
 const row = (ikon, titel, sub, tun, rechts) => h("div", {class: "liste-zeile", onclick: tun}, h("span", {class: "ikon"}, icon(ikon)), h("div", {class: "fuell"}, h("div", {class: "fett"}, titel), sub ? h("div", {class: "mut klein"}, sub) : null), rechts || icon("rechts", 18));
 
@@ -25,6 +25,8 @@ export async function ichSeite(ctx) {
       row("blitz", "Klesro Fit Pro", plan.pro ? (plan.admin ? "Aktiv (Admin)" : plan.alle ? "Für alle freigeschaltet" : "Aktiv bis " + tagName(new Date(plan.bis * 1000).toISOString().slice(0, 10), {day: "numeric", month: "long", year: "numeric"})) : "Coach, eigene KI, mehr Reels", () => { location.hash = "#/pro"; }, plan.pro ? null : proMarke()),
       row("funke", "KI-Coach", "Fragen zu Training & Ernährung", () => { location.hash = "#/coach"; }, plan.pro ? null : proMarke()),
       row("schluessel", "Eigene KI", ich.ki || plan.pro ? "Eigenen API-Schlüssel nutzen" : "Gemini, OpenAI, Claude …", () => { location.hash = "#/ki"; }, plan.pro ? null : proMarke()),
+      row("chart", "Nährwerte verfolgen", verfolgtText(), () => trackingSheet(), null),
+      row("uhr", "Erinnerungen", erinnerungText(), () => erinnerungSheet(), null),
       row("schuh", "Apple Health", "Schritte automatisch übernehmen", () => { location.hash = "#/apple-health"; }),
       row("regler", "Schnittstelle", "Für Klaus, Telegram, Kurzbefehle", () => { location.hash = "#/schnittstelle"; })),
     ich.admin ? h("div", {class: "karte", style: {padding: "4px 16px"}}, row("sperren", "Admin", "Nutzer, Pro-Codes, Meldungen", () => { location.hash = "#/admin"; })) : null,
@@ -195,4 +197,49 @@ export async function adminSeite(ctx) {
     h("div", {class: "abschnitt"}, h("h2", {}, `Meldungen (${meldungen.length})`)),
     meldungen.length ? meldungen.map(m => h("div", {class: "karte"}, h("div", {class: "zeile zwischen"}, h("b", {}, `${m.art} #${m.ziel}`), h("span", {class: "mut klein"}, vor(m.erstellt))), m.grund ? h("div", {class: "mut klein", style: {margin: "4px 0 8px"}}, m.grund) : null,
       h("button", {class: "btn klein zweit", onclick: async () => { if (await bestaetigen(`${m.art} #${m.ziel} ausblenden?`, "Ausblenden", true)) los(async () => { toast((await api("POST", "loeschen", {art: m.art, id: m.ziel})).text); }); }}, "Inhalt ausblenden"))) : leer("Keine Meldungen", "Alles ruhig.")));
+}
+
+
+/* ---------- Welche Nährwerte verfolgen? ---------- */
+const verfolgtText = () => { const l = S.ich.profil && S.ich.profil.mikro_track; return Array.isArray(l) ? `${l.length} von ${S.ich.mikro_katalog.length} ausgewählt` : "Alle Vitamine & Mineralstoffe"; };
+function trackingSheet() {
+  const kat = S.ich.mikro_katalog || [], an = new Set(kat.filter(k => verfolgt(k.key)).map(k => k.key));
+  const gruppen = {basis: "Basis", vitamin: "Vitamine", mineral: "Mineralstoffe"};
+  const boxen = {};
+  sheet("Nährwerte verfolgen", zu => [
+    h("p", {class: "mut klein", style: {margin: "0 0 10px"}}, "Nur ausgewählte Werte erscheinen auf „Heute“ und nach dem Scan. Gespeichert werden alle – du kannst die Auswahl jederzeit ändern."),
+    h("div", {class: "knopfreihe", style: {marginBottom: "6px"}}, h("button", {class: "btn zweit klein", onclick: () => Object.values(boxen).forEach(b => { b.checked = true; })}, "Alle"), h("button", {class: "btn zweit klein", onclick: () => Object.values(boxen).forEach(b => { b.checked = false; })}, "Keine")),
+    Object.entries(gruppen).map(([g, n]) => [h("div", {class: "lab", style: {margin: "12px 0 6px"}}, n), kat.filter(k => k.gruppe === g).map(k => {
+      boxen[k.key] = h("input", {type: "checkbox", id: "mt-" + k.key, checked: an.has(k.key)});
+      return h("label", {class: "zeile", for: "mt-" + k.key, style: {padding: "7px 0", cursor: "pointer"}}, boxen[k.key], h("span", {}, `${k.name} (${k.einheit})`)); })]),
+    h("button", {class: "btn", style: {marginTop: "14px"}, onclick: () => los(async () => {
+      await api("PUT", "ich", {mikro_track: kat.filter(k => boxen[k.key].checked).map(k => k.key)}); S.ich = await api("GET", "ich"); zu(); toast("Gespeichert"); window.dispatchEvent(new HashChangeEvent("hashchange"));
+    })}, "Speichern")]);
+}
+
+/* ---------- Erinnerungen (Web Push) ---------- */
+const b64 = t => Uint8Array.from(atob((t + "=".repeat((4 - t.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+const pushDa = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const erinnerungText = () => { const t = S.ich.profil && S.ich.profil.erinnerung_tage; return t === 0 ? "Aus" : `Nach ${t || 2} Tagen ohne Aktivität`; };
+async function pushAbo() { const reg = await navigator.serviceWorker.ready; return reg.pushManager.getSubscription(); }
+async function erinnerungSheet() {
+  const aktiv = pushDa() && Notification.permission === "granted" && !!(await pushAbo());
+  const tage = (S.ich.profil && S.ich.profil.erinnerung_tage) ?? 2;
+  const wahl = h("select", {"aria-label": "Erinnern nach"}, [[0, "Aus"], [1, "1 Tag"], [2, "2 Tagen"], [3, "3 Tagen"], [5, "5 Tagen"], [7, "7 Tagen"]].map(([w, n]) => h("option", {value: w, selected: Number(tage) === w}, w ? "Nach " + n + " ohne Aktivität" : n)));
+  const ios = /iPhone|iPad/.test(navigator.userAgent) && !navigator.standalone;
+  sheet("Erinnerungen", zu => [
+    h("p", {class: "mut klein", style: {margin: "0 0 12px"}}, "Wenn du eine Zeit lang nichts eingetragen oder die App nicht geöffnet hast, bekommst du eine Benachrichtigung (einmal pro Pause, nur tagsüber)."),
+    !S.ich.push_moeglich ? h("p", {class: "hilfe"}, "Auf diesem Server sind Benachrichtigungen noch nicht eingerichtet.")
+      : !pushDa() ? h("p", {class: "hilfe"}, ios ? "Auf dem iPhone: In Safari auf Teilen → „Zum Home-Bildschirm“ tippen, die App von dort öffnen, dann hier erneut aktivieren (iOS 16.4 oder neuer)." : "Dein Browser unterstützt keine Benachrichtigungen.")
+      : [h("div", {class: "lab", style: {margin: "0 0 6px"}}, "Erinnern"), wahl, h("div", {style: {height: "12px"}}),
+        aktiv ? h("div", {}, h("p", {class: "mut klein", style: {margin: "0 0 10px"}}, "✓ Benachrichtigungen sind auf diesem Gerät an."),
+          h("div", {class: "knopfreihe"}, h("button", {class: "btn zweit", onclick: () => los(async () => { const r = await api("POST", "push/test", {}); toast(r.gesendet ? "Test gesendet" : "Nichts angekommen – bitte neu aktivieren"); })}, "Test senden"),
+            h("button", {class: "btn geist", onclick: () => los(async () => { const a = await pushAbo(); if (a) { await api("DELETE", "push/abo", {endpoint: a.endpoint}); await a.unsubscribe(); } zu(); toast("Aus auf diesem Gerät"); })}, "Ausschalten")))
+          : h("button", {class: "btn", onclick: () => los(async () => {
+            if (await Notification.requestPermission() !== "granted") throw new Error("Benachrichtigungen sind in den iPhone-Einstellungen blockiert.");
+            const reg = await navigator.serviceWorker.ready, k = (await api("GET", "push/schluessel")).key;
+            const a = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64(k)});
+            await api("POST", "push/abo", a.toJSON()); zu(); toast("Benachrichtigungen an");
+          })}, "Benachrichtigungen aktivieren")],
+    h("button", {class: "btn zweit", style: {marginTop: "10px"}, onclick: () => los(async () => { await api("PUT", "ich", {erinnerung_tage: wahl.value}); S.ich = await api("GET", "ich"); zu(); toast("Gespeichert"); window.dispatchEvent(new HashChangeEvent("hashchange")); })}, "Einstellung speichern")]);
 }
