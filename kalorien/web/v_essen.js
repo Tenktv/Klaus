@@ -76,7 +76,7 @@ function produkt(box, p) {
   leeren(box, h("div", {class: "karte"}, h("h2", {style: {textTransform: "none", letterSpacing: 0, fontSize: "24px"}}, p.name), h("div", {class: "mut"}, [p.marke, p.menge].filter(Boolean).join(" · ")),
     h("label", {class: "lab f"}, "Menge in Gramm" + (p.portion_g ? " (Portion laut Packung)" : "")), gramm, zeige),
     h("button", {class: "btn", onclick: () => { const f = (Number(gramm.value) || 0) / 100;
-      ergebnis(box, [{name: p.name, menge: gramm.value + " g", kcal: p.pro100.kcal * f, eiweiss: p.pro100.eiweiss * f, kh: p.pro100.kh * f, fett: p.pro100.fett * f}], "barcode"); }}, "Weiter"));
+      ergebnis(box, [{name: p.name, menge: gramm.value + " g", kcal: p.pro100.kcal * f, eiweiss: p.pro100.eiweiss * f, kh: p.pro100.kh * f, fett: p.pro100.fett * f, mikro: Object.fromEntries(Object.entries(p.mikro100 || {}).map(([k, v]) => [k, v * f]))}], "barcode"); }}, "Weiter"));
 }
 
 /* Menge in Gramm/ml aendern -> Kalorien und Makros rechnen mit (aus den Ausgangswerten, ohne Rundungsdrift). */
@@ -95,6 +95,14 @@ function mitwachsen(mengeFeld, werte) {   // werte: [[inputFeld, rundenFn], ...]
   });
 }
 
+/* Vitamine & Co: Liste "Name  Wert Einheit" aus {schluessel: wert}; Katalog kommt vom Server (S.ich.mikro_katalog). */
+export function mikroListe(werte, gruppen) {
+  const kat = (S.ich && S.ich.mikro_katalog) || [];
+  const zeilen = kat.filter(k => werte && werte[k.key] > 0 && (!gruppen || gruppen.includes(k.gruppe)));
+  if (!zeilen.length) return h("div", {class: "mut klein"}, "Keine Angaben.");
+  return h("div", {class: "mikro-liste"}, zeilen.map(k => h("div", {class: "zeile zwischen"}, h("span", {}, k.name), h("b", {}, de(Math.round(werte[k.key] * 10) / 10) + " " + k.einheit))));
+}
+
 /* Pruefen & eintragen (gemeinsam fuer alle Wege). Alles bleibt aenderbar. */
 export function ergebnis(box, gerichte, quelle, hinweis, vorschau) {
   let mahlzeit = S.mahlzeit || mahlzeitJetzt(); S.mahlzeit = null;
@@ -102,6 +110,10 @@ export function ergebnis(box, gerichte, quelle, hinweis, vorschau) {
   const felder = gerichte.map(g => ({
     name: h("input", {value: g.name, placeholder: "Name", maxlength: 120, "aria-label": "Name"}), menge: h("input", {value: g.menge, placeholder: "Menge", maxlength: 40, "aria-label": "Menge"}),
     kcal: num(g.kcal, "kcal", zahl), eiweiss: num(g.eiweiss, "Eiweiß g", eins), kh: num(g.kh, "KH g", eins), fett: num(g.fett, "Fett g", eins)}));
+  felder.forEach((f, i) => { f.mikro = {...(gerichte[i].mikro || {})}; f.mikroBox = h("div", {}); const mb = menge(f.menge.value);
+    const zeigeMikro = faktor => { const m = {}; Object.entries(f.mikro).forEach(([k, v]) => { m[k] = v * faktor; }); f.aktuell = m; leeren(f.mikroBox, mikroListe(m)); };
+    zeigeMikro(1);
+    f.menge.addEventListener("input", () => { const n = menge(f.menge.value); if (mb && n) zeigeMikro(n / mb); }); });
   felder.forEach(f => mitwachsen(f.menge, [[f.kcal, zahl], [f.eiweiss, eins], [f.kh, eins], [f.fett, eins]]));
   // Beschriftete Felder: in einem ausgefuellten Feld verschwindet der Platzhalter - darum steht immer ein Name darueber
   const beschr = (text, feld) => h("label", {class: "feld", style: {display: "block"}}, h("span", {class: "lab", style: {display: "block", marginBottom: "5px"}}, text), feld);
@@ -121,7 +133,7 @@ export function ergebnis(box, gerichte, quelle, hinweis, vorschau) {
   const senden = h("button", {class: "btn", onclick: () => los(async () => {
     senden.disabled = true;
     try {
-      for (const f of felder) await api("POST", "eintrag", {name: f.name.value, menge: f.menge.value, kcal: f.kcal.value, eiweiss: f.eiweiss.value, kh: f.kh.value, fett: f.fett.value, mahlzeit, datum: S.datum, quelle});
+      for (const f of felder) await api("POST", "eintrag", {name: f.name.value, menge: f.menge.value, kcal: f.kcal.value, eiweiss: f.eiweiss.value, kh: f.kh.value, fett: f.fett.value, mikro: f.aktuell, mahlzeit, datum: S.datum, quelle});
       toast("Eingetragen"); location.hash = "#/heute";
     } finally { senden.disabled = false; }
   })}, icon("haken"), "Eintragen");
@@ -130,7 +142,8 @@ export function ergebnis(box, gerichte, quelle, hinweis, vorschau) {
     quelle === "hand" ? null : h("div", {class: "lab", style: {margin: "4px 0 6px"}}, "Zusammen"), quelle === "hand" ? null : summe,
     felder.map(f => h("div", {class: "karte ergebnis-karte"}, beschr("Gericht", f.name), beschr("Menge", f.menge),
       h("div", {class: "r2 raster", style: {marginBottom: "10px"}}, beschr("Kalorien (kcal)", f.kcal), beschr("Eiweiß (g)", f.eiweiss)),
-      h("div", {class: "r2 raster"}, beschr("Kohlenhydrate (g)", f.kh), beschr("Fett (g)", f.fett)))),
+      h("div", {class: "r2 raster"}, beschr("Kohlenhydrate (g)", f.kh), beschr("Fett (g)", f.fett)),
+      Object.keys(f.mikro).length ? h("details", {class: "mikro-box"}, h("summary", {}, "Vitamine & Mineralstoffe (geschätzt)"), f.mikroBox) : null)),
     h("div", {class: "lab", style: {margin: "14px 0 6px"}}, "Mahlzeit"), chips, senden);
 }
 

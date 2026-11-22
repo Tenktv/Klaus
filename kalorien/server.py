@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import db, ki, nahrung, pro, reels, rezepte, sozial, workouts, schalter
+from . import db, ki, mikro, nahrung, pro, reels, rezepte, sozial, workouts, schalter
 
 WEB = Path(__file__).resolve().parent / "web"
 PORT = int(os.getenv("KALORIEN_PORT", "7730") or 7730)   # .env wird erst im Start geladen -> dort nochmal lesen
@@ -140,7 +140,8 @@ def nutzer_aus(c, kopf: str):
 def ich(z) -> dict:
     return {"name": z["name"], "admin": z["name"].lower() in _admins(), "ki": ki.verfuegbar(), "plan": pro.plan(z), "video": reels.verfuegbar(),
             "profil": json.loads(z["profil"] or "{}"), "bio": z["bio"] or "", "rangliste": bool(z["in_rangliste"]),
-            "ziele": {"kcal": z["ziel_kcal"], "eiweiss": z["ziel_eiweiss"], "kh": z["ziel_kh"], "fett": z["ziel_fett"]}}
+            "ziele": {"kcal": z["ziel_kcal"], "eiweiss": z["ziel_eiweiss"], "kh": z["ziel_kh"], "fett": z["ziel_fett"]},
+            "mikro_katalog": mikro.katalog_oeffentlich()}
 
 
 VERBRAUCH = {"nein": 0.0, "halb": 0.5, "ja": 1.0}   # wie viel des Verbrauchs (Training, Schritte) das Tagesbudget erhoeht
@@ -186,17 +187,19 @@ def tag(c, z, datum: str) -> dict:
     zeilen = c.execute("SELECT * FROM eintrag WHERE nutzer=? AND datum=? ORDER BY id", (z["id"], datum)).fetchall()
     zusatz = sozial.tag_zusatz(c, z, datum)
     modus = json.loads(z["profil"] or "{}").get("verbrauch", "")
-    return {"datum": datum, "eintraege": [dict(e) for e in zeilen], "summe": _summe(zeilen), "ziele": ich(z)["ziele"], **zusatz,
+    eintraege = [{**dict(e), "mikro": mikro.laden(e["mikro"])} for e in zeilen]
+    return {"datum": datum, "eintraege": eintraege, "summe": _summe(zeilen), "ziele": ich(z)["ziele"], **zusatz,
+            "mikro_summe": mikro.summe([e["mikro"] for e in eintraege]),
             "verbrauch_modus": modus, "bonus": round(zusatz["verbrannt"] * VERBRAUCH.get(modus, 0.0))}
 
 
 def eintragen(c, z, d: dict) -> dict:
     mahlzeit = d.get("mahlzeit") if d.get("mahlzeit") in MAHLZEITEN else _mahlzeit_jetzt()
     cur = c.execute(
-        "INSERT INTO eintrag(nutzer, datum, mahlzeit, name, menge, kcal, eiweiss, kh, fett, quelle, erstellt) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO eintrag(nutzer, datum, mahlzeit, name, menge, kcal, eiweiss, kh, fett, quelle, erstellt, mikro) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         (z["id"], _datum(d.get("datum")), mahlzeit, _text(d.get("name"), "Name", 1, 120), str(d.get("menge") or "")[:40],
          _zahl(d.get("kcal"), "Kalorien", 10000), _zahl(d.get("eiweiss") or 0, "Eiweiß", 1000), _zahl(d.get("kh") or 0, "Kohlenhydrate", 2000),
-         _zahl(d.get("fett") or 0, "Fett", 1000), str(d.get("quelle") or "hand")[:12], db.jetzt()))
+         _zahl(d.get("fett") or 0, "Fett", 1000), str(d.get("quelle") or "hand")[:12], db.jetzt(), json.dumps(mikro.bereinigen(d.get("mikro")))))
     return {"id": cur.lastrowid}
 
 
@@ -425,8 +428,8 @@ def konto_loeschen(c, z) -> dict:
 
 def export(c, z) -> dict:
     return {"name": z["name"], "ziele": ich(z)["ziele"], "profil": json.loads(z["profil"] or "{}"),
-            "tagebuch": [dict(r) for r in c.execute("SELECT datum, mahlzeit, name, menge, kcal, eiweiss, kh, fett FROM eintrag WHERE nutzer=? "
-                                                    "ORDER BY datum, id", (z["id"],))],
+            "tagebuch": [{**dict(r), "mikro": mikro.laden(r["mikro"])} for r in c.execute(
+                "SELECT datum, mahlzeit, name, menge, kcal, eiweiss, kh, fett, mikro FROM eintrag WHERE nutzer=? ORDER BY datum, id", (z["id"],))],
             "forum": [dict(r) for r in c.execute("SELECT titel, text, erstellt FROM thema WHERE nutzer=?", (z["id"],))],
             "beitraege": [dict(r) for r in c.execute("SELECT art, text, erstellt FROM beitrag WHERE nutzer=? AND versteckt=0", (z["id"],))],
             "training": [dict(r) for r in c.execute("SELECT datum, art, minuten, kcal, notiz FROM training WHERE nutzer=? ORDER BY datum", (z["id"],))],

@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS zugang (
 CREATE TABLE IF NOT EXISTS eintrag (
     id INTEGER PRIMARY KEY, nutzer INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE, datum TEXT NOT NULL,
     mahlzeit TEXT NOT NULL, name TEXT NOT NULL, menge TEXT DEFAULT '', kcal REAL NOT NULL, eiweiss REAL DEFAULT 0,
-    kh REAL DEFAULT 0, fett REAL DEFAULT 0, quelle TEXT DEFAULT 'hand', erstellt INTEGER NOT NULL);
+    kh REAL DEFAULT 0, fett REAL DEFAULT 0, quelle TEXT DEFAULT 'hand', erstellt INTEGER NOT NULL, mikro TEXT DEFAULT '{}');
 CREATE INDEX IF NOT EXISTS eintrag_tag ON eintrag(nutzer, datum);
 CREATE TABLE IF NOT EXISTS ki_nutzung (nutzer INTEGER NOT NULL, tag TEXT NOT NULL, n INTEGER DEFAULT 0, PRIMARY KEY (nutzer, tag));
 CREATE TABLE IF NOT EXISTS thema (
@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS routine (
 
 
 _einricht_sperre = threading.Lock()
-NACHRUESTEN = "nachruesten-2"   # beim Hinzufuegen neuer ALTER-Spalten in _einrichten() hochzaehlen (SCHEMA-Aenderungen erkennt der Hash selbst)
+NACHRUESTEN = "nachruesten-3"   # beim Hinzufuegen neuer ALTER-Spalten in _einrichten() hochzaehlen (SCHEMA-Aenderungen erkennt der Hash selbst)
 
 
 def _stand() -> int:
@@ -124,6 +124,8 @@ def _einrichten(c: sqlite3.Connection) -> None:
     for name, ddl in (("bio", "TEXT DEFAULT ''"), ("in_rangliste", "INTEGER DEFAULT 1"), ("pro_bis", "INTEGER DEFAULT 0")):   # aeltere Datenbanken nachruesten
         if name not in spalten:
             c.execute(f"ALTER TABLE nutzer ADD COLUMN {name} {ddl}")
+    if "mikro" not in {r["name"] for r in c.execute("PRAGMA table_info(eintrag)")}:   # Vitamine/Mineralstoffe je Eintrag (JSON)
+        c.execute("ALTER TABLE eintrag ADD COLUMN mikro TEXT DEFAULT '{}'")
     spalten = {r["name"] for r in c.execute("PRAGMA table_info(beitrag)")}
     for name, ddl in (("video", "TEXT DEFAULT ''"), ("poster", "TEXT DEFAULT ''"), ("status", "TEXT DEFAULT 'fertig'"),
                       ("dauer", "REAL DEFAULT 0"), ("roh", "TEXT DEFAULT ''")):   # Reels sind Beitraege mit Video

@@ -5,6 +5,8 @@ import json
 import re
 import urllib.request
 
+from . import mikro
+
 OFF = "https://world.openfoodfacts.org/api/v2/product/{code}.json?fields=product_name,brands,quantity,serving_size,nutriments"
 AKTIV = {"wenig": 1.2, "leicht": 1.375, "mittel": 1.55, "viel": 1.725}
 ZIEL = {"abnehmen": -400, "halten": 0, "zunehmen": 300}
@@ -49,4 +51,5 @@ def barcode_suchen(code: str, timeout: float = 10) -> dict | None:
     return {"code": code, "name": (p.get("product_name") or "Unbekanntes Produkt").strip()[:120],
             "marke": (p.get("brands") or "").split(",")[0].strip()[:60], "menge": (p.get("quantity") or "")[:40],
             "pro100": {"kcal": kcal, "eiweiss": zahl("proteins_100g"), "kh": zahl("carbohydrates_100g"), "fett": zahl("fat_100g")},
+            "mikro100": mikro.aus_off(n),   # Vitamine/Mineralstoffe/Ballaststoffe/Zucker/Salz je 100 g, soweit das Produkt sie angibt
             "portion_g": float(portion.group(1).replace(",", ".")) if portion else None}

@@ -8,6 +8,7 @@ lässt sich per Schnittstelle mit Klaus, Telegram oder Kurzbefehlen verbinden.
 | Foto machen → KI schätzt Gerichte, Menge, Kalorien, Eiweiß/Kohlenhydrate/Fett (Werte vor dem Eintragen änderbar) | ✅ |
 | Beschreiben („2 Scheiben Vollkornbrot mit …“) → detaillierte Schätzung | ✅ |
 | Barcode scannen (Kamera) oder Nummer tippen → Open Food Facts, Menge in Gramm | ✅ |
+| Vitamine, Mineralstoffe, Ballaststoffe, Zucker, Salz je Eintrag (KI-Schätzung bzw. Open Food Facts), Tagesbalken auf „Heute“ mit Richtwerten | ✅ |
 | Von Hand eintragen, Mahlzeiten, Tagesring, 7-Tage-Übersicht, Tagesziele (auch berechnet) | ✅ |
 | Forum (Beiträge, Antworten) und Community-Chat | ✅ |
 | Melden, Blockieren, Löschen, Moderator-Liste, Textfilter, Sende-Bremsen | ✅ |

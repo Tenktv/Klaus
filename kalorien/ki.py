@@ -17,6 +17,8 @@ import time
 import urllib.error
 import urllib.request
 
+from . import mikro as _mikro
+
 MODELL = os.getenv("KALORIEN_MODELL", "gemini-3.5-flash")
 URL = "https://generativelanguage.googleapis.com/v1beta/models/{modell}:generateContent"
 
@@ -39,8 +41,10 @@ MODELL_MUSTER = re.compile(r"^[\w./:@-]{2,80}$")
 SCHLUESSEL_MUSTER = re.compile(r"^[\w.\-]{16,300}$")
 
 FORMAT = ('Antworte NUR mit JSON: {"gerichte":[{"name":"deutscher Name","menge":"z.B. 150 g oder 1 Stück","kcal":Zahl,'
-          '"eiweiss":Gramm,"kh":Gramm,"fett":Gramm}],"hinweis":"ein kurzer Satz zur Unsicherheit"}. '
+          '"eiweiss":Gramm,"kh":Gramm,"fett":Gramm,"mikro":{"schluessel":Zahl}}],"hinweis":"ein kurzer Satz zur Unsicherheit"}. '
           "Zahlen sind für die genannte Menge insgesamt, nicht pro 100 g. Schätze realistisch, lieber vorsichtig runden. "
+          "In \"mikro\" nur Nährstoffe nennen, die du halbwegs sinnvoll schätzen kannst (unbekannte weglassen, keine Nullen raten); "
+          "erlaubte Schlüssel mit Einheit: " + _mikro.fuer_ki() + ". "
           "Wenn nichts Essbares erkennbar ist: gerichte = [].")
 BILD = "Du bist ein Ernährungs-Assistent. Erkenne jedes Lebensmittel auf dem Foto, schätze Portionsgrößen und Nährwerte. "
 TEXT = "Du bist ein Ernährungs-Assistent. Schätze Menge und Nährwerte der beschriebenen Mahlzeit; Angaben des Nutzers haben Vorrang. "
@@ -357,7 +361,7 @@ def lesen(text: str) -> dict:
         if isinstance(g, dict) and str(g.get("name") or "").strip():
             gerichte.append({"name": str(g["name"]).strip()[:120], "menge": str(g.get("menge") or "")[:40],
                              "kcal": zahl(g.get("kcal"), 5000), "eiweiss": zahl(g.get("eiweiss"), 500),
-                             "kh": zahl(g.get("kh"), 800), "fett": zahl(g.get("fett"), 500)})
+                             "kh": zahl(g.get("kh"), 800), "fett": zahl(g.get("fett"), 500), "mikro": _mikro.bereinigen(g.get("mikro"))})
     return {"gerichte": gerichte, "hinweis": str(roh.get("hinweis") or "")[:200] if isinstance(roh, dict) else ""}
 
 
