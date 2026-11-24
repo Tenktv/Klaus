@@ -456,6 +456,9 @@ def bauen(innen: bool = True):
                 args = {**args, "betrag_usd": args["betrag_eur"]}
         if name == "cfd_demo":
             return cfd_werkzeug(args)
+        if name == "leads_suchen":
+            import leads_server
+            return leads_server.starten(args, tg.senden, tg.datei)
         if name == "alpaca_konto":
             return alpaca_lesen()
         if name == "alpaca_order":
