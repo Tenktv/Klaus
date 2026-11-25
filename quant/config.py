@@ -1,7 +1,7 @@
 """Konfiguration: Backtest, Risiko, Maerkte. Alle Werte sind Testannahmen, keine Anlageempfehlung."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)

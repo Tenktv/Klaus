@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import copy
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import pandas as pd
 
@@ -20,7 +20,8 @@ from .config import MARKETS, BacktestConfig, MarketConfig, RiskConfig
 from .corporate_actions import CorporateActions
 from .data import DataError, ValidationReport, validate_ohlcv
 from .metrics import compute_metrics
-from .portfolio import InsufficientCash, Order, Portfolio, PortfolioError
+from .portfolio import Order, Portfolio
+from .execution import execute_buy, execute_sell, fill_price, size_market_buy
 from .risk import RiskManager
 from .strategies.base import Strategy
 
@@ -151,37 +152,11 @@ class BacktestEngine:
                 op = heute_open[o.symbol]
                 o.exec_date, o.ref_open = heute, op
                 if o.side == "sell":
-                    p = pf.positions.get(o.symbol)
-                    if p is None:
-                        o.status, o.reason = "rejected", "Keine Position zum Verkaufen (Long-only)."
-                        continue
-                    preis = op * (1 - slip_r)
-                    qty = p.quantity
-                    fee = qty * preis * fee_r
-                    pf.sell(o.symbol, qty, preis, fee, heute, qty * (op - preis))
-                    o.quantity, o.exec_price, o.fee, o.slippage_cost, o.status = qty, preis, fee, qty * (op - preis), "filled"
+                    execute_sell(pf, o, pf.positions[o.symbol].quantity if o.symbol in pf.positions else 0.0, fill_price("sell", op, slip_r), op, fee_r, heute)
                 else:
-                    preis = op * (1 + slip_r)
-                    eq = pf.equity(marks)
-                    ziel = cfg.position_size_pct * eq
-                    ziel = min(ziel, self.risk.max_buy_value(pf, o.symbol, marks, peak))
-                    qty = ziel / (preis * (1 + fee_r))
-                    qty = qty if frac else math.floor(qty + 1e-12)
-                    if qty <= 0:
-                        o.status, o.reason, o.quantity = "rejected", "Ordergroesse 0 (Risikogrenzen, Cash oder Kurs zu hoch).", 0.0
-                        continue
-                    fee = qty * preis * fee_r
-                    dec = self.risk.check_buy(pf, o.symbol, qty, preis, fee, marks, peak)
-                    o.quantity = qty
-                    if not dec.approved:
-                        o.status, o.reason = "rejected", " ".join(dec.reasons)
-                        continue
-                    try:
-                        pf.buy(o.symbol, qty, preis, fee, heute, qty * (preis - op))
-                    except InsufficientCash as e:
-                        o.status, o.reason = "rejected", str(e)
-                        continue
-                    o.exec_price, o.fee, o.slippage_cost, o.status = preis, fee, qty * (preis - op), "filled"
+                    preis = fill_price("buy", op, slip_r)
+                    qty = size_market_buy(pf, self.risk, o.symbol, preis, marks, peak, fee_r, cfg.position_size_pct, frac)
+                    execute_buy(pf, self.risk, o, qty, preis, op, fee_r, marks, peak, heute)
             # --- 3. Bewertung zum Schluss -----------------------------------------------------------------------
             for s in self.data:
                 if d in self.data[s].index:

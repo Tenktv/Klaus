@@ -6,7 +6,7 @@ Unrealisiert = menge*(kurs - einstand) - noch nicht realisierte Einstiegsgebuehr
 Identitaet (wird getestet): equity = initial_cash + realisiert + unrealisiert + dividenden."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 
 EPS = 1e-9
@@ -35,6 +35,11 @@ class Order:
     fee: float = 0.0
     slippage_cost: float = 0.0
     reason: str = ""
+    order_type: str = "market"        # market | limit | stop (Paper-Broker; der Backtest nutzt market)
+    limit_price: float | None = None
+    stop_price: float | None = None
+    time_in_force: str = "gtc"        # day | gtc
+    bars_open: int = 0
 
 
 @dataclass

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .config import MARKETS, MarketConfig
+from .config import MarketConfig
 from .corporate_actions import CorporateActions
 
 OHLC = ["open", "high", "low", "close"]
