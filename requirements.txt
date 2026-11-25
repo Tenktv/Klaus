@@ -24,3 +24,5 @@ PyAutoGUI>=0.9.54
 tzdata
 pyflakes
 cryptography>=42
+numpy
+pandas>=2.2

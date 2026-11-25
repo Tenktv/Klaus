@@ -31,3 +31,6 @@ data/obs/
 
 # Kalorien-App: Datenbank mit Gesundheitsdaten nie ins Repo
 data/kalorien.db*
+
+# Quant-Paket: lokaler Daten-Cache
+data/quant_cache/
