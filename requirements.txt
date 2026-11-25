@@ -26,3 +26,5 @@ pyflakes
 cryptography>=42
 numpy
 pandas>=2.2
+exchange_calendars>=4.5
+# optional (Yahoo-Datenadapter in quant/): yfinance
